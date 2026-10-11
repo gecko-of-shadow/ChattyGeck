@@ -130,10 +130,11 @@ await step("/me sends an action", async () => {
 
 await step("scrolling up pauses the feed; the toe-pad button sticks back to live", async () => {
   const log = page.getByLabel("Chat messages");
+  await mockPost("/__burst?channel=geckotown&n=60");
   await page.waitForFunction(() => {
     const el = document.querySelector('[aria-label="Chat messages"]');
     return el && el.scrollHeight > el.clientHeight + 200;
-  }, null, { timeout: 60_000 });
+  }, null, { timeout: 15_000 });
   const box = await log.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -600);

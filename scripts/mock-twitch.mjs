@@ -151,6 +151,17 @@ const httpServer = http.createServer(async (req, res) => {
     case "POST /__expire":
       tokens.clear();
       return json(res, 200, { ok: true });
+    case "POST /__burst": {
+      const channel = url.searchParams.get("channel") ?? "";
+      const count = Number(url.searchParams.get("n") ?? 50);
+      for (const client of clients) {
+        if (!client.channels.has(channel)) continue;
+        for (let i = 0; i < count; i++) {
+          client.send(privmsgLine(channel, chatters[i % chatters.length], `${lines[i % lines.length]} (#${i + 1})`));
+        }
+      }
+      return json(res, 200, { ok: true });
+    }
     default:
       return json(res, 404, { status: 404, message: "not found" });
   }

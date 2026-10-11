@@ -47,6 +47,9 @@ function form(data: Record<string, string>): URLSearchParams {
   return new URLSearchParams(data);
 }
 
+/** Twitch's auth endpoints occasionally hang; never let a login check stall startup. */
+const timeout = () => AbortSignal.timeout(10_000);
+
 async function readError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { message?: string; error?: string };
@@ -59,6 +62,7 @@ async function readError(res: Response): Promise<string> {
 export async function startDeviceFlow(clientId: string): Promise<DeviceCode> {
   const res = await fetch(`${config.authBase}/oauth2/device`, {
     method: "POST",
+    signal: timeout(),
     body: form({ client_id: clientId, scopes: config.scopes.join(" ") }),
   });
   if (!res.ok) {
@@ -86,6 +90,7 @@ export async function startDeviceFlow(clientId: string): Promise<DeviceCode> {
 
 export async function validateToken(accessToken: string): Promise<ValidateResponse | null> {
   const res = await fetch(`${config.authBase}/oauth2/validate`, {
+    signal: timeout(),
     headers: { Authorization: `OAuth ${accessToken}` },
   });
   if (res.status === 401) return null;
@@ -110,6 +115,7 @@ async function sessionFromTokens(clientId: string, tokens: TokenResponse): Promi
 export async function pollDeviceFlow(clientId: string, deviceCode: string): Promise<PollResult> {
   const res = await fetch(`${config.authBase}/oauth2/token`, {
     method: "POST",
+    signal: timeout(),
     body: form({
       client_id: clientId,
       scopes: config.scopes.join(" "),
@@ -134,6 +140,7 @@ export async function refreshSession(session: Session): Promise<Session | null> 
   if (!session.refreshToken) return null;
   const res = await fetch(`${config.authBase}/oauth2/token`, {
     method: "POST",
+    signal: timeout(),
     body: form({
       client_id: session.clientId,
       grant_type: "refresh_token",
@@ -148,6 +155,7 @@ export async function refreshSession(session: Session): Promise<Session | null> 
 export async function revokeToken(clientId: string, accessToken: string): Promise<void> {
   await fetch(`${config.authBase}/oauth2/revoke`, {
     method: "POST",
+    signal: timeout(),
     body: form({ client_id: clientId, token: accessToken }),
   }).catch(() => undefined);
 }
