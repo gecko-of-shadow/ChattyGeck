@@ -155,7 +155,7 @@ export function Composer() {
                 if (error) setError(null);
               }}
               onKeyDown={onKeyDown}
-              placeholder={target ? `Chirp to #${target}…` : "Pick a channel to chirp to"}
+              placeholder={target ? `Chirp to #${target} as ${auth.login}…` : "Pick a channel to chirp to"}
               aria-label={target ? `Message #${target}` : "Message"}
               className="h-9 pr-12 text-sm"
               autoComplete="off"
