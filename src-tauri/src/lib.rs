@@ -97,9 +97,15 @@ fn set_tray_status(app: AppHandle, mentions: u32) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // Must be first: a second launch just brings the running copy (maybe hidden in the tray) forward.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
+    let mut builder = tauri::Builder::default();
+    // A second launch just brings the running copy (maybe hidden in the tray) forward. This plugin must
+    // be registered first. On Linux it needs a `unix:` session D-Bus address and panics on anything else.
+    let single_instance = cfg!(not(target_os = "linux"))
+        || std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok_and(|address| address.starts_with("unix:"));
+    if single_instance {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)));
+    }
+    builder
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data = storage::resolve_data_dir(app.handle());
