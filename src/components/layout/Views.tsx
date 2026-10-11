@@ -34,6 +34,7 @@ import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/l
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
+import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer } from "@/store/ui";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 
@@ -91,6 +92,7 @@ function statusText(status: ProviderStatus): string {
 
 export function EmoteStatusChip({ channel, compact = false }: { channel: string; compact?: boolean }) {
   const version = useChat((s) => `${s.emoteVersions[channel] ?? 0}.${s.globalEmoteVersion}`);
+  const settings = useChat((s) => s.settings);
   const [, force] = useState(0);
   useEffect(() => force((n) => n + 1), [version]);
   const channelStatus = emoteRegistry.getChannelStatus(channel);
@@ -99,6 +101,7 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
     (p) => channelStatus?.[p].state === "error" || globalStatus[p].state === "error",
   );
   const total = THIRD_PARTY_PROVIDERS.reduce((sum, p) => {
+    if (!isFeatureOn(settings, channel, p)) return sum;
     const c = channelStatus?.[p];
     return sum + (c?.state === "ok" ? c.count : 0);
   }, 0);
@@ -130,17 +133,20 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
             </tr>
           </thead>
           <tbody>
-            {THIRD_PARTY_PROVIDERS.map((p) => (
-              <tr key={p}>
-                <td className="py-0.5 pr-2 font-medium">{PROVIDER_LABELS[p]}</td>
-                <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-mention")}>
-                  {channelStatus ? statusText(channelStatus[p]) : "waiting"}
-                </td>
-                <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-mention")}>
-                  {statusText(globalStatus[p])}
-                </td>
-              </tr>
-            ))}
+            {THIRD_PARTY_PROVIDERS.map((p) => {
+              const on = isFeatureOn(settings, channel, p);
+              return (
+                <tr key={p}>
+                  <td className="py-0.5 pr-2 font-medium">{PROVIDER_LABELS[p]}</td>
+                  <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-mention")}>
+                    {!on ? "off here" : channelStatus ? statusText(channelStatus[p]) : "waiting"}
+                  </td>
+                  <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-mention")}>
+                    {!on ? "off here" : statusText(globalStatus[p])}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         <p className="mt-2 text-muted-foreground">Twitch emotes always come straight from chat messages.</p>
@@ -193,6 +199,7 @@ export function FocusedView({ login }: { login: string }) {
   return (
     <ChatLog
       messages={view.messages}
+      channel={login}
       viewKey={`focused:${login}`}
       empty={<ChannelPlaceholder login={login} />}
       readMarker={view.readMarker}
@@ -291,6 +298,7 @@ function ChatBox({ login }: { login: string }) {
       </header>
       <ChatLog
         messages={view.messages}
+        channel={login}
         viewKey={`box:${login}`}
         label={`#${login} messages`}
         liveRows={120}

@@ -52,6 +52,9 @@ const avatar = (login) =>
 
 const roomId = (channel) => String(100000 + ([...channel].reduce((h, c) => h * 31 + c.charCodeAt(0), 7) % 900000));
 
+/** Providers that should answer with 500 until cleared (for the Problems e2e step). */
+const failProviders = new Set();
+
 // ------------------------------------------------------------------ Third-party emotes
 
 const emoteSvg = (name) =>
@@ -127,6 +130,9 @@ const httpServer = http.createServer(async (req, res) => {
 
   if (req.method === "GET") {
     let m;
+    if (url.pathname.startsWith("/7tv/") && failProviders.has("7tv")) return json(res, 500, { error: "mock 7TV down" });
+    if (url.pathname.startsWith("/bttv/") && failProviders.has("bttv")) return json(res, 500, { error: "mock BTTV down" });
+    if (url.pathname.startsWith("/ffz/") && failProviders.has("ffz")) return json(res, 500, { error: "mock FFZ down" });
     if (url.pathname.startsWith("/emote/")) {
       // Any path under /emote/<name>/... draws a little badge with the name, whatever the file extension.
       const name = decodeURIComponent(url.pathname.split("/")[2] ?? "?");
@@ -247,6 +253,14 @@ const httpServer = http.createServer(async (req, res) => {
       }
       return json(res, 200, { ok: true });
     }
+    case "POST /__fail-emotes": {
+      const provider = url.searchParams.get("provider");
+      if (provider) failProviders.add(provider);
+      return json(res, 200, { failing: [...failProviders] });
+    }
+    case "POST /__unfail-emotes":
+      failProviders.clear();
+      return json(res, 200, { ok: true });
     case "POST /__drop":
       for (const client of clients) client.socket.terminate();
       return json(res, 200, { dropped: clients.size });

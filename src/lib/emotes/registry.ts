@@ -1,4 +1,6 @@
+import type { ChannelFeature } from "@/store/settings";
 import { emoteCache, type EmoteCache } from "./cache";
+import { problemLog } from "./problems";
 import { NotFoundError, channelFetchers, globalFetchers } from "./providers";
 import { THIRD_PARTY_PROVIDERS, type Emote, type ProviderStatus, type ThirdPartyProvider } from "./types";
 
@@ -18,6 +20,8 @@ export interface EmotePrefs {
   overlays: boolean;
   blocked: Set<string>;
   remember: boolean;
+  /** Features switched off for one channel only. */
+  off: Record<string, ReadonlySet<ChannelFeature>>;
 }
 
 const DEFAULT_PREFS: EmotePrefs = {
@@ -25,7 +29,21 @@ const DEFAULT_PREFS: EmotePrefs = {
   overlays: true,
   blocked: new Set(),
   remember: true,
+  off: {},
 };
+
+function sameOff(a: EmotePrefs["off"], b: EmotePrefs["off"]): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    const sa = a[key];
+    const sb = b[key];
+    if (!sb || sa.size !== sb.size) return false;
+    for (const feature of sa) if (!sb.has(feature)) return false;
+  }
+  return true;
+}
 
 const emptyEmotes = (): ProviderRecord<Emote[]> => ({ "7tv": [], bttv: [], ffz: [] });
 const statuses = (state: ProviderStatus): ProviderRecord<ProviderStatus> => ({
@@ -82,7 +100,8 @@ export class EmoteRegistry {
       before.remember === prefs.remember &&
       THIRD_PARTY_PROVIDERS.every((p) => before.providers[p] === prefs.providers[p]) &&
       before.blocked.size === prefs.blocked.size &&
-      [...prefs.blocked].every((name) => before.blocked.has(name));
+      [...prefs.blocked].every((name) => before.blocked.has(name)) &&
+      sameOff(before.off, prefs.off);
     if (!same) this.emit(null);
   }
 
@@ -115,8 +134,10 @@ export class EmoteRegistry {
           if (this.prefs.remember) this.cache.put(key, "global", emotes);
         } catch (err) {
           if (this.globalLoadId !== loadId) return;
-          const hadSomething = hit || (force && this.globalStatus[provider].state === "ok");
-          if (!hadSomething) this.globalStatus[provider] = { state: "error", error: describeError(err) };
+          const message = describeError(err);
+          problemLog.record(provider, "global", message);
+          const hadSomething = hit || this.globalStatus[provider].state === "ok";
+          if (!hadSomething) this.globalStatus[provider] = { state: "error", error: message };
         }
         this.emit(null);
       }),
@@ -154,8 +175,14 @@ export class EmoteRegistry {
           status = emotes.length ? { state: "ok", count: emotes.length } : { state: "none" };
           if (this.prefs.remember) this.cache.put(key, "channel", emotes);
         } catch (err) {
-          if (hit || (keep && !(err instanceof NotFoundError))) return; // keep showing what we have
-          status = err instanceof NotFoundError ? { state: "none" } : { state: "error", error: describeError(err) };
+          if (err instanceof NotFoundError) {
+            status = { state: "none" };
+          } else {
+            const message = describeError(err);
+            problemLog.record(provider, "channel", message, channel);
+            if (hit || keep) return; // keep showing what we have; the failure is still in Problems
+            status = { state: "error", error: message };
+          }
         }
         if (this.channels.get(channel)?.loadId !== entry.loadId) return;
         entry.emotes[provider] = emotes;
@@ -170,10 +197,19 @@ export class EmoteRegistry {
     this.lookups.delete(channel);
   }
 
-  /** The provider's emotes with the user's switches applied. */
-  private usable(emotes: Emote[], provider: ThirdPartyProvider): Emote[] {
-    if (!this.prefs.providers[provider]) return [];
-    const { blocked, overlays } = this.prefs;
+  private providerOn(provider: ThirdPartyProvider, channel: string): boolean {
+    return this.prefs.providers[provider] && !this.prefs.off[channel]?.has(provider);
+  }
+
+  private overlaysOn(channel: string): boolean {
+    return this.prefs.overlays && !this.prefs.off[channel]?.has("overlayEmotes");
+  }
+
+  /** The provider's emotes with the user's switches (and this channel's overrides) applied. */
+  private usable(emotes: Emote[], provider: ThirdPartyProvider, channel: string): Emote[] {
+    if (!this.providerOn(provider, channel)) return [];
+    const { blocked } = this.prefs;
+    const overlays = this.overlaysOn(channel);
     if (!blocked.size && overlays) return emotes;
     const out: Emote[] = [];
     for (const emote of emotes) {
@@ -188,10 +224,10 @@ export class EmoteRegistry {
     const cached = this.lookups.get(channel);
     if (cached) return cached;
     const map = new Map<string, Emote>();
-    for (const provider of PRIORITY) for (const emote of this.usable(this.global[provider], provider)) map.set(emote.name, emote);
+    for (const provider of PRIORITY) for (const emote of this.usable(this.global[provider], provider, channel)) map.set(emote.name, emote);
     const entry = this.channels.get(channel);
     if (entry) {
-      for (const provider of PRIORITY) for (const emote of this.usable(entry.emotes[provider], provider)) map.set(emote.name, emote);
+      for (const provider of PRIORITY) for (const emote of this.usable(entry.emotes[provider], provider, channel)) map.set(emote.name, emote);
     }
     this.lookups.set(channel, map);
     return map;

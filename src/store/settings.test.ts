@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, clampTextSize, makeBackup, parseWordList, readBackup, sanitizeSettings } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  clampTextSize,
+  cleanChannelOverrides,
+  isFeatureOn,
+  makeBackup,
+  parseWordList,
+  readBackup,
+  sanitizeSettings,
+} from "./settings";
 
 describe("sanitizeSettings", () => {
   it("starts from defaults when nothing is saved", () => {
@@ -81,5 +90,31 @@ describe("backups", () => {
     // Looks like settings only by accident (package.json, tsconfig…): must not reset everything.
     expect(readBackup(JSON.stringify({ name: "zoochattr", version: "0.3.0" }))).toBeNull();
     expect(readBackup(JSON.stringify({ mode: "production", channels: 4 }))).toBeNull();
+  });
+});
+
+describe("channelOverrides", () => {
+  it("keeps known feature ids and drops junk", () => {
+    expect(cleanChannelOverrides({ "#XQC": ["7tv", "nope", "tabComplete", "7tv"], "not a channel!": ["7tv"] })).toEqual({
+      xqc: ["7tv", "tabComplete"],
+    });
+    expect(sanitizeSettings({ channelOverrides: { geckotown: ["emotePreview"] } }).channelOverrides).toEqual({
+      geckotown: ["emotePreview"],
+    });
+  });
+
+  it("honours global switches and per-channel offs", () => {
+    const settings = sanitizeSettings({
+      emoteProviders: { bttv: false },
+      tabComplete: true,
+      channelOverrides: { geckotown: ["7tv", "tabComplete"] },
+    });
+    expect(isFeatureOn(settings, "geckotown", "7tv")).toBe(false);
+    expect(isFeatureOn(settings, "lizardlounge", "7tv")).toBe(true);
+    expect(isFeatureOn(settings, "geckotown", "bttv")).toBe(false);
+    expect(isFeatureOn(settings, "lizardlounge", "bttv")).toBe(false);
+    expect(isFeatureOn(settings, "geckotown", "tabComplete")).toBe(false);
+    expect(isFeatureOn(settings, "lizardlounge", "tabComplete")).toBe(true);
+    expect(isFeatureOn(settings, null, "tabComplete")).toBe(true);
   });
 });
