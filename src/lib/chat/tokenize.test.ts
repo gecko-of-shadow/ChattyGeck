@@ -59,6 +59,11 @@ describe("tokenize", () => {
     expect(first.type === "emote" && first.emote.url1x).toContain("/emoticons/v2/25/");
   });
 
+  it("keeps blocked Twitch emotes as plain words", () => {
+    const blocked = (name: string) => name === "Kappa";
+    expect(summarize(tokenize("hi Kappa KEKW", [{ id: "25", start: 3, end: 7 }], lookup, blocked))).toEqual(["hi Kappa ", "[KEKW]"]);
+  });
+
   it("ignores out-of-range Twitch emote positions", () => {
     expect(summarize(tokenize("short", [{ id: "25", start: 3, end: 40 }], lookup))).toEqual(["short"]);
   });

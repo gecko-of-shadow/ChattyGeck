@@ -807,9 +807,16 @@ class ChatController {
   /** Throws away remembered emote lists and fetches fresh ones for every joined channel. */
   forgetEmotes(): void {
     emoteRegistry.forgetCache();
+    this.refetchEmotes();
+  }
+
+  private refetchEmotes(): void {
     void emoteRegistry.loadGlobal(true);
     for (const view of Object.values(get().channels)) {
-      if (view.roomId) void emoteRegistry.loadChannel(view.login, view.roomId, true);
+      if (view.roomId) {
+        this.emoteLoadedAt.set(view.login, Date.now());
+        void emoteRegistry.loadChannel(view.login, view.roomId, true);
+      }
     }
   }
 
@@ -820,8 +827,8 @@ class ChatController {
     if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
     emoteRegistry.setPrefs(emotePrefsFrom(after));
     if (after.rememberEmotes && !before.rememberEmotes) {
-      // Turning "remember" on: store what's already loaded by refetching once.
-      void emoteRegistry.loadGlobal(true);
+      // Turning "remember" on: fetch once more so every current list gets stored.
+      this.refetchEmotes();
     } else if (!after.rememberEmotes && before.rememberEmotes) {
       emoteRegistry.forgetCache();
     }

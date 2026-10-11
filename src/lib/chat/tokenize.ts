@@ -76,6 +76,8 @@ export function tokenize(
   text: string,
   twitchEmotes: TwitchEmoteRange[],
   lookup: (word: string) => Emote | undefined,
+  /** Twitch emote names the user blocked; they stay plain words. (Third-party ones never reach `lookup`.) */
+  isBlocked: (name: string) => boolean = () => false,
 ): Fragment[] {
   const out: Fragment[] = [];
   if (!twitchEmotes.length) {
@@ -87,8 +89,9 @@ export function tokenize(
   let cursor = 0;
   for (const range of twitchEmotes) {
     if (range.start < cursor || range.end >= chars.length) continue;
-    tokenizeWords(out, chars.slice(cursor, range.start).join(""), lookup);
     const name = chars.slice(range.start, range.end + 1).join("");
+    if (isBlocked(name)) continue;
+    tokenizeWords(out, chars.slice(cursor, range.start).join(""), lookup);
     out.push({ type: "emote", emote: twitchEmote(range.id, name), overlays: [] });
     cursor = range.end + 1;
   }

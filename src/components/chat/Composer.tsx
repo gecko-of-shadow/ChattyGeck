@@ -291,7 +291,9 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             </span>
           ) : null}
         </div>
-        {emotePicker ? <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} compact={compact} /> : null}
+        {emotePicker ? (
+          <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} returnFocus={inputRef} compact={compact} />
+        ) : null}
         <Button
           type="submit"
           size={compact ? "icon-sm" : "default"}
