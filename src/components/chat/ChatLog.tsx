@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { GeckoFootIcon } from "@/components/gecko/icons";
@@ -28,11 +28,13 @@ interface ChatLogProps {
   viewKey: string;
   showChannel: boolean;
   empty?: ReactNode;
+  /** Draws a "new since you left" divider after this message id. */
+  readMarker?: string;
   onChannelClick?: (channel: string) => void;
   onNameClick?: (login: string) => void;
 }
 
-export function ChatLog({ messages, viewKey, showChannel, empty, onChannelClick, onNameClick }: ChatLogProps) {
+export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onChannelClick, onNameClick }: ChatLogProps) {
   const prefs: RowPrefs & { fontSize: string; zebra: boolean } = useChat(
     useShallow((s) => ({
       showTimestamps: s.settings.showTimestamps,
@@ -143,17 +145,25 @@ export function ChatLog({ messages, viewKey, showChannel, empty, onChannelClick,
           {visible.length === 0 && empty ? (
             <div className="flex flex-1 items-center justify-center p-6">{empty}</div>
           ) : null}
-          {visible.map((message) => (
-            <MessageRow
-              key={message.id}
-              message={message}
-              revision={`${emoteVersions[message.channel] ?? 0}.${globalEmoteVersion}.${badgeVersion}`}
-              showChannel={showChannel}
-              prefs={prefs}
-              selfLogin={selfLogin}
-              onChannelClick={onChannelClick}
-              onNameClick={onNameClick}
-            />
+          {visible.map((message, index) => (
+            <Fragment key={message.id}>
+              <MessageRow
+                message={message}
+                revision={`${emoteVersions[message.channel] ?? 0}.${globalEmoteVersion}.${badgeVersion}`}
+                showChannel={showChannel}
+                prefs={prefs}
+                selfLogin={selfLogin}
+                onChannelClick={onChannelClick}
+                onNameClick={onNameClick}
+              />
+              {message.id === readMarker && index < visible.length - 1 ? (
+                <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-semibold tracking-wide text-mention uppercase" role="separator">
+                  <span className="h-px flex-1 bg-[rgb(var(--mention-rgb)/0.45)]" />
+                  New since you left
+                  <span className="h-px flex-1 bg-[rgb(var(--mention-rgb)/0.45)]" />
+                </div>
+              ) : null}
+            </Fragment>
           ))}
         </div>
       </div>

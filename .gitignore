@@ -23,10 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
-# Secrets: only .env.example is committed
+# Local env files stay out of git; .env.mock only points at the offline mock Twitch
 .env
 .env.*
 !.env.example
+!.env.mock
 
 # Portable build output and runtime data
 release/

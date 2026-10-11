@@ -67,6 +67,13 @@ export async function clearSession(): Promise<void> {
   sessionStorage.removeItem(SESSION_KEY);
 }
 
+/** Flashes the taskbar button (Windows) / bounces the dock icon. */
+export async function requestAttention(): Promise<void> {
+  if (!isTauri) return;
+  const { getCurrentWindow, UserAttentionType } = await import("@tauri-apps/api/window");
+  await getCurrentWindow().requestUserAttention(UserAttentionType.Informational);
+}
+
 export async function openExternal(url: string): Promise<void> {
   if (isTauri) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
