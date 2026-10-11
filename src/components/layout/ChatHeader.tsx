@@ -30,7 +30,7 @@ function ConnectionPill() {
   let tone: "ok" | "wait" | "bad";
   switch (read.status) {
     case "connected":
-      label = auth.status === "logged_in" ? "Live" : "Live · anonymous";
+      label = auth.status === "logged_in" ? `Live · ${auth.login}` : "Live · anonymous";
       tone = "ok";
       break;
     case "reconnecting":
