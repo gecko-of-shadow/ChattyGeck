@@ -1,0 +1,11 @@
+---
+description: Never wipe or logout gecko-of-shadow GitHub credentials after use
+alwaysApply: true
+---
+
+# GitHub auth — never wipe
+
+- Do **not** log out, revoke, reject, erase, or clear GitHub credentials for `gecko-of-shadow` / `github.com` after pushes or at session end.
+- Forbidden unless the user explicitly asks: `gh auth logout`, `git credential reject`/`erase` for github.com, GCM wipe, deleting credential stores.
+- Prefer cached GCM credentials or env `GITHUB_TOKEN` / `GH_TOKEN`. Only start device login if both are missing/broken.
+- After any successful login, leave credentials cached; do not “clean up” auth.
