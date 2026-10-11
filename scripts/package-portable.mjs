@@ -36,7 +36,7 @@ fs.writeFileSync(
     `Double-click ${exeName} to start. Nothing gets installed.`,
     "",
     "- Settings and the webview cache live in the ZooChattr-data folder created next to the exe.",
-    "  Copy the whole folder to take your channel list with you.",
+    "  Copy the whole folder to take your channel list with you; delete ZooChattr-data before giving a copy to someone else.",
     "- Your Twitch login is kept in Windows Credential Manager (entry \"ZooChattr\"), not in this folder.",
     "  Use Log out in the app to remove it.",
     "- Windows SmartScreen may warn because the exe isn't code-signed: More info > Run anyway.",
