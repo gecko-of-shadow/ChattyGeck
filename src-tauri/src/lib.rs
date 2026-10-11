@@ -6,6 +6,8 @@ use tauri::{Manager, State, WebviewWindowBuilder};
 
 struct AppState {
     data: storage::DataDir,
+    /// Commands run on a thread pool; two saves must not share the temp file at once.
+    save_lock: std::sync::Mutex<()>,
 }
 
 #[derive(Serialize)]
@@ -36,6 +38,7 @@ fn settings_load(state: State<'_, AppState>) -> Result<Option<serde_json::Value>
 
 #[tauri::command]
 fn settings_save(state: State<'_, AppState>, settings: serde_json::Value) -> Result<(), String> {
+    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     storage::save_settings(&state.data, &settings)
 }
 
@@ -61,7 +64,10 @@ pub fn run() {
         .setup(|app| {
             let data = storage::resolve_data_dir(app.handle());
             let webview_dir = data.portable.then(|| data.path.join("webview"));
-            app.manage(AppState { data });
+            app.manage(AppState {
+                data,
+                save_lock: std::sync::Mutex::new(()),
+            });
 
             let window_config = app
                 .config()

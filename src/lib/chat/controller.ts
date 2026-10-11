@@ -65,7 +65,8 @@ class ChatController {
   private write: IrcConnection | null = null;
   private queue: ChatMessage[] = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saving = false;
+  private saveDirty = false;
   private saveErrorShown = false;
   private pendingSends: PendingSend[] = [];
   private sentLog: number[] = [];
@@ -805,20 +806,30 @@ class ChatController {
 
   updateSettings(patch: Partial<Settings> | ((settings: Settings) => Partial<Settings>)): void {
     set((s) => ({ settings: { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) } }));
-    if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      this.saveTimer = null;
-      platform.saveSettings(get().settings).then(
-        () => {
+    this.saveDirty = true;
+    void this.persistSettings();
+  }
+
+  /** Saves right away (so closing the window can't lose a change), one write at a time, latest state wins. */
+  private async persistSettings(): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    try {
+      while (this.saveDirty) {
+        this.saveDirty = false;
+        try {
+          await platform.saveSettings(get().settings);
           this.saveErrorShown = false;
-        },
-        (err) => {
-          if (this.saveErrorShown) return;
-          this.saveErrorShown = true;
-          toast.error("Couldn't save settings", { description: errorText(err) });
-        },
-      );
-    }, 300);
+        } catch (err) {
+          if (!this.saveErrorShown) {
+            this.saveErrorShown = true;
+            toast.error("Couldn't save settings", { description: errorText(err) });
+          }
+        }
+      }
+    } finally {
+      this.saving = false;
+    }
   }
 
   private tick(): void {

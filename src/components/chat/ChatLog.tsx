@@ -63,10 +63,20 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
   const [hover, setHover] = useState<HoverEmote | null>(null);
   const anchorFromBottom = useRef<number | null>(null);
 
-  const visible = useMemo(
-    () => frozen ?? (messages.length > LIVE_ROWS ? messages.slice(-LIVE_ROWS) : messages),
-    [frozen, messages],
-  );
+  const visible = useMemo(() => {
+    if (frozen) return frozen;
+    let keep = LIVE_ROWS;
+    if (readMarker) {
+      // Keep the "new since you left" divider reachable even in a fast channel.
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].id === readMarker) {
+          keep = Math.max(keep, messages.length - i + 3);
+          break;
+        }
+      }
+    }
+    return messages.length > keep ? messages.slice(-keep) : messages;
+  }, [frozen, messages, readMarker]);
   const newer = frozen ? countNewer(frozen, messages) : 0;
 
   useEffect(() => {

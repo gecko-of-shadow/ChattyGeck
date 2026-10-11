@@ -22,6 +22,7 @@ export class HelixUnauthorizedError extends Error {}
 
 async function helix<T>(session: Session, path: string): Promise<T> {
   const res = await fetch(`${config.helixBase}${path}`, {
+    signal: AbortSignal.timeout(15_000),
     headers: {
       Authorization: `Bearer ${session.accessToken}`,
       "Client-Id": session.clientId,
