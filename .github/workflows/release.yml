@@ -1,0 +1,51 @@
+name: Release
+
+# Builds the portable ZooChattr.exe on Windows. Pushing a tag like v0.1.0 publishes it as a GitHub Release;
+# running it by hand (Actions tab > Release > Run workflow) just uploads the zip as a build artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Build portable exe
+        run: npm run build:portable
+        env:
+          # Public Twitch Client ID (Settings > Secrets and variables > Actions > Variables).
+          # Without it the app still builds; people paste a Client ID in Settings to log in.
+          TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZooChattr-portable
+          path: release/ZooChattr-portable-*.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/ZooChattr-portable-*.zip
+          generate_release_notes: true

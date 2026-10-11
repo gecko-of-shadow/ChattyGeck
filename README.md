@@ -4,6 +4,8 @@ A portable Windows 11 desktop app for reading several Twitch chats at once, old-
 
 Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it talks to Twitch chat over the official IRC WebSocket and pulls emotes from the public emote APIs.
 
+**Download:** grab `ZooChattr-portable-<version>.zip` from [Releases](https://github.com/gecko-of-shadow/ZooChattr/releases/latest), unzip it anywhere, and run `ZooChattr.exe`. Each release is built on Windows by the [Release workflow](.github/workflows/release.yml).
+
 ## What it does
 
 - **Many channels, one window.** Join and leave channels freely. Connections stay open while the app runs, and drops are recovered automatically with backoff ("dropped the connection like a tail, regrowing it in 4s").
@@ -84,6 +86,17 @@ release/
 Copy `ZooChattr-portable` anywhere, such as a USB stick or Dropbox, and double-click `ZooChattr.exe`. On first run it creates `ZooChattr-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.zoochattr`. Settings shows which location is in use.
 
 The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
+
+### Publishing a release
+
+Push a version tag and GitHub builds the exe on Windows and attaches the zip to a new release:
+
+```bash
+npm version patch          # bumps package.json (the app reads its version from there) and tags it
+git push && git push --tags
+```
+
+To bake your Twitch Client ID into release builds, add it as a repository variable named `TWITCH_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). It's public by design, so a variable is fine; no secret is needed.
 
 ### Cross-compiling from Linux or macOS (experimental)
 
