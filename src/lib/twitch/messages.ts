@@ -61,10 +61,18 @@ export function mentionsUser(text: string, login: string | undefined): boolean {
   return new RegExp(`(^|[^\\w])@?${escapeRegExp(login)}(?![\\w])`, "i").test(text);
 }
 
+const highlightPatterns = new WeakMap<readonly string[], RegExp>();
+
 /** True when any of the user's extra highlight words appears as a whole word (case-insensitive). */
 export function matchesHighlight(text: string, words: readonly string[]): boolean {
   if (!words.length) return false;
-  return words.some((word) => mentionsUser(text, word));
+  // One combined pattern per word list (the list object only changes when the setting does).
+  let pattern = highlightPatterns.get(words);
+  if (!pattern) {
+    pattern = new RegExp(`(^|[^\\w])@?(?:${words.map(escapeRegExp).join("|")})(?![\\w])`, "i");
+    highlightPatterns.set(words, pattern);
+  }
+  return pattern.test(text);
 }
 
 export function privmsgToChat(message: IrcMessage, selfLogin?: string): ChatMessage {

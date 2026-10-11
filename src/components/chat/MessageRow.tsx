@@ -123,8 +123,9 @@ function MessageRowInner({
 }: MessageRowProps) {
   const fragments = useMemo(() => {
     const lookup = emoteRegistry.lookup(message.channel);
-    return tokenize(message.text, message.twitchEmotes, (word) => lookup.get(word));
-    // `revision` changes when this channel's emote map changes; the lookup itself is not reactive.
+    const { blocked } = emoteRegistry.getPrefs();
+    return tokenize(message.text, message.twitchEmotes, (word) => lookup.get(word), (name) => blocked.has(name));
+    // `revision` changes when this channel's emote map or the emote switches change; the lookup itself is not reactive.
   }, [message.text, message.twitchEmotes, message.channel, revision]);
 
   const time = prefs.showTimestamps ? (

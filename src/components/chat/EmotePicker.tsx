@@ -92,11 +92,13 @@ export interface EmotePickerProps {
   emotes: Emote[];
   index: NameIndex;
   onPick: (emote: Emote) => void;
+  /** Where focus goes when the menu closes (the message box). */
+  returnFocus?: React.RefObject<HTMLElement | null>;
   compact?: boolean;
 }
 
 /** FFZ-style emote menu: foldable sections per source, search, and right-click favourites. */
-export function EmotePicker({ channel, emotes, index, onPick, compact = false }: EmotePickerProps) {
+export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compact = false }: EmotePickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const tab = useChat((s) => s.settings.pickerTab);
@@ -159,7 +161,14 @@ export function EmotePicker({ channel, emotes, index, onPick, compact = false }:
       >
         <Mascot className={compact ? "size-5" : "size-6"} anim="none" />
       </PopoverTrigger>
-      <PopoverContent align="end" side="top" sideOffset={8} className="w-[min(92vw,22rem)] gap-2 p-2" data-testid="emote-picker">
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={8}
+        finalFocus={returnFocus}
+        className="w-[min(92vw,22rem)] gap-2 p-2"
+        data-testid="emote-picker"
+      >
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input

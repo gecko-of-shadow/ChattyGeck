@@ -210,7 +210,8 @@ await step("text size, emote size and sources apply straight away", async () => 
   await page.keyboard.press("Escape");
   const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
   await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
-  await row.locator('img[alt="KEKW"]').waitFor({ timeout: 5_000 });
+  await row.getByText("geckoWave peepoHappy").waitFor({ timeout: 5_000 });
+  await row.locator('img[alt="LilZ"]').waitFor({ timeout: 2_000 });
   await page.getByRole("button", { name: "Settings" }).first().click();
   await page.locator('label[for="pref-provider-7tv"]').click();
   await page.getByRole("radio", { name: "Medium" }).click();

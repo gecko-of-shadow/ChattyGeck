@@ -96,6 +96,10 @@ function TextSizeRow() {
   const [draft, setDraft] = useState(String(textSize));
   useEffect(() => setDraft(String(textSize)), [textSize]);
   const commit = () => {
+    if (!draft.trim()) {
+      setDraft(String(textSize));
+      return;
+    }
     const next = clampTextSize(draft);
     setDraft(String(next));
     if (next !== textSize) chat.updateSettings({ textSize: next });
@@ -315,6 +319,8 @@ function EmotesSection() {
                 onClick={() => {
                   chat.forgetEmotes();
                   setCacheSize(0);
+                  // Fresh lists get remembered as they arrive; show the real count once they have.
+                  setTimeout(() => setCacheSize(emoteRegistry.cacheSize), 4_000);
                   toast("Forgot the remembered emotes", { description: "Fetching fresh lists now." });
                 }}
               >
