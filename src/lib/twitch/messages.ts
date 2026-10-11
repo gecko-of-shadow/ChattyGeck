@@ -61,6 +61,12 @@ export function mentionsUser(text: string, login: string | undefined): boolean {
   return new RegExp(`(^|[^\\w])@?${escapeRegExp(login)}(?![\\w])`, "i").test(text);
 }
 
+/** True when any of the user's extra highlight words appears as a whole word (case-insensitive). */
+export function matchesHighlight(text: string, words: readonly string[]): boolean {
+  if (!words.length) return false;
+  return words.some((word) => mentionsUser(text, word));
+}
+
 export function privmsgToChat(message: IrcMessage, selfLogin?: string): ChatMessage {
   const tags = message.tags;
   const login = (message.nick ?? tags.login ?? "").toLowerCase();

@@ -5,15 +5,19 @@ import { chat } from "@/lib/chat/controller";
 import { tokenize, type Fragment } from "@/lib/chat/tokenize";
 import { readableNameColor } from "@/lib/colors";
 import { emoteRegistry } from "@/lib/emotes/registry";
-import type { Emote } from "@/lib/emotes/types";
+import { emoteBigUrl, emoteUrls, type Emote } from "@/lib/emotes/types";
 import { openExternal } from "@/lib/platform";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { cn } from "@/lib/utils";
+import type { EmoteAnimation } from "@/store/settings";
 
 export interface RowPrefs {
   showTimestamps: boolean;
   use24h: boolean;
   showBadges: boolean;
+  emoteAnimation: EmoteAnimation;
+  /** Deleted messages stay readable (faded, crossed out) instead of being replaced by a note. */
+  showDeleted: boolean;
 }
 
 const formatters = {
@@ -25,20 +29,24 @@ function formatTime(ts: number, use24h: boolean): string {
   return (use24h ? formatters.h24 : formatters.h12).format(ts);
 }
 
-function srcSet(emote: Emote): string | undefined {
-  const parts = [`${emote.url1x} 1x`];
-  if (emote.url2x) parts.push(`${emote.url2x} 2x`);
-  if (emote.url4x) parts.push(`${emote.url4x} 4x`);
+function srcSet(urls: { url1x: string; url2x?: string; url4x?: string }): string | undefined {
+  const parts = [`${urls.url1x} 1x`];
+  if (urls.url2x) parts.push(`${urls.url2x} 2x`);
+  if (urls.url4x) parts.push(`${urls.url4x} 4x`);
   return parts.length > 1 ? parts.join(", ") : undefined;
 }
 
-function EmoteImage({ emote, overlay = false }: { emote: Emote; overlay?: boolean }) {
+function EmoteImage({ emote, animation, overlay = false }: { emote: Emote; animation: EmoteAnimation; overlay?: boolean }) {
   const [failed, setFailed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   if (failed) return overlay ? null : <span className="[grid-area:1/1]">{emote.name}</span>;
+  // "hover": the still frame until the pointer is on it (the row's mouse events reach us through bubbling).
+  const still = animation === "never" || (animation === "hover" && !hovered);
+  const urls = emoteUrls(emote, still);
   return (
     <img
-      src={emote.url1x}
-      srcSet={srcSet(emote)}
+      src={urls.url1x}
+      srcSet={srcSet(urls)}
       alt={emote.name}
       loading="lazy"
       decoding="async"
@@ -47,22 +55,24 @@ function EmoteImage({ emote, overlay = false }: { emote: Emote; overlay?: boolea
       data-emote-name={emote.name}
       data-emote-provider={emote.provider}
       data-emote-scope={emote.scope}
-      data-emote-src={emote.url4x ?? emote.url2x ?? emote.url1x}
+      data-emote-src={emoteBigUrl(emote, animation === "never")}
+      onMouseEnter={animation === "hover" && emote.animated ? () => setHovered(true) : undefined}
+      onMouseLeave={animation === "hover" && emote.animated ? () => setHovered(false) : undefined}
       onError={() => setFailed(true)}
     />
   );
 }
 
-function renderFragment(fragment: Fragment, index: number, selfLogin?: string): ReactNode {
+function renderFragment(fragment: Fragment, index: number, animation: EmoteAnimation, selfLogin?: string): ReactNode {
   switch (fragment.type) {
     case "text":
       return <span key={index}>{fragment.text}</span>;
     case "emote":
       return (
         <span key={index} className="inline-grid place-items-center align-middle mx-px">
-          <EmoteImage emote={fragment.emote} />
+          <EmoteImage emote={fragment.emote} animation={animation} />
           {fragment.overlays.map((overlay, i) => (
-            <EmoteImage key={i} emote={overlay} overlay />
+            <EmoteImage key={i} emote={overlay} animation={animation} overlay />
           ))}
         </span>
       );
@@ -155,6 +165,9 @@ function MessageRowInner({
   const nameColor = readableNameColor(message.color, message.login ?? name);
   const isAction = message.kind === "action";
   const isEvent = message.kind === "event";
+  const deleted = !!message.deleted;
+  /** Hidden deletions: the words are replaced by a note, like Twitch does. */
+  const hideText = deleted && !prefs.showDeleted;
 
   const badges = prefs.showBadges
     ? message.badges.map((badge) => {
@@ -184,9 +197,11 @@ function MessageRowInner({
         message.highlighted && "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
         message.firstMsg && !message.mention && "shadow-[inset_3px_0_0_var(--mascot-belly)]",
         isEvent && "my-0.5 bg-primary/[0.07] py-1.5 shadow-[inset_3px_0_0_var(--primary)]",
-        message.deleted && "opacity-45",
+        deleted && "chat-row-deleted opacity-50",
         message.pending === "sending" && "opacity-60",
       )}
+      data-deleted={deleted || undefined}
+      data-mention={message.mention || undefined}
     >
       {message.reply ? (
         <div className="mb-0.5 flex items-center gap-1 truncate pl-1 text-[0.82em] text-muted-foreground">
@@ -222,10 +237,14 @@ function MessageRowInner({
             {showLogin ? <span className="font-medium opacity-70"> ({message.login})</span> : null}
           </button>
           {isAction ? " " : <span className="mr-1 text-muted-foreground">:</span>}
-          <span style={isAction ? { color: nameColor } : undefined} className={cn(isAction && "italic")}>
-            {fragments.map((fragment, index) => renderFragment(fragment, index, selfLogin))}
-          </span>
-          {message.deleted ? (
+          {hideText ? (
+            <span className="text-muted-foreground italic">message deleted</span>
+          ) : (
+            <span style={isAction ? { color: nameColor } : undefined} className={cn("chat-text", isAction && "italic")}>
+              {fragments.map((fragment, index) => renderFragment(fragment, index, prefs.emoteAnimation, selfLogin))}
+            </span>
+          )}
+          {deleted && !hideText ? (
             <span className="ml-1.5 rounded bg-muted px-1 text-[0.75em] text-muted-foreground not-italic">deleted</span>
           ) : null}
           {message.pending === "sending" ? (

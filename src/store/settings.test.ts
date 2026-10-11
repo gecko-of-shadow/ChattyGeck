@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, sanitizeSettings } from "./settings";
+import { DEFAULT_SETTINGS, clampTextSize, makeBackup, parseWordList, readBackup, sanitizeSettings } from "./settings";
 
 describe("sanitizeSettings", () => {
   it("starts from defaults when nothing is saved", () => {
@@ -27,5 +27,55 @@ describe("sanitizeSettings", () => {
   it("closes to the tray unless told otherwise", () => {
     expect(sanitizeSettings({}).closeToTray).toBe(true);
     expect(sanitizeSettings({ closeToTray: false }).closeToTray).toBe(false);
+  });
+
+  it("turns the old small/medium/large text sizes into pixels and clamps new ones", () => {
+    expect(sanitizeSettings({ fontSize: "sm" }).textSize).toBe(12.5);
+    expect(sanitizeSettings({ fontSize: "lg" }).textSize).toBe(15.5);
+    expect(sanitizeSettings({ textSize: 32 }).textSize).toBe(32);
+    expect(sanitizeSettings({ textSize: 400 }).textSize).toBe(40);
+    expect(sanitizeSettings({ textSize: "nope" }).textSize).toBe(13.5);
+    expect(clampTextSize(11.26)).toBe(11.5);
+  });
+
+  it("keeps every emote switch, with unknown values falling back", () => {
+    const s = sanitizeSettings({
+      emoteProviders: { bttv: false },
+      emoteSize: 1.5,
+      emoteAnimation: "hover",
+      overlayEmotes: false,
+      blockedEmotes: [" KEKW ", "KEKW", "", 5, "Clap"],
+      pickerTab: "nope",
+      favoriteEmotes: ["7tv:abc"],
+    });
+    expect(s.emoteProviders).toEqual({ "7tv": true, bttv: false, ffz: true });
+    expect(s.emoteSize).toBe(1.5);
+    expect(s.emoteAnimation).toBe("hover");
+    expect(s.overlayEmotes).toBe(false);
+    expect(s.blockedEmotes).toEqual(["KEKW", "Clap"]);
+    expect(s.pickerTab).toBe("all");
+    expect(s.favoriteEmotes).toEqual(["7tv:abc"]);
+    expect(sanitizeSettings({ emoteSize: 3 }).emoteSize).toBe(1);
+  });
+});
+
+describe("word lists", () => {
+  it("splits on lines, commas and spaces", () => {
+    expect(parseWordList("gecko\nlizard, newt  frog\n\n")).toEqual(["gecko", "lizard", "newt", "frog"]);
+  });
+});
+
+describe("backups", () => {
+  it("round-trips through a backup file", () => {
+    const settings = sanitizeSettings({ channels: ["xqc"], textSize: 20, highlightWords: ["gecko"] });
+    const text = JSON.stringify(makeBackup(settings));
+    expect(readBackup(text)).toEqual(settings);
+  });
+
+  it("accepts a bare settings object and rejects other files", () => {
+    expect(readBackup(JSON.stringify({ channels: ["xqc"] }))?.channels).toEqual(["xqc"]);
+    expect(readBackup("not json")).toBeNull();
+    expect(readBackup(JSON.stringify({ hello: "world" }))).toBeNull();
+    expect(readBackup("[]")).toBeNull();
   });
 });

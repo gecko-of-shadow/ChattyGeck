@@ -128,6 +128,117 @@ await step("/me sends an action", async () => {
   await rowsWith("licks its eyeball").first().waitFor({ timeout: 8_000 });
 });
 
+await step("7TV, BTTV and FFZ emotes render in chat", async () => {
+  await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("geckoWave peepoHappy LilZ KEKW"));
+  const row = rowsWith("geckoWave").last();
+  for (const name of ["geckoWave", "peepoHappy", "LilZ", "KEKW"]) {
+    await row.locator(`img[alt="${name}"]`).first().waitFor({ timeout: 8_000 });
+  }
+  await shot("05b-third-party-emotes");
+});
+
+await step("Tab finishes emote names and cycles the matches", async () => {
+  const input = page.getByLabel("Message #geckotown");
+  await input.fill("hi geck");
+  await input.press("Tab");
+  if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Tab: "${await input.inputValue()}"`);
+  await page.getByTestId("tab-complete").waitFor({ timeout: 2_000 });
+  await input.press("Tab");
+  if ((await input.inputValue()) !== "hi geckoHype ") throw new Error(`after 2nd Tab: "${await input.inputValue()}"`);
+  await input.press("Shift+Tab");
+  if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Shift+Tab: "${await input.inputValue()}"`);
+  await shot("05c-tab-complete");
+  await input.fill("");
+});
+
+await step("emote menu inserts emotes and remembers favourites", async () => {
+  const input = page.getByLabel("Message #geckotown");
+  await page.getByTestId("emote-picker-button").first().click();
+  const picker = page.getByTestId("emote-picker");
+  await picker.waitFor({ timeout: 3_000 });
+  await picker.locator('[data-emote-tile="geckoWave"]').waitFor({ timeout: 5_000 });
+  await shot("05d-emote-menu");
+  await picker.getByLabel("Search emotes").fill("catJ");
+  await picker.locator('[data-emote-tile="catJAM"]').click();
+  await page.waitForTimeout(200);
+  if ((await input.inputValue()) !== "catJAM ") throw new Error(`picker inserted "${await input.inputValue()}"`);
+  await input.fill("");
+  await page.getByTestId("emote-picker-button").first().click();
+  await picker.locator('[data-emote-tile="peepoHappy"]').click({ button: "right" });
+  await picker.getByRole("tab", { name: /Favourites/ }).click();
+  await picker.locator('[data-emote-tile="peepoHappy"]').waitFor({ timeout: 3_000 });
+  if (await picker.locator('[data-emote-tile="catJAM"]').count()) throw new Error("non-favourite shown on the favourites tab");
+  await shot("05e-favourites");
+  await page.keyboard.press("Escape");
+  await picker.waitFor({ state: "hidden", timeout: 3_000 });
+});
+
+await step("deleted messages stay readable, faded and crossed out", async () => {
+  const { id } = await (await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("this one gets removed soon"))).json();
+  await rowsWith("this one gets removed soon").last().waitFor({ timeout: 8_000 });
+  await mockPost(`/__delete?channel=geckotown&id=${id}`);
+  await page.locator(".chat-row.chat-row-deleted", { hasText: "this one gets removed soon" }).waitFor({ timeout: 5_000 });
+});
+
+await step("highlight words count as mentions", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  const box = page.locator("#pref-highlight");
+  await box.fill("giveaway");
+  await box.press("Control+Enter");
+  await page.keyboard.press("Escape");
+  await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("big GIVEAWAY tonight folks"));
+  await page.locator('.chat-row[data-mention="true"]', { hasText: "GIVEAWAY tonight" }).waitFor({ timeout: 8_000 });
+});
+
+await step("text size, emote size and sources apply straight away", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.getByRole("radio", { name: "Huge" }).click();
+  await page.getByRole("radio", { name: "2×" }).click();
+  const vars = await page.evaluate(() => {
+    const el = document.querySelector(".chat-log");
+    return [el?.style.getPropertyValue("--chat-font"), el?.style.getPropertyValue("--emote-scale")];
+  });
+  if (vars[0] !== "20px" || vars[1] !== "2") throw new Error(`css vars are ${JSON.stringify(vars)}`);
+  const px = page.getByLabel("Text size in pixels");
+  await px.fill("16");
+  await px.press("Enter");
+  const font = await page.evaluate(() => document.querySelector(".chat-log")?.style.getPropertyValue("--chat-font"));
+  if (font !== "16px") throw new Error(`custom px gave ${font}`);
+  await shot("06b-settings-emotes");
+  await page.locator("#pref-provider-7tv").click();
+  await page.keyboard.press("Escape");
+  const row = rowsWith("geckoWave").last();
+  await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
+  await row.locator('img[alt="KEKW"]').waitFor({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.locator("#pref-provider-7tv").click();
+  await page.getByRole("radio", { name: "Medium" }).click();
+  await page.getByRole("radio", { name: "1×" }).click();
+  await page.keyboard.press("Escape");
+  await row.locator('img[alt="geckoWave"]').waitFor({ timeout: 5_000 });
+});
+
+await step("settings back up, reset and restore", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  const px = page.getByLabel("Text size in pixels");
+  await px.fill("17");
+  await px.press("Enter");
+  const downloading = page.waitForEvent("download", { timeout: 5_000 });
+  await page.getByRole("button", { name: "Back up" }).click();
+  const file = await (await downloading).path();
+  const backup = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (backup.zoochattr !== 1 || backup.settings.textSize !== 17) throw new Error("backup file looks wrong");
+  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: "Really reset?" }).click();
+  if ((await px.inputValue()) !== "13.5") throw new Error(`reset left text size at ${await px.inputValue()}`);
+  await page.locator('input[type="file"]').setInputFiles(file);
+  await page.getByText("Settings restored").waitFor({ timeout: 3_000 });
+  if ((await px.inputValue()) !== "17") throw new Error(`restore left text size at ${await px.inputValue()}`);
+  await px.fill("13.5");
+  await px.press("Enter");
+  await page.keyboard.press("Escape");
+});
+
 await step("scrolling up pauses the feed; the toe-pad button sticks back to live", async () => {
   const log = page.getByLabel("Chat messages");
   await mockPost("/__burst?channel=geckotown&n=60");

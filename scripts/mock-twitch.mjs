@@ -52,6 +52,63 @@ const avatar = (login) =>
 
 const roomId = (channel) => String(100000 + ([...channel].reduce((h, c) => h * 31 + c.charCodeAt(0), 7) % 900000));
 
+// ------------------------------------------------------------------ Third-party emotes
+
+const emoteSvg = (name) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 28"><rect width="56" height="28" rx="6" fill="#2b4a2e"/><text x="28" y="18" font-size="9" text-anchor="middle" fill="#c8ffa6" font-family="sans-serif">${name.slice(0, 9)}</text></svg>`;
+const emoteBase = (provider, name) => `http://127.0.0.1:${HTTP_PORT}/emote/${encodeURIComponent(name)}/${provider}`;
+
+// Channel sets are keyed by the mock room id of the channel (see roomId()).
+const GECKOTOWN = roomId("geckotown");
+const SEVEN_TV = {
+  global: [
+    { id: "7g1", name: "peepoHappy", animated: true },
+    { id: "7g2", name: "catJAM", animated: true },
+    { id: "7g3", name: "FeelsOkayMan" },
+  ],
+  channel: {
+    [GECKOTOWN]: [
+      { id: "7c1", name: "geckoWave" },
+      { id: "7c2", name: "geckoLick", animated: true },
+      { id: "7c3", name: "RainbowPls", zeroWidth: true, animated: true },
+    ],
+  },
+};
+const BTTV = {
+  global: [
+    { id: "bg1", code: "KEKW" },
+    { id: "bg2", code: "monkaS" },
+  ],
+  channel: { [GECKOTOWN]: [{ id: "bc1", code: "geckoHype", animated: true, imageType: "gif" }] },
+};
+const FFZ = {
+  global: [
+    { id: 1, name: "LilZ" },
+    { id: 2, name: "ZreknarF" },
+  ],
+  channel: { [GECKOTOWN]: [{ id: 3, name: "geckoPog", animated: true }] },
+};
+
+const sevenTvEmote = (e) => ({
+  id: e.id,
+  name: e.name,
+  flags: e.zeroWidth ? 1 : 0,
+  data: {
+    animated: !!e.animated,
+    flags: 0,
+    host: { url: emoteBase("7tv", e.name), files: [{ name: "1x.webp", width: 56, height: 28, format: "WEBP" }] },
+  },
+});
+const bttvEmote = (e) => ({ id: e.id, code: e.code, imageType: e.imageType ?? "png", animated: !!e.animated, userId: "mock" });
+const ffzEmote = (e) => ({
+  id: e.id,
+  name: e.name,
+  width: 56,
+  height: 28,
+  urls: { 1: `${emoteBase("ffz", e.name)}/1` },
+  animated: e.animated ? { 1: `${emoteBase("ffz", e.name)}/1.animated` } : null,
+});
+
 // ------------------------------------------------------------------ HTTP: id.twitch.tv + Helix
 
 const httpServer = http.createServer(async (req, res) => {
@@ -67,6 +124,31 @@ const httpServer = http.createServer(async (req, res) => {
 
   const bearer = (req.headers.authorization ?? "").replace(/^(OAuth|Bearer)\s+/i, "");
   const tokenValid = tokens.has(bearer) && tokens.get(bearer) > Date.now();
+
+  if (req.method === "GET") {
+    let m;
+    if (url.pathname.startsWith("/emote/")) {
+      // Any path under /emote/<name>/... draws a little badge with the name, whatever the file extension.
+      const name = decodeURIComponent(url.pathname.split("/")[2] ?? "?");
+      res.writeHead(200, { "content-type": "image/svg+xml", "access-control-allow-origin": "*", "cache-control": "no-store" });
+      return res.end(emoteSvg(name));
+    }
+    if ((m = url.pathname.match(/^\/7tv\/users\/twitch\/(\d+)$/))) {
+      const set = SEVEN_TV.channel[m[1]];
+      if (!set) return json(res, 404, { error: "Unknown User" });
+      return json(res, 200, { emote_set: { emotes: set.map(sevenTvEmote) } });
+    }
+    if ((m = url.pathname.match(/^\/bttv\/cached\/users\/twitch\/(\d+)$/))) {
+      const set = BTTV.channel[m[1]];
+      if (!set) return json(res, 404, { message: "user not found" });
+      return json(res, 200, { channelEmotes: set.map(bttvEmote), sharedEmotes: [] });
+    }
+    if ((m = url.pathname.match(/^\/ffz\/room\/id\/(\d+)$/))) {
+      const set = FFZ.channel[m[1]];
+      if (!set) return json(res, 404, { error: "Not Found" });
+      return json(res, 200, { room: { set: 9 }, sets: { 9: { emoticons: set.map(ffzEmote) } } });
+    }
+  }
 
   switch (`${req.method} ${url.pathname}`) {
     case "POST /oauth2/device": {
@@ -141,7 +223,30 @@ const httpServer = http.createServer(async (req, res) => {
           : [],
       });
     }
+    // Third-party emotes (7TV, BTTV, FFZ) with pictures served from here, so they render offline.
+    case "GET /7tv/emote-sets/global":
+      return json(res, 200, { emotes: SEVEN_TV.global.map(sevenTvEmote) });
+    case "GET /bttv/cached/emotes/global":
+      return json(res, 200, BTTV.global.map(bttvEmote));
+    case "GET /ffz/set/global":
+      return json(res, 200, { default_sets: [3], sets: { 3: { emoticons: FFZ.global.map(ffzEmote) } } });
     // Test controls
+    case "POST /__say": {
+      const channel = url.searchParams.get("channel") ?? "";
+      const text = url.searchParams.get("text") ?? "";
+      const who = chatters[Number(url.searchParams.get("who") ?? 0) % chatters.length];
+      const id = `mock-say-${++msgCounter}`;
+      for (const client of clients) if (client.channels.has(channel)) client.send(privmsgLine(channel, who, text, { id }));
+      return json(res, 200, { id });
+    }
+    case "POST /__delete": {
+      const channel = url.searchParams.get("channel") ?? "";
+      const id = url.searchParams.get("id") ?? "";
+      for (const client of clients) {
+        if (client.channels.has(channel)) client.send(`@login=mock;target-msg-id=${id};tmi-sent-ts=${Date.now()} :tmi.twitch.tv CLEARMSG #${channel} :deleted`);
+      }
+      return json(res, 200, { ok: true });
+    }
     case "POST /__drop":
       for (const client of clients) client.socket.terminate();
       return json(res, 200, { dropped: clients.size });

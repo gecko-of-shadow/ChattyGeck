@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { config } from "@/lib/config";
-import { emoteRegistry } from "@/lib/emotes/registry";
+import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/twitch/helix";
 import {
   localId,
+  matchesHighlight,
   noticeToChat,
   normalizeChannelName,
   parseRoomState,
@@ -57,6 +58,15 @@ function anonymousNick(): string {
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function emotePrefsFrom(settings: Settings): EmotePrefs {
+  return {
+    providers: settings.emoteProviders,
+    overlays: settings.overlayEmotes,
+    blocked: new Set(settings.blockedEmotes),
+    remember: settings.rememberEmotes,
+  };
 }
 
 class ChatController {
@@ -113,6 +123,7 @@ class ChatController {
     ]);
     const settings = sanitizeSettings(rawSettings);
     void platform.setCloseToTray(settings.closeToTray).catch(() => undefined);
+    emoteRegistry.setPrefs(emotePrefsFrom(settings));
     set({
       settings,
       appInfo,
@@ -380,11 +391,11 @@ class ChatController {
       case "PRIVMSG": {
         const chat = privmsgToChat(message, self);
         if (chat.self && this.resolvePending(chat)) return;
-        this.enqueue(chat);
+        this.enqueue(this.withHighlight(chat));
         return;
       }
       case "USERNOTICE":
-        this.enqueue(usernoticeToChat(message, self));
+        this.enqueue(this.withHighlight(usernoticeToChat(message, self)));
         return;
       case "ROOMSTATE":
         this.onRoomState(message);
@@ -402,6 +413,12 @@ class ChatController {
         this.onClearMsg(message);
         return;
     }
+  }
+
+  /** The user's extra highlight words count like a mention (never for their own messages). */
+  private withHighlight(message: ChatMessage): ChatMessage {
+    if (message.self || message.mention) return message;
+    return matchesHighlight(message.text, get().settings.highlightWords) ? { ...message, mention: true } : message;
   }
 
   private onWriteMessage(message: IrcMessage): void {
@@ -783,8 +800,17 @@ class ChatController {
       return;
     }
     this.emoteLoadedAt.set(channel, Date.now());
-    void emoteRegistry.loadChannel(channel, view.roomId);
+    void emoteRegistry.loadChannel(channel, view.roomId, true);
     void emoteRegistry.loadGlobal(true);
+  }
+
+  /** Throws away remembered emote lists and fetches fresh ones for every joined channel. */
+  forgetEmotes(): void {
+    emoteRegistry.forgetCache();
+    void emoteRegistry.loadGlobal(true);
+    for (const view of Object.values(get().channels)) {
+      if (view.roomId) void emoteRegistry.loadChannel(view.login, view.roomId, true);
+    }
   }
 
   updateSettings(patch: Partial<Settings> | ((settings: Settings) => Partial<Settings>)): void {
@@ -792,8 +818,28 @@ class ChatController {
     set((s) => ({ settings: { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) } }));
     const after = get().settings;
     if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
+    emoteRegistry.setPrefs(emotePrefsFrom(after));
+    if (after.rememberEmotes && !before.rememberEmotes) {
+      // Turning "remember" on: store what's already loaded by refetching once.
+      void emoteRegistry.loadGlobal(true);
+    } else if (!after.rememberEmotes && before.rememberEmotes) {
+      emoteRegistry.forgetCache();
+    }
     this.saveDirty = true;
     void this.persistSettings();
+  }
+
+  /** Replaces every preference (not the channel list or view) with the ones from a backup or the defaults. */
+  replacePreferences(source: Settings): void {
+    this.updateSettings((current) => {
+      const next: Partial<Settings> = { ...source };
+      delete next.channels;
+      delete next.focused;
+      delete next.mode;
+      delete next.version;
+      // Keep the view pointing at a channel we actually have.
+      return { ...next, focused: current.focused };
+    });
   }
 
   /** Saves right away (so closing the window can't lose a change), one write at a time, latest state wins. */
