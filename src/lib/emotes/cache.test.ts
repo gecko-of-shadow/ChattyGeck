@@ -43,6 +43,39 @@ describe("EmoteCache", () => {
     expect(store.keys()).toEqual([]);
   });
 
+  it("treats a damaged list as a miss and removes it", () => {
+    const store = memoryStorage();
+    const cache = new EmoteCache(store, () => 1);
+    store.setItem("zoochattr.emotes.7tv:global", JSON.stringify({ at: 1, scope: "global", emotes: [{ id: "1" }, "junk"] }));
+    expect(cache.get("7tv:global")).toBeNull();
+    expect(store.getItem("zoochattr.emotes.7tv:global")).toBeNull();
+    store.setItem("zoochattr.emotes.bttv:global", "{not json");
+    expect(cache.get("bttv:global")).toBeNull();
+  });
+
+  it("leaves no orphan when the index write fails, and sweeps strays on clear", () => {
+    const store = memoryStorage();
+    let failIndex = false;
+    const flaky = {
+      ...store,
+      setItem: (k: string, v: string) => {
+        if (failIndex && k.endsWith("index")) throw new Error("QuotaExceededError");
+        store.setItem(k, v);
+      },
+    };
+    const cache = new EmoteCache(flaky, () => 1);
+    failIndex = true;
+    cache.put("ffz:global", "global", [emote("a")]);
+    expect(store.keys()).toEqual([]);
+    failIndex = false;
+    cache.put("ffz:global", "global", [emote("a")]);
+    store.setItem("zoochattr.emotes.stray", "{}");
+    const sweepable = { ...flaky, length: 0, key: (i: number) => store.keys()[i] ?? null };
+    Object.defineProperty(sweepable, "length", { get: () => store.keys().length });
+    new EmoteCache(sweepable, () => 1).clear();
+    expect(store.keys()).toEqual([]);
+  });
+
   it("does nothing without storage", () => {
     const cache = new EmoteCache(null);
     cache.put("x", "global", []);

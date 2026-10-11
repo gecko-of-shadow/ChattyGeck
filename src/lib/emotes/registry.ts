@@ -51,6 +51,7 @@ export class EmoteRegistry {
   private global = emptyEmotes();
   private globalStatus = statuses({ state: "idle" });
   private globalLoad: Promise<void> | null = null;
+  private globalLoadId = 0;
   private channels = new Map<string, ChannelEntry>();
   private lookups = new Map<string, Map<string, Emote>>();
   private listeners = new Set<Listener>();
@@ -91,7 +92,10 @@ export class EmoteRegistry {
 
   loadGlobal(force = false): Promise<void> {
     if (this.globalLoad && !force) return this.globalLoad;
-    this.globalStatus = statuses({ state: "loading" });
+    const loadId = ++this.loadCounter;
+    this.globalLoadId = loadId;
+    // A forced reload keeps showing what's there until the fresh list arrives.
+    if (!force) this.globalStatus = statuses({ state: "loading" });
     this.emit(null);
     this.globalLoad = Promise.all(
       THIRD_PARTY_PROVIDERS.map(async (provider) => {
@@ -105,11 +109,14 @@ export class EmoteRegistry {
         }
         try {
           const emotes = await globalFetchers[provider]();
+          if (this.globalLoadId !== loadId) return; // a newer reload took over
           this.global[provider] = emotes;
           this.globalStatus[provider] = emotes.length ? { state: "ok", count: emotes.length } : { state: "none" };
           if (this.prefs.remember) this.cache.put(key, "global", emotes);
         } catch (err) {
-          if (!hit) this.globalStatus[provider] = { state: "error", error: describeError(err) };
+          if (this.globalLoadId !== loadId) return;
+          const hadSomething = hit || (force && this.globalStatus[provider].state === "ok");
+          if (!hadSomething) this.globalStatus[provider] = { state: "error", error: describeError(err) };
         }
         this.emit(null);
       }),
@@ -118,10 +125,13 @@ export class EmoteRegistry {
   }
 
   async loadChannel(channel: string, roomId: string, force = false): Promise<void> {
+    const previous = this.channels.get(channel);
+    // A forced reload of the same room keeps the current lists on screen until fresh ones arrive.
+    const keep = force && previous?.roomId === roomId ? previous : null;
     const entry: ChannelEntry = {
       roomId,
-      emotes: emptyEmotes(),
-      status: statuses({ state: "loading" }),
+      emotes: keep ? { ...keep.emotes } : emptyEmotes(),
+      status: keep ? { ...keep.status } : statuses({ state: "loading" }),
       loadId: ++this.loadCounter,
     };
     this.channels.set(channel, entry);
@@ -144,7 +154,7 @@ export class EmoteRegistry {
           status = emotes.length ? { state: "ok", count: emotes.length } : { state: "none" };
           if (this.prefs.remember) this.cache.put(key, "channel", emotes);
         } catch (err) {
-          if (hit) return; // keep showing the remembered list
+          if (hit || (keep && !(err instanceof NotFoundError))) return; // keep showing what we have
           status = err instanceof NotFoundError ? { state: "none" } : { state: "error", error: describeError(err) };
         }
         if (this.channels.get(channel)?.loadId !== entry.loadId) return;

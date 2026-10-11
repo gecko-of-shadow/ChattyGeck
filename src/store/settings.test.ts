@@ -72,10 +72,14 @@ describe("backups", () => {
     expect(readBackup(text)).toEqual(settings);
   });
 
-  it("accepts a bare settings object and rejects other files", () => {
-    expect(readBackup(JSON.stringify({ channels: ["xqc"] }))?.channels).toEqual(["xqc"]);
+  it("accepts a bare settings.json (new or old) and rejects other files", () => {
+    expect(readBackup(JSON.stringify({ channels: ["xqc"], skin: "penguin", textSize: 15 }))?.channels).toEqual(["xqc"]);
+    expect(readBackup(JSON.stringify({ skin: "penguin", fontSize: "lg" }))?.textSize).toBe(15.5);
     expect(readBackup("not json")).toBeNull();
     expect(readBackup(JSON.stringify({ hello: "world" }))).toBeNull();
     expect(readBackup("[]")).toBeNull();
+    // Looks like settings only by accident (package.json, tsconfig…): must not reset everything.
+    expect(readBackup(JSON.stringify({ name: "zoochattr", version: "0.3.0" }))).toBeNull();
+    expect(readBackup(JSON.stringify({ mode: "production", channels: 4 }))).toBeNull();
   });
 });

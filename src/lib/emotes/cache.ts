@@ -27,6 +27,25 @@ interface Storage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  /** Present on real `localStorage`; lets `clear()` sweep entries the index lost track of. */
+  readonly length?: number;
+  key?(index: number): string | null;
+}
+
+/** A stored list is only trusted if every entry still looks like an emote (the file may have been cut short or edited). */
+function validEmotes(value: unknown): value is Emote[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (e) =>
+        e &&
+        typeof e === "object" &&
+        typeof (e as Emote).id === "string" &&
+        typeof (e as Emote).name === "string" &&
+        typeof (e as Emote).url1x === "string" &&
+        typeof (e as Emote).provider === "string",
+    )
+  );
 }
 
 function storage(): Storage | null {
@@ -56,17 +75,29 @@ export class EmoteCache {
   get(key: string): CacheHit | null {
     const store = this.store;
     if (!store) return null;
+    let entry: Partial<Entry>;
     try {
       const raw = store.getItem(PREFIX + key);
       if (!raw) return null;
-      const entry = JSON.parse(raw) as Partial<Entry>;
-      if (!Array.isArray(entry.emotes) || typeof entry.at !== "number" || !(entry.scope! in FRESH_FOR)) return null;
-      const stale = this.now() - entry.at > FRESH_FOR[entry.scope as EmoteScope];
-      this.touch(store, key);
-      return { emotes: entry.emotes as Emote[], stale };
+      entry = JSON.parse(raw) as Partial<Entry>;
     } catch {
       return null;
     }
+    if (!validEmotes(entry.emotes) || typeof entry.at !== "number" || !(entry.scope! in FRESH_FOR)) {
+      try {
+        store.removeItem(PREFIX + key);
+      } catch {
+        // nothing more to do
+      }
+      return null;
+    }
+    const stale = this.now() - entry.at > FRESH_FOR[entry.scope as EmoteScope];
+    try {
+      this.touch(store, key);
+    } catch {
+      // Couldn't update the index (quota); the hit itself is still good.
+    }
+    return { emotes: entry.emotes, stale };
   }
 
   put(key: string, scope: EmoteScope, emotes: Emote[]): void {
@@ -74,9 +105,18 @@ export class EmoteCache {
     if (!store) return;
     try {
       store.setItem(PREFIX + key, JSON.stringify({ at: this.now(), scope, emotes } satisfies Entry));
+    } catch {
+      return; // Quota or private mode: live without the cache.
+    }
+    try {
       this.touch(store, key, true);
     } catch {
-      // Quota or private mode: live without the cache.
+      // No room for the index entry: don't leave an orphan behind.
+      try {
+        store.removeItem(PREFIX + key);
+      } catch {
+        // nothing more to do
+      }
     }
   }
 
@@ -86,6 +126,15 @@ export class EmoteCache {
     const index = readIndex(store);
     for (const key of Object.keys(index)) store.removeItem(PREFIX + key);
     store.removeItem(INDEX_KEY);
+    // Sweep anything the index lost track of (e.g. an entry whose index write failed).
+    if (typeof store.length === "number" && store.key) {
+      const strays: string[] = [];
+      for (let i = 0; i < store.length; i++) {
+        const name = store.key(i);
+        if (name?.startsWith(PREFIX)) strays.push(name);
+      }
+      for (const name of strays) store.removeItem(name);
+    }
   }
 
   /** Number of lists kept. */
