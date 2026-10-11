@@ -252,10 +252,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="gecko-scales flex h-full w-full flex-col border-r border-sidebar-border text-sidebar-foreground">
       <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-3">
-        <GeckoMascot anim="idle" className="size-9 shrink-0 drop-shadow-[0_0_10px_rgb(var(--glow-rgb)/0.35)]" title="ChatDeck gecko" />
+        <GeckoMascot anim="idle" className="size-9 shrink-0 drop-shadow-[0_0_10px_rgb(var(--glow-rgb)/0.35)]" title="ZooChattr gecko" />
         <div className="min-w-0">
           <div className="gecko-text-glow text-[17px] leading-tight font-extrabold tracking-tight">
-            Chat<span className="text-primary">Deck</span>
+            Zoo<span className="text-primary">Chattr</span>
           </div>
           <div className="truncate text-[11px] text-muted-foreground">Stick to every chat at once</div>
         </div>

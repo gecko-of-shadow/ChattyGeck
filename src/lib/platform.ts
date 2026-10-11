@@ -15,8 +15,8 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
   return invoke<T>(command, args);
 }
 
-const SETTINGS_KEY = "chatdeck.settings";
-const SESSION_KEY = "chatdeck.session";
+const SETTINGS_KEY = "zoochattr.settings";
+const SESSION_KEY = "zoochattr.session";
 
 export async function getAppInfo(): Promise<AppInfo> {
   if (isTauri) return invoke<AppInfo>("app_info");

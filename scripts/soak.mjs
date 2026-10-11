@@ -1,4 +1,4 @@
-// Long-running stability check: opens ChatDeck in headless Chrome, joins live channels
+// Long-running stability check: opens ZooChattr in headless Chrome, joins live channels
 // anonymously, and logs memory / DOM / message counters once a minute.
 //
 //   SOAK_URL=http://127.0.0.1:17420 SOAK_MINUTES=60 SOAK_CHANNELS=xqc,summit1g npm run soak
@@ -33,7 +33,7 @@ page.on("console", (msg) => {
 
 await page.goto(url);
 await page.evaluate(
-  (list) => localStorage.setItem("chatdeck.settings", JSON.stringify({ channels: list, mode: "merged" })),
+  (list) => localStorage.setItem("zoochattr.settings", JSON.stringify({ channels: list, mode: "merged" })),
   channels,
 );
 await page.reload();
@@ -47,7 +47,7 @@ while (Date.now() - started < minutes * 60_000) {
     if (typeof gc === "function") gc();
     const memory = performance.memory;
     return {
-      ...(window.__chatdeckStats?.() ?? {}),
+      ...(window.__zoochattrStats?.() ?? {}),
       heapMB: memory ? Number((memory.usedJSHeapSize / 1048576).toFixed(1)) : null,
       domNodes: document.getElementsByTagName("*").length,
     };

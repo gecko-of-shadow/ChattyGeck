@@ -1,10 +1,10 @@
 // Offline stand-in for Twitch so login + sending can be tested without a real account.
 //
 //   npm run mock:twitch            (IRC on ws://127.0.0.1:17422, HTTP on http://127.0.0.1:17423)
-//   npm run dev:mock               (ChatDeck UI pointed at the mock)
+//   npm run dev:mock               (ZooChattr UI pointed at the mock)
 //
 // Device login auto-approves after two polls. The IRC side behaves like Twitch where it
-// matters to ChatDeck: one command per frame, no echo to the sending connection, USERSTATE
+// matters to ZooChattr: one command per frame, no echo to the sending connection, USERSTATE
 // after a send, NOTICE on failures, RECONNECT/drops on demand.
 import http from "node:http";
 import { WebSocketServer } from "ws";
@@ -107,7 +107,7 @@ const httpServer = http.createServer(async (req, res) => {
     }
     case "GET /activate":
       res.writeHead(200, { "content-type": "text/html" });
-      return res.end("<h1>Mock Twitch</h1><p>ChatDeck's login will be approved automatically.</p>");
+      return res.end("<h1>Mock Twitch</h1><p>ZooChattr's login will be approved automatically.</p>");
     case "GET /helix/users": {
       if (!tokenValid) return json(res, 401, { status: 401 });
       const logins = url.searchParams.getAll("login").filter((l) => !l.startsWith("nosuch"));

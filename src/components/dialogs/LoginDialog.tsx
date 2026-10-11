@@ -36,7 +36,7 @@ function ClientIdSetup() {
           </li>
           <li>
             Set <b>Client Type</b> to <b>Public</b>. For <b>OAuth Redirect URLs</b> enter{" "}
-            <code className="rounded bg-muted px-1">http://localhost</code> (ChatDeck doesn't use it, but the form
+            <code className="rounded bg-muted px-1">http://localhost</code> (ZooChattr doesn't use it, but the form
             requires one).
           </li>
           <li>Copy the Client ID and paste it below. It isn't a secret.</li>
@@ -170,7 +170,7 @@ export function LoginDialog() {
             <KeyRound className="size-4.5 text-primary" /> Log in with Twitch
           </DialogTitle>
           <DialogDescription>
-            ChatDeck uses Twitch's device login: you approve it on twitch.tv, and your password never touches this
+            ZooChattr uses Twitch's device login: you approve it on twitch.tv, and your password never touches this
             app.
           </DialogDescription>
         </DialogHeader>
@@ -217,7 +217,7 @@ export function LoginDialog() {
             <div className="flex items-start gap-3 rounded-xl border bg-muted/40 p-3 text-sm">
               <ShieldCheck className="mt-0.5 size-4.5 shrink-0 text-primary" />
               <div className="text-muted-foreground">
-                ChatDeck only asks for <code className="rounded bg-muted px-1 text-foreground">chat:read</code> and{" "}
+                ZooChattr only asks for <code className="rounded bg-muted px-1 text-foreground">chat:read</code> and{" "}
                 <code className="rounded bg-muted px-1 text-foreground">chat:edit</code>: enough to read and send chat,
                 nothing else. Your login is stored in your system's credential store.
               </div>

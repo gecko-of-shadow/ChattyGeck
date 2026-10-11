@@ -1,13 +1,13 @@
 [package]
-name = "chatdeck"
+name = "zoochattr"
 version = "0.1.0"
-description = "ChatDeck: multi-channel Twitch chat with a gecko soul"
+description = "ZooChattr: multi-channel Twitch chat with a gecko soul"
 authors = ["gecko-of-shadow"]
 edition = "2024"
 
 [lib]
 # The `_lib` suffix keeps the lib name distinct from the bin name (cargo issue #8519 on Windows).
-name = "chatdeck_lib"
+name = "zoochattr_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

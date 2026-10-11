@@ -62,7 +62,7 @@ export default function App() {
   }, [skin]);
 
   useEffect(() => {
-    document.title = mentions > 0 ? `(${mentions}) ChatDeck` : "ChatDeck";
+    document.title = mentions > 0 ? `(${mentions}) ZooChattr` : "ZooChattr";
   }, [mentions]);
 
   return (

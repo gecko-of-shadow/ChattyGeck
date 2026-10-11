@@ -230,7 +230,7 @@ class ChatController {
     try {
       const next = await this.refreshOnce();
       if (next) return next;
-      await this.logout("Your Twitch login expired, so ChatDeck switched to anonymous reading. Log in again to chat.");
+      await this.logout("Your Twitch login expired, so ZooChattr switched to anonymous reading. Log in again to chat.");
       return null;
     } catch {
       return this.session;
@@ -255,7 +255,7 @@ class ChatController {
         this.read.restart("Logged back in");
         this.write?.restart("Logged back in");
       } else if (next === null) {
-        await this.logout("Twitch rejected your saved login, so ChatDeck switched to anonymous reading. Log in again to chat.");
+        await this.logout("Twitch rejected your saved login, so ZooChattr switched to anonymous reading. Log in again to chat.");
       } else {
         setTimeout(() => {
           this.read.restart("Retrying login");
@@ -359,7 +359,7 @@ class ChatController {
         ),
       }));
       if (this.dropAnnounced) {
-        this.enqueue(systemMessage(ALL_CHANNELS, "Reconnected. Anything said while ChatDeck was offline was missed.", "success"));
+        this.enqueue(systemMessage(ALL_CHANNELS, "Reconnected. Anything said while ZooChattr was offline was missed.", "success"));
         this.dropAnnounced = false;
       }
       this.everConnected = true;
@@ -900,12 +900,12 @@ export const chat = new ChatController();
 declare global {
   interface Window {
     /** Read-only counters for soak tests; never exposes tokens. */
-    __chatdeckStats?: () => Record<string, unknown>;
+    __zoochattrStats?: () => Record<string, unknown>;
   }
 }
 
 if (typeof window !== "undefined") {
-  window.__chatdeckStats = () => {
+  window.__zoochattrStats = () => {
     const s = get();
     return {
       read: s.read.status,

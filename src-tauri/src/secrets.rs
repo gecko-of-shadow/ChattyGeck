@@ -3,7 +3,7 @@
 
 use keyring::Entry;
 
-const SERVICE: &str = "ChatDeck";
+const SERVICE: &str = "ZooChattr";
 const ACCOUNT: &str = "twitch-session";
 
 fn entry() -> Result<Entry, String> {

@@ -31,9 +31,9 @@ dist-ssr
 
 # Portable build output and runtime data
 release/
-ChatDeck-data/
+ZooChattr-data/
 
-# Mobile icon sets from `tauri icon` (ChatDeck targets Windows desktop)
+# Mobile icon sets from `tauri icon` (ZooChattr targets Windows desktop)
 src-tauri/icons/android/
 src-tauri/icons/ios/
 

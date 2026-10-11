@@ -234,7 +234,7 @@ export class IrcConnection {
         }
         break;
       case "RECONNECT":
-        this.forceReconnect("Twitch asked ChatDeck to reconnect");
+        this.forceReconnect("Twitch asked ZooChattr to reconnect");
         return;
       case "NOTICE":
         if (message.params[0] === "*" && AUTH_FAILURE.test(message.params[1] ?? "")) {
@@ -304,7 +304,7 @@ export class IrcConnection {
     const timeout = this.opts.pongTimeoutMs ?? 10_000;
     this.keepaliveTimer = setInterval(() => {
       if (!this.ws || this.ws.readyState !== 1) return;
-      this.ws.send("PING :chatdeck\r\n");
+      this.ws.send("PING :zoochattr\r\n");
       if (this.pongTimer) clearTimeout(this.pongTimer);
       this.pongTimer = setTimeout(() => {
         this.pongTimer = null;

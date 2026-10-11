@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const host = process.env.TAURI_DEV_HOST;
-const port = Number(process.env.CHATDECK_DEV_PORT ?? 17420);
+const port = Number(process.env.ZOOCHATTR_DEV_PORT ?? 17420);
 
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss()],

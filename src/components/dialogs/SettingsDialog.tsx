@@ -71,7 +71,7 @@ function ClientIdField() {
         {saved
           ? "Custom Client ID in use. Clear the field and save to go back to the built-in one."
           : config.builtInClientId
-            ? "This copy of ChatDeck ships with a Client ID, so login works out of the box."
+            ? "This copy of ZooChattr ships with a Client ID, so login works out of the box."
             : "No Client ID is built in. Reading chat works anyway; login needs one."}
       </p>
     </form>
@@ -90,7 +90,7 @@ export function SettingsDialog() {
       <DialogContent className="gecko-scroll max-h-[min(88vh,760px)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg">Settings</DialogTitle>
-          <DialogDescription>Saved automatically to this ChatDeck folder.</DialogDescription>
+          <DialogDescription>Saved automatically to this ZooChattr folder.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -176,13 +176,13 @@ export function SettingsDialog() {
           <Section icon={FolderOpen} title="Storage">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
               <dt className="text-muted-foreground">Mode</dt>
-              <dd>{appInfo?.portable ? "Portable (data lives next to ChatDeck)" : appInfo?.platform === "browser" ? "Browser dev mode" : "Per-user app data folder"}</dd>
+              <dd>{appInfo?.portable ? "Portable (data lives next to ZooChattr)" : appInfo?.platform === "browser" ? "Browser dev mode" : "Per-user app data folder"}</dd>
               <dt className="text-muted-foreground">Settings</dt>
               <dd className="font-mono break-all">{appInfo?.dataDir ?? "…"}</dd>
               <dt className="text-muted-foreground">Login</dt>
               <dd>{appInfo?.tokenStore ?? "…"}</dd>
               <dt className="text-muted-foreground">Version</dt>
-              <dd>ChatDeck {appInfo?.version ?? ""}</dd>
+              <dd>ZooChattr {appInfo?.version ?? ""}</dd>
             </dl>
           </Section>
         </div>
