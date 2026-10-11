@@ -248,6 +248,7 @@ wss.on("connection", (socket) => {
         if (client.authed) {
           client.send(`@badge-info=;badges=moderator/1;color=#8FE05A;display-name=${USER.displayName};emote-sets=0;mod=1 :tmi.twitch.tv USERSTATE #${channel}`);
         }
+        setTimeout(() => client.send(privmsgLine(channel, chatters[1], `welcome to #${channel}, grab a warm rock`)), 300);
         return;
       }
       case "PART":

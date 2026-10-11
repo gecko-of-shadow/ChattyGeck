@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { GeckoFootIcon } from "@/components/gecko/icons";
@@ -14,6 +14,9 @@ interface HoverEmote {
   src: string;
   rect: DOMRect;
 }
+
+/** Rows kept in the DOM while following live chat; scrolling up reveals the whole buffer. */
+const LIVE_ROWS = 150;
 
 function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
   const lastId = snapshot[snapshot.length - 1]?.id;
@@ -58,8 +61,12 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
   const liveRef = useRef(messages);
   liveRef.current = messages;
   const [hover, setHover] = useState<HoverEmote | null>(null);
+  const anchorFromBottom = useRef<number | null>(null);
 
-  const visible = frozen ?? messages;
+  const visible = useMemo(
+    () => frozen ?? (messages.length > LIVE_ROWS ? messages.slice(-LIVE_ROWS) : messages),
+    [frozen, messages],
+  );
   const newer = frozen ? countNewer(frozen, messages) : 0;
 
   useEffect(() => {
@@ -72,8 +79,16 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
   }, []);
 
   useLayoutEffect(() => {
-    if (!frozen) scrollToBottom();
-  }, [visible, frozen, scrollToBottom, prefs.fontSize]);
+    const el = scrollRef.current;
+    if (!el) return;
+    if (!frozen) {
+      el.scrollTop = el.scrollHeight;
+    } else if (anchorFromBottom.current !== null) {
+      // Older history was just rendered above the viewport; keep the same lines in view.
+      el.scrollTop = el.scrollHeight - anchorFromBottom.current;
+      anchorFromBottom.current = null;
+    }
+  }, [visible, frozen, prefs.fontSize]);
 
   // Emotes load after the row renders and grow it; keep pinned to the bottom while live.
   useEffect(() => {
@@ -95,7 +110,10 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
       return;
     }
     // Only a person scrolling up pauses the feed; layout shifts from images don't.
-    if (!frozenRef.current && Date.now() - lastInteraction.current < 600) setFrozen(liveRef.current);
+    if (!frozenRef.current && Date.now() - lastInteraction.current < 600) {
+      anchorFromBottom.current = el.scrollHeight - el.scrollTop;
+      setFrozen(liveRef.current);
+    }
   };
 
   const markInteraction = () => {
