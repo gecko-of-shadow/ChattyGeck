@@ -6,7 +6,7 @@ use std::{
 
 use tauri::{AppHandle, Manager};
 
-const PORTABLE_DIR: &str = "ChatDeck-data";
+const PORTABLE_DIR: &str = "ZooChattr-data";
 const SETTINGS_FILE: &str = "settings.json";
 
 pub struct DataDir {
@@ -15,10 +15,10 @@ pub struct DataDir {
     pub portable: bool,
 }
 
-/// Portable first: `<exe folder>/ChatDeck-data`. Falls back to the per-user app data folder
+/// Portable first: `<exe folder>/ZooChattr-data`. Falls back to the per-user app data folder
 /// when the exe sits somewhere read-only (e.g. Program Files).
 pub fn resolve_data_dir(app: &AppHandle) -> DataDir {
-    if let Some(dir) = std::env::var_os("CHATDECK_DATA_DIR") {
+    if let Some(dir) = std::env::var_os("ZOOCHATTR_DATA_DIR") {
         let path = PathBuf::from(dir);
         if ensure_writable(&path) {
             return DataDir { path, portable: true };
@@ -37,7 +37,7 @@ pub fn resolve_data_dir(app: &AppHandle) -> DataDir {
     let path = app
         .path()
         .app_data_dir()
-        .unwrap_or_else(|_| std::env::temp_dir().join("ChatDeck"));
+        .unwrap_or_else(|_| std::env::temp_dir().join("ZooChattr"));
     let _ = fs::create_dir_all(&path);
     DataDir {
         path,
@@ -90,7 +90,7 @@ mod tests {
     use super::*;
 
     fn temp_data_dir(name: &str) -> DataDir {
-        let path = std::env::temp_dir().join(format!("chatdeck-test-{name}-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("zoochattr-test-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(&path).unwrap();
         DataDir {

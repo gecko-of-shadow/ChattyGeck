@@ -1,4 +1,4 @@
-# ChatDeck
+# ZooChattr
 
 A portable Windows 11 desktop app for reading several Twitch chats at once, old-school multi-channel IRC style, with a gecko soul. Log in with Twitch to chat back. Twitch, 7TV, BetterTTV and FrankerFaceZ emotes render inline.
 
@@ -10,12 +10,12 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **Two reading modes.**
   - **Merged:** one feed for every channel, each line tagged with a colored `#channel` chip. Click a chip to make that channel the send target.
   - **Focused:** one channel at a time. The others show unread counts, plus a gecko-eye badge when someone mentions you.
-- **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ChatDeck). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.
+- **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.
 - **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped and the smiley chip in the channel header says why.
 - **IRC feel.** Dense dark log with timestamps, badges, name colors (lifted for readability), reply context, sub/raid events, first-time-chatter eggs, moderator deletions, and links that open in your browser.
 - **Gecko everything.** Five skins (Shadow, Leopard, Crested, Tokay, Day gecko), granular scale textures, an animated gecko mascot, and toe-pad "stick to live chat" scrolling.
 - **Remembers you.** Channels, reading mode, skin and display preferences survive restarts.
-- **Portable.** One `.exe` and nothing to install. Settings live in a `ChatDeck-data` folder next to it.
+- **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it.
 
 ## Run it in development
 
@@ -38,8 +38,8 @@ The desktop window opens with hot reload. `npm run dev` runs only the UI in a br
 Reading chat works with no setup (anonymous, read-only). Sending needs a Twitch Client ID:
 
 1. Open the [Twitch Developer Console](https://dev.twitch.tv/console/apps/create) and register an application.
-2. **Name:** anything unique, e.g. `ChatDeck (yourname)`.
-3. **OAuth Redirect URLs:** `http://localhost`. ChatDeck uses Twitch's device-code login and never redirects, but the form requires a URL.
+2. **Name:** anything unique, e.g. `ZooChattr (yourname)`.
+3. **OAuth Redirect URLs:** `http://localhost`. ZooChattr uses Twitch's device-code login and never redirects, but the form requires a URL.
 4. **Category:** Chat Bot (or Application Integration).
 5. **Client Type:** **Public**. This matters: public clients can use device login and refresh tokens without a client secret, which a desktop app can't keep secret anyway.
 6. Copy the **Client ID** into `.env`:
@@ -50,17 +50,17 @@ Reading chat works with no setup (anonymous, read-only). Sending needs a Twitch 
 
    It's baked into the build, so friends who get your `.exe` can log in without any setup. You can also paste a Client ID at runtime in **Settings → Twitch account**, which overrides the built-in one.
 
-ChatDeck asks only for `chat:read` and `chat:edit`. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
+ZooChattr asks only for `chat:read` and `chat:edit`. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
 
 ### Where the login is stored
 
 | Platform | Token storage |
 | --- | --- |
-| Windows | Windows Credential Manager, generic credential `twitch-session.ChatDeck` |
+| Windows | Windows Credential Manager, generic credential `twitch-session.ZooChattr` |
 | macOS | Keychain |
 | Linux (dev only) | Kernel keyring, cleared when you log out of your desktop session |
 
-The token is never written into the portable folder. **Log out** in ChatDeck revokes it on Twitch and deletes it. If the credential store refuses to save it, ChatDeck keeps the login for the current session only and tells you.
+The token is never written into the portable folder. **Log out** in ZooChattr revokes it on Twitch and deletes it. If the credential store refuses to save it, ZooChattr keeps the login for the current session only and tells you.
 
 ## Build the portable .exe
 
@@ -75,19 +75,19 @@ That runs `tauri build --no-bundle` (a release build with the UI embedded in the
 
 ```
 release/
-  ChatDeck-portable/
-    ChatDeck.exe      ← the whole app (about 5 MB)
+  ZooChattr-portable/
+    ZooChattr.exe      ← the whole app (about 3.5 MB)
     README.txt
-  ChatDeck-portable-0.1.0.zip
+  ZooChattr-portable-0.1.0.zip
 ```
 
-Copy `ChatDeck-portable` anywhere, such as a USB stick or Dropbox, and double-click `ChatDeck.exe`. On first run it creates `ChatDeck-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.chatdeck`. Settings shows which location is in use.
+Copy `ZooChattr-portable` anywhere, such as a USB stick or Dropbox, and double-click `ZooChattr.exe`. On first run it creates `ZooChattr-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.zoochattr`. Settings shows which location is in use.
 
 The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
 
 ### Cross-compiling from Linux or macOS (experimental)
 
-Tauri can build the Windows exe without Windows using [cargo-xwin](https://github.com/rust-cross/cargo-xwin). It produces the same portable `ChatDeck.exe`, but try it on a Windows machine before sharing it.
+Tauri can build the Windows exe without Windows using [cargo-xwin](https://github.com/rust-cross/cargo-xwin). It produces the same portable `ZooChattr.exe`, but try it on a Windows machine before sharing it.
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
@@ -98,7 +98,7 @@ npm run build:windows-cross
 
 ## Test without a Twitch account
 
-`scripts/mock-twitch.mjs` is an offline stand-in for Twitch. It provides device login (auto-approved), token validate/refresh/revoke, the Helix calls ChatDeck makes, and an IRC server that behaves like Twitch where it matters: one command per frame, no echo to the sending connection, `USERSTATE` after sends, `NOTICE` on failures.
+`scripts/mock-twitch.mjs` is an offline stand-in for Twitch. It provides device login (auto-approved), token validate/refresh/revoke, the Helix calls ZooChattr makes, and an IRC server that behaves like Twitch where it matters: one command per frame, no echo to the sending connection, `USERSTATE` after sends, `NOTICE` on failures.
 
 ```bash
 npm run mock:twitch     # terminal 1
@@ -127,13 +127,13 @@ The e2e and soak scripts use `playwright-core` with an installed Chrome. Set `CH
 | `VITE_TWITCH_AUTH_BASE` | `.env` / `.env.mock` | OAuth endpoint. Defaults to `https://id.twitch.tv`. |
 | `VITE_TWITCH_HELIX_BASE` | `.env` / `.env.mock` | Helix API. Defaults to `https://api.twitch.tv/helix`. |
 | `VITE_7TV_API`, `VITE_BTTV_API`, `VITE_FFZ_API` | `.env` | Emote API overrides (rarely needed). |
-| `CHATDECK_DATA_DIR` | runtime env | Forces the data folder, e.g. for testing a clean profile. |
+| `ZOOCHATTR_DATA_DIR` | runtime env | Forces the data folder, e.g. for testing a clean profile. |
 
 Only `.env.example` and `.env.mock` are committed. `.env` is git-ignored.
 
 ## How it works
 
-- **Two IRC connections**, the same way Chatterino does it. The *read* connection joins every channel; it's anonymous (`justinfan…`) when logged out and authenticated when logged in. The *write* connection only sends. Twitch echoes your message back on the read connection with full emote tags, and ChatDeck swaps that echo in for its local "sending…" copy. A `NOTICE` (rate limit, followers-only, etc.) marks the message as not sent and shows the reason.
+- **Two IRC connections**, the same way Chatterino does it. The *read* connection joins every channel; it's anonymous (`justinfan…`) when logged out and authenticated when logged in. The *write* connection only sends. Twitch echoes your message back on the read connection with full emote tags, and ZooChattr swaps that echo in for its local "sending…" copy. A `NOTICE` (rate limit, followers-only, etc.) marks the message as not sent and shows the reason.
 - **Reconnects:** exponential backoff with jitter (1s → 30s), immediate retry when Windows reports the network is back, honoring Twitch's `RECONNECT`, and a keepalive ping that catches dead sockets after sleep or Wi-Fi changes. JOINs are paced under Twitch's rate limit.
 - **Emotes:** `src/lib/emotes/` fetches 7TV (`7tv.io/v3`), BetterTTV (`api.betterttv.net/3/cached`) and FrankerFaceZ (`api.frankerfacez.com/v1`) global sets once, and channel sets whenever a channel is joined. Lookup order is channel over global, then 7TV › BTTV › FFZ. Twitch's own emotes come from the `emotes` IRC tag, indexed by Unicode code point so emoji don't shift them.
 - **Badges:** with a login, Helix provides exact global and channel badges (custom sub badges included). Anonymous mode falls back to Twitch's public images for broadcaster, mod, VIP, sub, Prime and similar.

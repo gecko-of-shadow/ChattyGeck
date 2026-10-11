@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main ChatDeck window",
+  "description": "Capability for the main ZooChattr window",
   "windows": ["main"],
   "permissions": [
     "core:default",

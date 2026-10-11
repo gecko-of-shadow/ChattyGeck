@@ -74,15 +74,15 @@ await step("merged view tags every line with its channel", async () => {
 
 await step("focused view counts unread on other channels", async () => {
   await page.getByRole("button", { name: "Open #geckotown" }).click();
-  await page.waitForTimeout(6_000);
-  const unread = await page.locator('[title$="unread"], [title*="mention"]').count();
-  if (unread < 1) throw new Error("expected an unread or mention badge on #lizardlounge");
+  await mockPost("/__burst?channel=lizardlounge&n=3");
+  await page.locator('[title$="unread"]').first().waitFor({ timeout: 5_000 });
   await shot("03-focused-unread");
 });
 
 await step("returning to a channel marks where you left off", async () => {
   await page.getByRole("button", { name: "Open #lizardlounge" }).click();
-  await page.waitForTimeout(5_000);
+  await mockPost("/__burst?channel=geckotown&n=3");
+  await page.waitForTimeout(1_000);
   await page.getByRole("button", { name: "Open #geckotown" }).click();
   await page.getByText("New since you left").waitFor({ timeout: 3_000 });
 });
@@ -97,11 +97,11 @@ await step("device-code login", async () => {
 
 await step("send a message; Twitch's echo replaces the local copy (with emote)", async () => {
   const input = page.getByLabel("Message #geckotown");
-  await input.fill("hello from ChatDeck Kappa");
+  await input.fill("hello from ZooChattr Kappa");
   await input.press("Enter");
-  await rowsWith("hello from ChatDeck").locator('img[alt="Kappa"]').first().waitFor({ timeout: 8_000 });
+  await rowsWith("hello from ZooChattr").locator('img[alt="Kappa"]').first().waitFor({ timeout: 8_000 });
   await page.waitForTimeout(1_500);
-  const copies = await rowsWith("hello from ChatDeck").count();
+  const copies = await rowsWith("hello from ZooChattr").count();
   if (copies !== 1) throw new Error(`expected 1 copy of the sent message, saw ${copies}`);
   await shot("05-sent");
 });

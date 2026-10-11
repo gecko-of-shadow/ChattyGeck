@@ -94,5 +94,5 @@ pub fn run() {
             session_clear
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ChatDeck");
+        .expect("error while running ZooChattr");
 }

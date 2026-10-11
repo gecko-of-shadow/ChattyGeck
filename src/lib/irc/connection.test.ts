@@ -139,7 +139,7 @@ describe("IrcConnection", () => {
     const { conn } = setup({ keepaliveMs: 1_000, pongTimeoutMs: 500 });
     const socket = await connect(conn);
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(socket.sent.at(-1)).toBe("PING :chatdeck\r\n");
+    expect(socket.sent.at(-1)).toBe("PING :zoochattr\r\n");
     await vi.advanceTimersByTimeAsync(600);
     expect(conn.status).toBe("reconnecting");
   });
@@ -148,7 +148,7 @@ describe("IrcConnection", () => {
     const { conn } = setup({ keepaliveMs: 1_000, pongTimeoutMs: 500 });
     const socket = await connect(conn);
     await vi.advanceTimersByTimeAsync(1_000);
-    socket.receive(":tmi.twitch.tv PONG tmi.twitch.tv :chatdeck");
+    socket.receive(":tmi.twitch.tv PONG tmi.twitch.tv :zoochattr");
     await vi.advanceTimersByTimeAsync(600);
     expect(conn.status).toBe("connected");
   });
