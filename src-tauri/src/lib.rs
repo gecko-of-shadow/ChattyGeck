@@ -24,7 +24,7 @@ struct AppInfo {
 fn app_info(app: tauri::AppHandle, state: State<'_, AppState>) -> AppInfo {
     AppInfo {
         version: app.package_info().version.to_string(),
-        data_dir: state.data.path.display().to_string(),
+        data_dir: storage::display_path(&state.data.path),
         portable: state.data.portable,
         token_store: secrets::store_name(),
         platform: std::env::consts::OS,

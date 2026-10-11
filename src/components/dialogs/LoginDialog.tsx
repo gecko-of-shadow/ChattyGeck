@@ -55,7 +55,7 @@ function ClientIdSetup() {
             id="client-id"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="e.g. gp762nuuoqcoxypju8c569th9wz7q5"
+            placeholder="e.g. abcd1234efgh5678ijkl9012mnop34"
             className="font-mono text-xs"
             autoComplete="off"
             spellCheck={false}

@@ -15,7 +15,7 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.
 - **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped and the smiley chip in the channel header says why.
 - **IRC feel.** Dense dark log with timestamps, badges, name colors (lifted for readability), reply context, sub/raid events, first-time-chatter eggs, moderator deletions, and links that open in your browser.
-- **Gecko everything.** Five skins (Shadow, Leopard, Crested, Tokay, Day gecko), granular scale textures, an animated gecko mascot, and toe-pad "stick to live chat" scrolling.
+- **Gecko everything (for now).** Five skins (Shadow, Leopard, Crested, Tokay, Day gecko), granular scale textures, an animated gecko mascot, and toe-pad "stick to live chat" scrolling. Future updates bring other animals to the zoo.
 - **Remembers you.** Channels, reading mode, skin and display preferences survive restarts.
 - **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it.
 
@@ -85,6 +85,8 @@ release/
 
 Copy `ZooChattr-portable` anywhere, such as a USB stick or Dropbox, and double-click `ZooChattr.exe`. On first run it creates `ZooChattr-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.zoochattr`. Settings shows which location is in use.
 
+Before giving your copy to someone else, delete `ZooChattr-data\`: it holds your channel list and browser cache. Your Twitch login isn't in it.
+
 The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". Click **More info → Run anyway**.
 
 ### Publishing a release
@@ -95,6 +97,8 @@ Push a version tag and GitHub builds the exe on Windows and attaches the zip to 
 npm version patch          # bumps package.json (the app reads its version from there) and tags it
 git push && git push --tags
 ```
+
+That commit and tag carry your git name and email. To keep your real email out of the public history, first set `git config --global user.email` to your GitHub noreply address (GitHub → Settings → Emails, also turn on **Keep my email addresses private**).
 
 To bake your Twitch Client ID into release builds, add it as a repository variable named `TWITCH_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). It's public by design, so a variable is fine; no secret is needed.
 

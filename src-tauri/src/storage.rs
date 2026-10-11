@@ -55,12 +55,26 @@ fn ensure_writable(path: &Path) -> bool {
     ok
 }
 
+/// Paths as shown to the user. The home folder is abbreviated so screenshots and streams
+/// don't reveal the Windows account name.
+pub fn display_path(path: &Path) -> String {
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" });
+    if let Some(rest) = home.and_then(|home| path.strip_prefix(PathBuf::from(home)).ok()) {
+        let prefix = if cfg!(windows) { "%USERPROFILE%" } else { "~" };
+        if rest.as_os_str().is_empty() {
+            return prefix.to_string();
+        }
+        return format!("{prefix}{}{}", std::path::MAIN_SEPARATOR, rest.display());
+    }
+    path.display().to_string()
+}
+
 pub fn load_settings(data: &DataDir) -> Result<Option<serde_json::Value>, String> {
     let file = data.path.join(SETTINGS_FILE);
     let text = match fs::read_to_string(&file) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(err) => return Err(format!("Couldn't read {}: {err}", file.display())),
+        Err(err) => return Err(format!("Couldn't read {}: {err}", display_path(&file))),
     };
 
     match serde_json::from_str(&text) {
@@ -81,8 +95,8 @@ pub fn save_settings(data: &DataDir, value: &serde_json::Value) -> Result<(), St
     let file = data.path.join(SETTINGS_FILE);
     let tmp = data.path.join(format!("{SETTINGS_FILE}.tmp"));
     let text = serde_json::to_string_pretty(value).map_err(|err| err.to_string())?;
-    fs::write(&tmp, text).map_err(|err| format!("Couldn't write {}: {err}", tmp.display()))?;
-    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save {}: {err}", file.display()))
+    fs::write(&tmp, text).map_err(|err| format!("Couldn't write {}: {err}", display_path(&tmp)))?;
+    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save {}: {err}", display_path(&file)))
 }
 
 #[cfg(test)]
@@ -106,6 +120,15 @@ mod tests {
         let value = serde_json::json!({ "channels": ["xqc", "shroud"], "mode": "merged" });
         save_settings(&data, &value).unwrap();
         assert_eq!(load_settings(&data).unwrap(), Some(value));
+    }
+
+    #[test]
+    fn display_path_hides_the_home_folder() {
+        let home = PathBuf::from(std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).unwrap());
+        let shown = display_path(&home.join("Downloads").join("ZooChattr-data"));
+        assert!(!shown.contains(&*home.to_string_lossy()), "{shown}");
+        assert!(shown.ends_with("ZooChattr-data"), "{shown}");
+        assert_eq!(display_path(Path::new("/opt/elsewhere")), Path::new("/opt/elsewhere").display().to_string());
     }
 
     #[test]
