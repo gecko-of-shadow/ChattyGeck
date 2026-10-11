@@ -80,6 +80,13 @@ await step("focused view counts unread on other channels", async () => {
   await shot("03-focused-unread");
 });
 
+await step("returning to a channel marks where you left off", async () => {
+  await page.getByRole("button", { name: "Open #lizardlounge" }).click();
+  await page.waitForTimeout(5_000);
+  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await page.getByText("New since you left").waitFor({ timeout: 3_000 });
+});
+
 await step("device-code login", async () => {
   await page.getByRole("button", { name: /^Log in$/ }).click();
   await page.getByRole("button", { name: "Get a login code" }).click();
@@ -119,6 +126,20 @@ await step("/me sends an action", async () => {
   await input.fill("/me licks its eyeball");
   await input.press("Enter");
   await rowsWith("licks its eyeball").first().waitFor({ timeout: 8_000 });
+});
+
+await step("merged view: pick a send target, or click a channel tag", async () => {
+  await page.getByRole("radio", { name: /merged/i }).click();
+  await page.getByLabel("Send to channel").click();
+  await page.getByRole("option", { name: "#lizardlounge" }).click();
+  const input = page.getByLabel("Message #lizardlounge");
+  await input.fill("hello from the merged feed");
+  await input.press("Enter");
+  await rowsWith("hello from the merged feed").locator("button", { hasText: "#lizardlounge" }).waitFor({ timeout: 8_000 });
+  await shot("05b-merged-send");
+  await page.locator(".chat-row button", { hasText: "#geckotown" }).first().click();
+  await page.getByLabel("Message #geckotown").waitFor({ timeout: 3_000 });
+  await page.getByRole("radio", { name: /focused/i }).click();
 });
 
 await step("channels, view and login survive a reload", async () => {

@@ -20,6 +20,8 @@ export interface ChannelView {
   /** Our own USERSTATE in this channel (name colour, badges, mod status). */
   me?: UserState;
   joinRequestedAt: number;
+  /** Last message seen before switching away; a divider marks what came after. */
+  readMarker?: string;
 }
 
 export type AuthView =

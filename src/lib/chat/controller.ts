@@ -77,6 +77,7 @@ class ChatController {
   private everConnected = false;
   private dropAnnounced = false;
   private booted = false;
+  private lastAttention = 0;
 
   constructor() {
     this.read = new IrcConnection({
@@ -596,6 +597,11 @@ class ChatController {
     const batch = this.queue;
     this.queue = [];
 
+    if (batch.some((m) => m.mention && !m.self) && !document.hasFocus() && Date.now() - this.lastAttention > 10_000) {
+      this.lastAttention = Date.now();
+      void platform.requestAttention().catch(() => undefined);
+    }
+
     set((state) => {
       const { mode, focused } = state.settings;
       const additions = new Map<string, ChatMessage[]>();
@@ -749,9 +755,20 @@ class ChatController {
     });
   }
 
+  /** Remembers where the user stopped reading the channel they're leaving. */
+  private markRead(leaving: string | null, entering: string | null): void {
+    const { mode } = get().settings;
+    if (mode !== "focused" || !leaving || leaving === entering) return;
+    this.flush();
+    this.patchChannel(leaving, (c) => ({ ...c, readMarker: c.messages[c.messages.length - 1]?.id }));
+  }
+
   focus(name: string): void {
+    const fromMerged = get().settings.mode === "merged";
+    this.markRead(get().settings.focused, name);
     this.updateSettings({ mode: "focused", focused: name, sendTarget: name });
-    this.patchChannel(name, (c) => (c.unread || c.mentions ? { ...c, unread: 0, mentions: 0 } : c));
+    // Coming from the merged feed, everything in this channel was already on screen.
+    this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0, readMarker: fromMerged ? undefined : c.readMarker }));
   }
 
   setMode(mode: ViewMode): void {
@@ -762,6 +779,7 @@ class ChatController {
       else this.updateSettings({ mode });
       return;
     }
+    this.markRead(get().settings.focused, null);
     this.updateSettings({ mode });
     set((s) => ({
       channels: Object.fromEntries(

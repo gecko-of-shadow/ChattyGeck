@@ -27,6 +27,10 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  // The bundle is embedded in the desktop binary and read from disk, so one chunk is fine.
+  build: {
+    chunkSizeWarningLimit: 900,
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

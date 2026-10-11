@@ -162,6 +162,7 @@ export function FocusedView({ login }: { login: string }) {
       viewKey={`focused:${login}`}
       showChannel={false}
       empty={empty}
+      readMarker={view.readMarker}
       onNameClick={mention}
     />
   );

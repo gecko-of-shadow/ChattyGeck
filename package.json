@@ -12,8 +12,11 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "mock:twitch": "node scripts/mock-twitch.mjs",
-    "dev:mock": "CHATDECK_DEV_PORT=17440 VITE_TWITCH_IRC_URL=ws://127.0.0.1:17422 VITE_TWITCH_AUTH_BASE=http://127.0.0.1:17423 VITE_TWITCH_HELIX_BASE=http://127.0.0.1:17423/helix TWITCH_CLIENT_ID=mock-client-id vite",
-    "e2e:mock": "node scripts/e2e-mock.mjs"
+    "dev:mock": "vite --mode mock --port 17440",
+    "e2e:mock": "node scripts/e2e-mock.mjs",
+    "build:portable": "tauri build --no-bundle && node scripts/package-portable.mjs",
+    "build:windows-cross": "tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle && node scripts/package-portable.mjs",
+    "tauri:mock": "tauri dev --config src-tauri/tauri.mock.conf.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
