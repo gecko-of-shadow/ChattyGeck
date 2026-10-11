@@ -176,7 +176,7 @@ export function Composer() {
         </form>
       )}
 
-      {target ? <RoomChips channel={target} /> : null}
+      {target && loggedIn ? <RoomChips channel={target} /> : null}
       {loggedIn && !connected ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">Connecting your account to Twitch chat…</p>
       ) : null}

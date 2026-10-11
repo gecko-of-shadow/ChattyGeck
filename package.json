@@ -7,7 +7,13 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "soak": "node scripts/soak.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "mock:twitch": "node scripts/mock-twitch.mjs",
+    "dev:mock": "CHATDECK_DEV_PORT=17440 VITE_TWITCH_IRC_URL=ws://127.0.0.1:17422 VITE_TWITCH_AUTH_BASE=http://127.0.0.1:17423 VITE_TWITCH_HELIX_BASE=http://127.0.0.1:17423/helix TWITCH_CLIENT_ID=mock-client-id vite",
+    "e2e:mock": "node scripts/e2e-mock.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -34,8 +40,10 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.2",
+    "playwright-core": "^1.64.0",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "ws": "^8.22.0"
   }
 }

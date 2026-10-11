@@ -104,7 +104,7 @@ export function SettingsDialog() {
                   onClick={() => chat.updateSettings({ skin: option.id })}
                   aria-pressed={skin === option.id}
                   className={cn(
-                    "gecko-scales relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition",
+                    "gecko-scales relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                     skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
                   )}
                 >
