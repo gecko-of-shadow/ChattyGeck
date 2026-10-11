@@ -40,7 +40,6 @@ export interface ChatState {
   settings: Settings;
   appInfo: AppInfo | null;
   channels: Record<string, ChannelView>;
-  merged: ChatMessage[];
   auth: AuthView;
   read: ConnectionView;
   write: ConnectionView | null;
@@ -55,7 +54,6 @@ export const useChat = create<ChatState>(() => ({
   settings: DEFAULT_SETTINGS,
   appInfo: null,
   channels: {},
-  merged: [],
   auth: { status: "booting" },
   read: { status: "idle", detail: {}, since: Date.now() },
   write: null,
@@ -74,11 +72,4 @@ export function newChannelView(login: string): ChannelView {
     messages: [],
     joinRequestedAt: Date.now(),
   };
-}
-
-/** Which channel the composer sends to right now. */
-export function composerTarget(state: Pick<ChatState, "settings">): string | null {
-  const { mode, focused, sendTarget, channels } = state.settings;
-  if (mode === "focused") return focused;
-  return sendTarget ?? focused ?? channels[0] ?? null;
 }

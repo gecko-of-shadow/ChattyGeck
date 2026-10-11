@@ -8,15 +8,16 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 
 ## What it does
 
-- **Many channels, one window.** Join and leave channels freely. Connections stay open while the app runs, and drops are recovered automatically with backoff ("dropped the connection like a tail, regrowing it in 4s").
+- **Many channels, one window.** Join and leave channels freely. Connections stay open while the app runs, and drops are recovered automatically with backoff.
 - **Two reading modes.**
-  - **Merged:** one feed for every channel, each line tagged with a colored `#channel` chip. Click a chip to make that channel the send target.
-  - **Focused:** one channel at a time. The others show unread counts, plus a gecko-eye badge when someone mentions you.
+  - **Grid:** every channel gets its own clean box, tiled to fill the window, each with its own chat log and message box. Small windows stack the boxes and scroll.
+  - **Focused:** one channel at a time. The others show unread counts, plus an eye badge when someone mentions you.
+- **Lives in the tray.** Closing the window keeps ZooChattr running in the system tray, so chats stay connected; the tray tooltip counts your mentions. Right-click the tray icon to quit (or turn this off in Settings). Opening the exe again brings the running copy back instead of starting a second one.
 - **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.
 - **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped and the smiley chip in the channel header says why.
 - **IRC feel.** Dense dark log with timestamps, badges, name colors (lifted for readability), reply context, sub/raid events, first-time-chatter eggs, moderator deletions, and links that open in your browser.
-- **Gecko everything (for now).** Five skins (Shadow, Leopard, Crested, Tokay, Day gecko), granular scale textures, an animated gecko mascot, and toe-pad "stick to live chat" scrolling. Future updates bring other animals to the zoo.
-- **Remembers you.** Channels, reading mode, skin and display preferences survive restarts.
+- **A zoo of themes.** Crested gecko, Penguin, Sea turtle and Elephant, each with its own animated mascot, colors, background texture (gecko scales, snowfall, shell plates, elephant wrinkles) and a little personality: the send button chirps, squawks, bloops or trumpets. More animals are on the way.
+- **Remembers you.** Channels, reading mode, theme and display preferences survive restarts.
 - **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it.
 
 ## Run it in development

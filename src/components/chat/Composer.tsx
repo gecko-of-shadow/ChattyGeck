@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
+import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
 import { chat } from "@/lib/chat/controller";
-import { channelColor } from "@/lib/colors";
-import { composerTarget, useChat } from "@/store/chat";
+import { THEMES } from "@/lib/themes";
+import { cn } from "@/lib/utils";
+import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
 function RoomChips({ channel }: { channel: string }) {
@@ -35,12 +35,29 @@ function RoomChips({ channel }: { channel: string }) {
   );
 }
 
-export function Composer() {
-  const target = useChat(composerTarget);
-  const mode = useChat((s) => s.settings.mode);
-  const channels = useChat((s) => s.settings.channels);
+/** Shown instead of message boxes while reading anonymously. */
+export function LoginPrompt() {
+  const booting = useChat((s) => s.auth.status === "booting");
+  return (
+    <div className="border-t border-border/80 bg-card/70 px-3 py-2.5 backdrop-blur">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
+        <Mascot className="size-7 shrink-0" />
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+          You're reading anonymously. Log in with Twitch to chat back.
+        </p>
+        <Button size="sm" onClick={() => useUi.setState({ loginOpen: true })} disabled={booting}>
+          Log in with Twitch
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Message input for one channel. `compact` is the slim version used inside grid boxes. */
+export function Composer({ channel, compact = false }: { channel: string | null; compact?: boolean }) {
   const auth = useChat((s) => s.auth);
   const writeStatus = useChat((s) => s.write?.status);
+  const theme = useChat((s) => THEMES[s.settings.skin]);
   const insert = useUi((s) => s.insert);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,27 +66,27 @@ export function Composer() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!insert) return;
+    if (!insert || insert.channel !== channel) return;
     setText((current) => {
       const spacer = current && !current.endsWith(" ") ? " " : "";
       return `${current}${spacer}${insert.text}`;
     });
     inputRef.current?.focus();
-  }, [insert]);
+  }, [insert, channel]);
 
   useEffect(() => {
     setError(null);
-  }, [target]);
+  }, [channel]);
 
-  if (!channels.length) return null;
+  if (!channel) return null;
+  if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
 
-  const loggedIn = auth.status === "logged_in";
   const connected = writeStatus === "connected";
   const length = Array.from(text).length;
 
   const submit = () => {
-    if (!target || !text.trim()) return;
-    const result = chat.send(target, text);
+    if (!text.trim()) return;
+    const result = chat.send(channel, text);
     if (result.ok) {
       history.current = [text, ...history.current.filter((h) => h !== text)].slice(0, 50);
       historyIndex.current = -1;
@@ -101,83 +118,58 @@ export function Composer() {
   };
 
   return (
-    <div className="border-t border-border/80 bg-card/70 px-3 pt-2.5 pb-3 backdrop-blur">
+    <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
       {error ? (
-        <div role="alert" className="mb-2 flex items-start gap-1.5 text-xs text-destructive">
+        <div role="alert" className={cn("flex items-start gap-1.5 text-destructive", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
           {error}
         </div>
       ) : null}
-
-      {!loggedIn ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
-          <GeckoMascot className="size-7 shrink-0" />
-          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-            You're reading anonymously. Log in with Twitch to chirp back.
-          </p>
-          <Button size="sm" onClick={() => useUi.setState({ loginOpen: true })} disabled={auth.status === "booting"}>
-            Log in with Twitch
-          </Button>
-        </div>
-      ) : (
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submit();
-          }}
-        >
-          {mode === "merged" ? (
-            <Select
-              value={target}
-              onValueChange={(value) => value && chat.setSendTarget(value as string)}
-              items={channels.map((c) => ({ value: c, label: `#${c}` }))}
+      <form
+        className="flex items-center gap-1.5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div className="relative min-w-0 flex-1">
+          <Input
+            ref={inputRef}
+            value={text}
+            onChange={(event) => {
+              setText(event.target.value);
+              historyIndex.current = -1;
+              if (error) setError(null);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
+            aria-label={`Message #${channel}`}
+            className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
+            autoComplete="off"
+            spellCheck
+          />
+          {length > 400 ? (
+            <span
+              className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
             >
-              <SelectTrigger className="h-9 max-w-40 shrink-0 font-mono text-xs" aria-label="Send to channel">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {channels.map((c) => (
-                  <SelectItem key={c} value={c} className="font-mono text-xs">
-                    <span className="size-2 rounded-full" style={{ backgroundColor: channelColor(c) }} />#{c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {500 - length}
+            </span>
           ) : null}
-          <div className="relative min-w-0 flex-1">
-            <Input
-              ref={inputRef}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value);
-                historyIndex.current = -1;
-                if (error) setError(null);
-              }}
-              onKeyDown={onKeyDown}
-              placeholder={target ? `Chirp to #${target} as ${auth.login}…` : "Pick a channel to chirp to"}
-              aria-label={target ? `Message #${target}` : "Message"}
-              className="h-9 pr-12 text-sm"
-              autoComplete="off"
-              spellCheck
-            />
-            {length > 400 ? (
-              <span
-                className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
-              >
-                {500 - length}
-              </span>
-            ) : null}
-          </div>
-          <Button type="submit" className="h-9 gap-1.5 px-3.5" disabled={!text.trim() || !connected || !target}>
-            <span className="hidden sm:inline">Chirp</span>
-            <SendHorizontal className="size-4" />
-          </Button>
-        </form>
-      )}
-
-      {target && loggedIn ? <RoomChips channel={target} /> : null}
-      {loggedIn && !connected ? (
+        </div>
+        <Button
+          type="submit"
+          size={compact ? "icon-sm" : "default"}
+          className={cn(!compact && "h-9 gap-1.5 px-3.5")}
+          disabled={!text.trim() || !connected}
+          aria-label={theme.sendVerb}
+          title={theme.sendVerb}
+        >
+          {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
+          <SendHorizontal className="size-4" />
+        </Button>
+      </form>
+      {compact ? null : <RoomChips channel={channel} />}
+      {!compact && !connected ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">Connecting your account to Twitch chat…</p>
       ) : null}
     </div>

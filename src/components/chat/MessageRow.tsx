@@ -1,9 +1,9 @@
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { CircleAlert, CornerDownRight, Info, LoaderCircle, Sparkles } from "lucide-react";
-import { GeckoEggIcon, GeckoTailIcon } from "@/components/gecko/icons";
+import { GeckoEggIcon, GeckoTailIcon } from "@/components/mascots/icons";
 import { chat } from "@/lib/chat/controller";
 import { tokenize, type Fragment } from "@/lib/chat/tokenize";
-import { channelColor, readableNameColor } from "@/lib/colors";
+import { readableNameColor } from "@/lib/colors";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import type { Emote } from "@/lib/emotes/types";
 import { openExternal } from "@/lib/platform";
@@ -99,20 +99,16 @@ interface MessageRowProps {
   message: ChatMessage;
   /** Changes whenever this channel's emotes or badges change, so the row re-renders. */
   revision: string;
-  showChannel: boolean;
   prefs: RowPrefs;
   selfLogin?: string;
-  onChannelClick?: (channel: string) => void;
   onNameClick?: (login: string) => void;
 }
 
 function MessageRowInner({
   message,
   revision,
-  showChannel,
   prefs,
   selfLogin,
-  onChannelClick,
   onNameClick,
 }: MessageRowProps) {
   const fragments = useMemo(() => {
@@ -126,22 +122,6 @@ function MessageRowInner({
       {formatTime(message.ts, prefs.use24h)}
     </time>
   ) : null;
-
-  const channelTag =
-    showChannel && message.channel !== "*" ? (
-      <button
-        type="button"
-        onClick={() => onChannelClick?.(message.channel)}
-        title={`Send to #${message.channel}`}
-        className="mr-1.5 inline-flex max-w-32 translate-y-[-1px] items-center rounded-[5px] px-1 py-px align-middle font-mono text-[0.72em] leading-tight font-semibold transition-colors hover:brightness-125"
-        style={{
-          color: channelColor(message.channel),
-          backgroundColor: `color-mix(in oklab, ${channelColor(message.channel)} 14%, transparent)`,
-        }}
-      >
-        <span className="truncate">#{message.channel}</span>
-      </button>
-    ) : null;
 
   if (message.kind === "system") {
     const warn = message.tone === "warn" || message.tone === "error";
@@ -164,7 +144,6 @@ function MessageRowInner({
     return (
       <div className="chat-row px-3 py-[3px] leading-[1.55] text-muted-foreground italic">
         {time}
-        {channelTag}
         <Info className="mr-1 inline size-3.5 -translate-y-px text-primary/70" />
         {message.text}
       </div>
@@ -203,7 +182,7 @@ function MessageRowInner({
         "chat-row relative px-3 py-[3px] leading-[1.6] break-words [overflow-wrap:anywhere]",
         message.mention && "bg-[rgb(var(--mention-rgb)/0.10)] shadow-[inset_3px_0_0_var(--mention)]",
         message.highlighted && "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
-        message.firstMsg && !message.mention && "shadow-[inset_3px_0_0_var(--gecko-belly)]",
+        message.firstMsg && !message.mention && "shadow-[inset_3px_0_0_var(--mascot-belly)]",
         isEvent && "my-0.5 bg-primary/[0.07] py-1.5 shadow-[inset_3px_0_0_var(--primary)]",
         message.deleted && "opacity-45",
         message.pending === "sending" && "opacity-60",
@@ -220,14 +199,12 @@ function MessageRowInner({
       {isEvent && message.systemText ? (
         <div className="mb-0.5 font-medium text-primary">
           {time}
-          {channelTag}
           {message.systemText}
         </div>
       ) : null}
       {isEvent && !message.text ? null : (
         <>
           {isEvent ? null : time}
-          {isEvent ? null : channelTag}
           {message.firstMsg ? (
             <span title="First message in this channel" className="mr-1 inline-flex -translate-y-px align-middle">
               <GeckoEggIcon />

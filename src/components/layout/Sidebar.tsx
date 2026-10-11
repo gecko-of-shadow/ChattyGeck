@@ -3,7 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   ExternalLink,
-  Layers,
+  LayoutGrid,
   LogIn,
   LogOut,
   MoreHorizontal,
@@ -12,8 +12,8 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
-import { GeckoEyeIcon } from "@/components/gecko/icons";
+import { Mascot } from "@/components/mascots/Mascot";
+import { GeckoEyeIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
 import { channelColor } from "@/lib/colors";
 import { openExternal } from "@/lib/platform";
+import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
@@ -118,7 +119,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
           className={cn(
             "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-sidebar",
             view.status === "joined" && "bg-primary",
-            view.status === "joining" && "animate-pulse bg-gecko-eye",
+            view.status === "joining" && "animate-pulse bg-mascot-eye",
             view.status === "error" && "bg-destructive",
           )}
         />
@@ -214,7 +215,7 @@ function AccountPanel() {
         </>
       ) : (
         <>
-          <GeckoMascot className="size-7 shrink-0" />
+          <Mascot className="size-7 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold">
               {auth.status === "booting" ? "Waking up…" : "Anonymous lurker"}
@@ -245,19 +246,20 @@ function AccountPanel() {
 }
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
+  const theme = useChat((s) => THEMES[s.settings.skin]);
   const order = useChat((s) => s.settings.channels);
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
 
   return (
-    <aside className="gecko-scales flex h-full w-full flex-col border-r border-sidebar-border text-sidebar-foreground">
+    <aside className="zoo-texture flex h-full w-full flex-col border-r border-sidebar-border text-sidebar-foreground">
       <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-3">
-        <GeckoMascot anim="idle" className="size-9 shrink-0 drop-shadow-[0_0_10px_rgb(var(--glow-rgb)/0.35)]" title="ZooChattr gecko" />
+        <Mascot anim="idle" className="size-9 shrink-0 drop-shadow-[0_0_10px_rgb(var(--glow-rgb)/0.35)]" title={`ZooChattr ${theme.name.toLowerCase()}`} />
         <div className="min-w-0">
-          <div className="gecko-text-glow text-[17px] leading-tight font-extrabold tracking-tight">
+          <div className="zoo-text-glow text-[17px] leading-tight font-extrabold tracking-tight">
             Zoo<span className="text-primary">Chattr</span>
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">Stick to every chat at once</div>
+          <div className="truncate text-[11px] text-muted-foreground">{theme.tagline}</div>
         </div>
       </div>
 
@@ -265,27 +267,27 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <AddChannelForm onAdded={onNavigate} />
       </div>
 
-      <nav className="gecko-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3" aria-label="Channels">
+      <nav className="zoo-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3" aria-label="Channels">
         {order.length > 0 ? (
           <button
             type="button"
             onClick={() => {
-              chat.setMode("merged");
+              chat.setMode("grid");
               onNavigate?.();
             }}
-            aria-current={mode === "merged" ? "page" : undefined}
+            aria-current={mode === "grid" ? "page" : undefined}
             className={cn(
               "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-              mode === "merged"
+              mode === "grid"
                 ? "bg-sidebar-accent font-semibold shadow-[inset_2px_0_0_var(--primary)]"
                 : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60",
             )}
           >
             <span className="grid size-7 place-items-center rounded-full bg-primary/15 text-primary">
-              <Layers className="size-3.5" />
+              <LayoutGrid className="size-3.5" />
             </span>
-            <span className="flex-1">All channels</span>
-            <span className="font-mono text-[11px] text-muted-foreground">merged</span>
+            <span className="flex-1">All chats</span>
+            <span className="font-mono text-[11px] text-muted-foreground">grid</span>
           </button>
         ) : null}
 

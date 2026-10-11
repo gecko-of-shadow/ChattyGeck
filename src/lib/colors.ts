@@ -17,7 +17,7 @@ const DEFAULT_NAME_COLORS = [
   "#00FF7F",
 ];
 
-/** Gecko morph colours for channel tags in the merged feed. */
+/** Accent colours for channel avatars. */
 export const CHANNEL_TAG_COLORS = [
   "#9be15d",
   "#f6b73c",

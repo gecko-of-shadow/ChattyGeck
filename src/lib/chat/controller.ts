@@ -112,6 +112,7 @@ class ChatController {
       platform.getAppInfo().catch(() => null),
     ]);
     const settings = sanitizeSettings(rawSettings);
+    void platform.setCloseToTray(settings.closeToTray).catch(() => undefined);
     set({
       settings,
       appInfo,
@@ -607,7 +608,6 @@ class ChatController {
       const { mode, focused } = state.settings;
       const additions = new Map<string, ChatMessage[]>();
       const counts = new Map<string, { unread: number; mentions: number }>();
-      const mergedAdd: ChatMessage[] = [];
       const add = (channel: string, message: ChatMessage) => {
         const list = additions.get(channel);
         if (list) list.push(message);
@@ -616,14 +616,12 @@ class ChatController {
 
       for (const message of batch) {
         if (message.channel === ALL_CHANNELS) {
-          mergedAdd.push(message);
           for (const channel of Object.keys(state.channels)) add(channel, message);
           continue;
         }
         if (!state.channels[message.channel]) continue;
         add(message.channel, message);
-        mergedAdd.push(message);
-        const visible = mode === "merged" || focused === message.channel;
+        const visible = mode === "grid" || focused === message.channel;
         const countable = message.kind === "chat" || message.kind === "action" || message.kind === "event";
         if (!visible && countable && !message.self) {
           const c = counts.get(message.channel) ?? { unread: 0, mentions: 0 };
@@ -645,11 +643,7 @@ class ChatController {
           mentions: view.mentions + (c?.mentions ?? 0),
         };
       }
-      const merged = state.merged.concat(mergedAdd);
-      return {
-        channels,
-        merged: merged.length > config.messageCapMerged ? merged.slice(-config.messageCapMerged) : merged,
-      };
+      return { channels };
     });
   }
 
@@ -665,13 +659,12 @@ class ChatController {
         next[index] = update(list[index]);
         return next;
       };
-      const merged = swap(state.merged);
       const channels = { ...state.channels };
       for (const [key, view] of Object.entries(channels)) {
         const messages = swap(view.messages);
         if (messages !== view.messages) channels[key] = { ...view, messages };
       }
-      return changed ? { merged, channels } : {};
+      return changed ? { channels } : {};
     });
   }
 
@@ -685,7 +678,6 @@ class ChatController {
       const mark = (m: ChatMessage) => (hit(m) ? { ...m, deleted: true } : m);
       return {
         channels: { ...state.channels, [channel]: { ...view, messages: view.messages.map(mark) } },
-        merged: state.merged.map(mark),
       };
     });
   }
@@ -703,14 +695,13 @@ class ChatController {
     const name = normalizeChannelName(input);
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
     if (get().channels[name]) {
-      this.focus(name);
+      if (get().settings.mode === "focused") this.focus(name);
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
-      sendTarget: s.mode === "focused" || !s.sendTarget ? name : s.sendTarget,
     }));
     this.read.join(name);
     if (this.session) void this.loadProfiles([name]);
@@ -730,17 +721,13 @@ class ChatController {
     set((s) => {
       const channels = { ...s.channels };
       delete channels[name];
-      return { channels, merged: s.merged.filter((m) => m.channel !== name) };
+      return { channels };
     });
     this.updateSettings((s) => {
       const index = s.channels.indexOf(name);
       const channels = s.channels.filter((c) => c !== name);
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
-      return {
-        channels,
-        focused: s.focused === name ? fallback : s.focused,
-        sendTarget: s.sendTarget === name ? fallback : s.sendTarget,
-      };
+      return { channels, focused: s.focused === name ? fallback : s.focused };
     });
   }
 
@@ -765,11 +752,11 @@ class ChatController {
   }
 
   focus(name: string): void {
-    const fromMerged = get().settings.mode === "merged";
+    const fromGrid = get().settings.mode === "grid";
     this.markRead(get().settings.focused, name);
-    this.updateSettings({ mode: "focused", focused: name, sendTarget: name });
-    // Coming from the merged feed, everything in this channel was already on screen.
-    this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0, readMarker: fromMerged ? undefined : c.readMarker }));
+    this.updateSettings({ mode: "focused", focused: name });
+    // Coming from the grid, everything in this channel was already on screen.
+    this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0, readMarker: fromGrid ? undefined : c.readMarker }));
   }
 
   setMode(mode: ViewMode): void {
@@ -789,10 +776,6 @@ class ChatController {
     }));
   }
 
-  setSendTarget(name: string): void {
-    this.updateSettings({ sendTarget: name });
-  }
-
   reloadEmotes(channel: string): void {
     const view = get().channels[channel];
     if (!view?.roomId) {
@@ -805,7 +788,10 @@ class ChatController {
   }
 
   updateSettings(patch: Partial<Settings> | ((settings: Settings) => Partial<Settings>)): void {
+    const before = get().settings;
     set((s) => ({ settings: { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) } }));
+    const after = get().settings;
+    if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
     this.saveDirty = true;
     void this.persistSettings();
   }
@@ -918,7 +904,6 @@ if (typeof window !== "undefined") {
         unread: c.unread,
         emotes: emoteRegistry.channelEmotes(c.login).length,
       })),
-      merged: s.merged.length,
       received: chat.received,
       rows: document.querySelectorAll(".chat-row").length,
       emoteImages: document.querySelectorAll("img.chat-emote").length,

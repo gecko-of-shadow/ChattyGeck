@@ -15,5 +15,4 @@ export const config = {
   builtInClientId: (env.TWITCH_CLIENT_ID || "").trim(),
   scopes: ["chat:read", "chat:edit"],
   messageCapPerChannel: 400,
-  messageCapMerged: 600,
 } as const;

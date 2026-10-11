@@ -1,8 +1,10 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
-import { GeckoFootIcon } from "@/components/gecko/icons";
+import { PawPrint } from "lucide-react";
+import { GeckoFootIcon } from "@/components/mascots/icons";
 import { PROVIDER_LABELS, type EmoteProvider } from "@/lib/emotes/types";
+import { THEMES } from "@/lib/themes";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { MessageRow, type RowPrefs } from "./MessageRow";
@@ -16,7 +18,7 @@ interface HoverEmote {
 }
 
 /** Rows kept in the DOM while following live chat; scrolling up reveals the whole buffer. */
-const LIVE_ROWS = 150;
+const DEFAULT_LIVE_ROWS = 150;
 
 function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
   const lastId = snapshot[snapshot.length - 1]?.id;
@@ -29,15 +31,25 @@ interface ChatLogProps {
   messages: ChatMessage[];
   /** Changing this resets scroll position (switching channel or view). */
   viewKey: string;
-  showChannel: boolean;
   empty?: ReactNode;
   /** Draws a "new since you left" divider after this message id. */
   readMarker?: string;
-  onChannelClick?: (channel: string) => void;
+  /** How many recent rows stay rendered while following live chat. */
+  liveRows?: number;
+  /** Accessible name of the scrolling log. */
+  label?: string;
   onNameClick?: (login: string) => void;
 }
 
-export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onChannelClick, onNameClick }: ChatLogProps) {
+export function ChatLog({
+  messages,
+  viewKey,
+  empty,
+  readMarker,
+  liveRows = DEFAULT_LIVE_ROWS,
+  label = "Chat messages",
+  onNameClick,
+}: ChatLogProps) {
   const prefs: RowPrefs & { fontSize: string; zebra: boolean } = useChat(
     useShallow((s) => ({
       showTimestamps: s.settings.showTimestamps,
@@ -51,6 +63,7 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
   const globalEmoteVersion = useChat((s) => s.globalEmoteVersion);
   const badgeVersion = useChat((s) => s.badgeVersion);
   const selfLogin = useChat((s) => (s.auth.status === "logged_in" ? s.auth.login : undefined));
+  const isGecko = useChat((s) => THEMES[s.settings.skin].animal === "gecko");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -65,7 +78,7 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
 
   const visible = useMemo(() => {
     if (frozen) return frozen;
-    let keep = LIVE_ROWS;
+    let keep = liveRows;
     if (readMarker) {
       // Keep the "new since you left" divider reachable even in a fast channel.
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -76,7 +89,7 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
       }
     }
     return messages.length > keep ? messages.slice(-keep) : messages;
-  }, [frozen, messages, readMarker]);
+  }, [frozen, messages, readMarker, liveRows]);
   const newer = frozen ? countNewer(frozen, messages) : 0;
 
   useEffect(() => {
@@ -159,8 +172,8 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
         onMouseOver={onMouseOver}
         onMouseOut={onMouseOut}
         tabIndex={0}
-        aria-label="Chat messages"
-        className="gecko-scroll absolute inset-0 overflow-y-auto overscroll-contain outline-none"
+        aria-label={label}
+        className="zoo-scroll absolute inset-0 overflow-y-auto overscroll-contain outline-none"
       >
         <div
           ref={contentRef}
@@ -178,10 +191,8 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
               <MessageRow
                 message={message}
                 revision={`${emoteVersions[message.channel] ?? 0}.${globalEmoteVersion}.${badgeVersion}`}
-                showChannel={showChannel}
                 prefs={prefs}
                 selfLogin={selfLogin}
-                onChannelClick={onChannelClick}
                 onNameClick={onNameClick}
               />
               {message.id === readMarker && index < visible.length - 1 ? (
@@ -200,10 +211,11 @@ export function ChatLog({ messages, viewKey, showChannel, empty, readMarker, onC
         <button
           type="button"
           onClick={() => setFrozen(null)}
-          className="gecko-glow absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg transition hover:brightness-110"
+          className="zoo-glow absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg transition hover:brightness-110"
         >
-          <GeckoFootIcon className="size-4" />
-          {newer > 0 ? `${newer > 999 ? "999+" : newer} new · Stick to live chat` : "Paused · Stick to live chat"}
+          {isGecko ? <GeckoFootIcon className="size-4" /> : <PawPrint className="size-4" />}
+          {newer > 0 ? `${newer > 999 ? "999+" : newer} new · ` : "Paused · "}
+          {isGecko ? "Stick to live chat" : "Back to live chat"}
         </button>
       ) : null}
 

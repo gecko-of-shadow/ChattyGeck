@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Layers, Menu, PanelTop, RotateCw, Settings } from "lucide-react";
-import { GeckoTailIcon } from "@/components/gecko/icons";
+import { LayoutGrid, Menu, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
+import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
+import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import type { ViewMode } from "@/store/settings";
@@ -75,9 +76,9 @@ function ConnectionPill() {
 
 function ModeToggle() {
   const mode = useChat((s) => s.settings.mode);
-  const options: { value: ViewMode; label: string; icon: typeof Layers; hint: string }[] = [
-    { value: "merged", label: "Merged", icon: Layers, hint: "Every channel in one feed" },
-    { value: "focused", label: "Focused", icon: PanelTop, hint: "One channel at a time" },
+  const options: { value: ViewMode; label: string; icon: typeof LayoutGrid; hint: string }[] = [
+    { value: "grid", label: "Grid", icon: LayoutGrid, hint: "Every chat in its own box" },
+    { value: "focused", label: "Focused", icon: PanelTop, hint: "One chat at a time" },
   ];
   return (
     <div role="radiogroup" aria-label="Reading mode" className="flex rounded-lg border bg-muted/60 p-0.5">
@@ -112,7 +113,7 @@ export function ChatHeader() {
   );
 
   return (
-    <header className="gecko-scales-soft flex h-12 shrink-0 items-center gap-2 border-b border-border/80 bg-card/40 px-2.5 sm:px-3">
+    <header className="zoo-texture-soft flex h-12 shrink-0 items-center gap-2 border-b border-border/80 bg-card/40 px-2.5 sm:px-3">
       <Button
         variant="ghost"
         size="icon-sm"
@@ -125,15 +126,15 @@ export function ChatHeader() {
       </Button>
 
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        {mode === "merged" || !view ? (
+        {mode === "grid" || !view ? (
           <>
             <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
-              <Layers className="size-3.5" />
+              <LayoutGrid className="size-3.5" />
             </span>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">All channels</div>
+              <div className="truncate text-sm font-semibold">All chats</div>
               <div className="truncate text-[11px] text-muted-foreground">
-                {count === 0 ? "No channels yet" : `${count} channel${count === 1 ? "" : "s"} in one feed`}
+                {count === 0 ? "No channels yet" : `${count} chat${count === 1 ? "" : "s"}, each in its own box`}
               </div>
             </div>
           </>
@@ -171,6 +172,7 @@ export function ChatHeader() {
 
 export function ConnectionBanner() {
   const read = useChat((s) => s.read);
+  const theme = useChat((s) => THEMES[s.settings.skin]);
   const retryAt = read.status === "reconnecting" && read.detail.retryInMs ? read.since + read.detail.retryInMs : null;
   const seconds = useCountdown(retryAt);
   if (read.status !== "reconnecting" && read.status !== "auth_failed") return null;
@@ -180,10 +182,14 @@ export function ConnectionBanner() {
       role="alert"
       className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[rgb(var(--mention-rgb)/0.25)] bg-[rgb(var(--mention-rgb)/0.08)] px-3 py-2 text-xs"
     >
-      <GeckoTailIcon className="size-4 shrink-0 text-mention" />
+      {theme.animal === "gecko" ? (
+        <GeckoTailIcon className="size-4 shrink-0 text-mention" />
+      ) : (
+        <WifiOff className="size-4 shrink-0 text-mention" />
+      )}
       <div className="min-w-0 flex-1">
         <span className="font-semibold text-mention">
-          {read.status === "auth_failed" ? "Twitch rejected the login." : "Dropped the connection like a tail."}
+          {read.status === "auth_failed" ? "Twitch rejected the login." : theme.dropped}
         </span>{" "}
         <span className="text-muted-foreground">
           {read.status === "auth_failed"
