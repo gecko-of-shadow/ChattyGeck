@@ -251,6 +251,8 @@ function EmotesSection() {
   const [cacheSize, setCacheSize] = useState(() => emoteRegistry.cacheSize);
   useEffect(() => {
     setCacheSize(emoteRegistry.cacheSize);
+    // Lists get remembered as downloads land; the registry announces each one.
+    return emoteRegistry.subscribe(() => setCacheSize(emoteRegistry.cacheSize));
   }, [remember]);
 
   return (
@@ -318,9 +320,7 @@ function EmotesSection() {
                 disabled={cacheSize === 0}
                 onClick={() => {
                   chat.forgetEmotes();
-                  setCacheSize(0);
-                  // Fresh lists get remembered as they arrive; show the real count once they have.
-                  setTimeout(() => setCacheSize(emoteRegistry.cacheSize), 4_000);
+                  setCacheSize(emoteRegistry.cacheSize);
                   toast("Forgot the remembered emotes", { description: "Fetching fresh lists now." });
                 }}
               >

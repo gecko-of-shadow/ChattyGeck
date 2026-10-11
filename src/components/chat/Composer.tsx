@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,17 @@ interface Completion {
 
 const MIN_TYPED = 2;
 
-function CompletionBar({ completion, onChoose, compact }: { completion: Completion; onChoose: (index: number) => void; compact: boolean }) {
+function CompletionBar({
+  id,
+  completion,
+  onChoose,
+  compact,
+}: {
+  id: string;
+  completion: Completion;
+  onChoose: (index: number) => void;
+  compact: boolean;
+}) {
   const still = useChat((s) => s.settings.emoteAnimation === "never");
   const activeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -77,6 +87,7 @@ function CompletionBar({ completion, onChoose, compact }: { completion: Completi
   }, [completion.index]);
   return (
     <div
+      id={id}
       data-testid="tab-complete"
       role="listbox"
       aria-label="Emote suggestions"
@@ -88,6 +99,7 @@ function CompletionBar({ completion, onChoose, compact }: { completion: Completi
         return (
           <button
             key={emoteKey(emote)}
+            id={`${id}-${i}`}
             ref={active ? activeRef : undefined}
             type="button"
             role="option"
@@ -125,6 +137,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
+  const listId = useId();
 
   useEffect(() => {
     if (!insert || insert.channel !== channel) return;
@@ -175,9 +188,15 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     const after = text.slice(base.end);
     const spacer = after.startsWith(" ") ? "" : " ";
     const inserted = `${name}${spacer}`;
-    setText(`${text.slice(0, base.start)}${inserted}${after}`);
+    const next = `${text.slice(0, base.start)}${inserted}${after}`;
     const end = base.start + inserted.length;
-    pendingCaret.current = end;
+    if (next === text) {
+      // Same name again (one match, or re-picking the active one): no render, so place the caret now.
+      inputRef.current?.setSelectionRange(end, end);
+    } else {
+      setText(next);
+      pendingCaret.current = end;
+    }
     setCompletion({ ...base, index: nextIndex, end });
   };
 
@@ -258,6 +277,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
         <div className="relative min-w-0 flex-1">
           {completion && completion.matches.length > 1 ? (
             <CompletionBar
+              id={listId}
               completion={completion}
               compact={compact}
               onChoose={(i) => {
@@ -279,6 +299,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             onBlur={() => setCompletion(null)}
             placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
             aria-label={`Message #${channel}`}
+            aria-autocomplete={tabComplete ? "list" : undefined}
+            aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
+            aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
+            aria-activedescendant={completion && completion.matches.length > 1 ? `${listId}-${completion.index}` : undefined}
             className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
             autoComplete="off"
             spellCheck

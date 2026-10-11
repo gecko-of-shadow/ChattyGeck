@@ -88,7 +88,7 @@ release/
   ZooChattr-portable/
     ZooChattr.exe      ← the whole app (about 3.5 MB)
     README.txt
-  ZooChattr-portable-0.3.0.zip
+  ZooChattr-portable-0.3.1.zip
 ```
 
 Copy `ZooChattr-portable` anywhere, such as a USB stick or Dropbox, and double-click `ZooChattr.exe`. On first run it creates `ZooChattr-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.zoochattr`. Settings shows which location is in use.

@@ -106,18 +106,20 @@ const pick = <T extends string | number>(value: unknown, allowed: readonly T[], 
 const bool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
 
 const MAX_LIST = 200;
+/** Favourites are picked one click at a time; emote fans collect a lot of them. */
+export const MAX_FAVOURITES = 2000;
 
-/** Distinct, trimmed, non-empty strings; at most MAX_LIST of them. */
-export function cleanWordList(value: unknown): string[] {
+/** Distinct, trimmed, non-empty strings; at most `max` of them. */
+export function cleanWordList(value: unknown, max = MAX_LIST): string[] {
   if (!Array.isArray(value)) return [];
-  const out: string[] = [];
+  const out = new Set<string>();
   for (const entry of value) {
     if (typeof entry !== "string") continue;
     const word = entry.trim();
-    if (word && !out.includes(word)) out.push(word);
-    if (out.length >= MAX_LIST) break;
+    if (word) out.add(word);
+    if (out.size >= max) break;
   }
-  return out;
+  return Array.from(out);
 }
 
 /** Textarea text, one entry per line (spaces and commas also separate), to a clean list. */
@@ -184,7 +186,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     tabComplete: bool(input.tabComplete, DEFAULT_SETTINGS.tabComplete),
     emotePicker: bool(input.emotePicker, DEFAULT_SETTINGS.emotePicker),
     emotePreview: bool(input.emotePreview, DEFAULT_SETTINGS.emotePreview),
-    favoriteEmotes: cleanWordList(input.favoriteEmotes),
+    favoriteEmotes: cleanWordList(input.favoriteEmotes, MAX_FAVOURITES),
     pickerFolded: cleanWordList(input.pickerFolded),
     pickerTab: pick(input.pickerTab, ["fav", "channel", "all"] as const, DEFAULT_SETTINGS.pickerTab),
     highlightWords: cleanWordList(input.highlightWords),
@@ -211,10 +213,17 @@ export function readBackup(text: string): Settings | null {
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== "object") return null;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const obj = parsed as Record<string, unknown>;
-  const body = obj.zoochattr === 1 && obj.settings && typeof obj.settings === "object" ? obj.settings : obj;
-  const keys = Object.keys(body as object);
-  const known = keys.filter((k) => k in DEFAULT_SETTINGS);
-  return known.length ? sanitizeSettings(body) : null;
+  if (obj.zoochattr === 1) {
+    return obj.settings && typeof obj.settings === "object" ? sanitizeSettings(obj.settings) : null;
+  }
+  // A bare settings.json is fine too, but "version" / "mode" / "channels" are in lots of files;
+  // insist on keys only ZooChattr writes so a stray package.json can't reset everything.
+  const keys = Object.keys(obj);
+  const known = keys.filter((k) => k in DEFAULT_SETTINGS && !GENERIC_KEYS.has(k));
+  const legacy = typeof obj.fontSize === "string";
+  return known.length >= 2 || (legacy && keys.includes("skin")) ? sanitizeSettings(obj) : null;
 }
+
+const GENERIC_KEYS = new Set(["version", "mode", "channels", "focused"]);
