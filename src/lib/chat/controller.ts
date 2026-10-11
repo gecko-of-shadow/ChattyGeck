@@ -580,7 +580,11 @@ class ChatController {
 
   // ---------------------------------------------------------------- message buffer
 
+  /** Total messages received since launch (for soak stats). */
+  received = 0;
+
   private enqueue(message: ChatMessage): void {
+    this.received++;
     this.queue.push(message);
     if (!this.flushTimer) this.flushTimer = setTimeout(() => this.flush(), 80);
   }
@@ -863,3 +867,32 @@ class ChatController {
 }
 
 export const chat = new ChatController();
+
+declare global {
+  interface Window {
+    /** Read-only counters for soak tests; never exposes tokens. */
+    __chatdeckStats?: () => Record<string, unknown>;
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.__chatdeckStats = () => {
+    const s = get();
+    return {
+      read: s.read.status,
+      readDetail: s.read.detail,
+      auth: s.auth.status,
+      channels: Object.values(s.channels).map((c) => ({
+        login: c.login,
+        status: c.status,
+        messages: c.messages.length,
+        unread: c.unread,
+        emotes: emoteRegistry.channelEmotes(c.login).length,
+      })),
+      merged: s.merged.length,
+      received: chat.received,
+      rows: document.querySelectorAll(".chat-row").length,
+      emoteImages: document.querySelectorAll("img.chat-emote").length,
+    };
+  };
+}
