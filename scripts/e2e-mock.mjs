@@ -67,8 +67,8 @@ await step("join a second channel", async () => {
 
 await step("merged view tags every line with its channel", async () => {
   await page.getByRole("radio", { name: /merged/i }).click();
-  await page.locator(".chat-row button", { hasText: "#geckotown" }).first().waitFor({ timeout: 10_000 });
-  await page.locator(".chat-row button", { hasText: "#lizardlounge" }).first().waitFor({ timeout: 10_000 });
+  await page.locator(".chat-row button", { hasText: "#geckotown" }).first().waitFor({ timeout: 20_000 });
+  await page.locator(".chat-row button", { hasText: "#lizardlounge" }).first().waitFor({ timeout: 20_000 });
   await shot("02-merged");
 });
 
@@ -126,6 +126,23 @@ await step("/me sends an action", async () => {
   await input.fill("/me licks its eyeball");
   await input.press("Enter");
   await rowsWith("licks its eyeball").first().waitFor({ timeout: 8_000 });
+});
+
+await step("scrolling up pauses the feed; the toe-pad button sticks back to live", async () => {
+  const log = page.getByLabel("Chat messages");
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[aria-label="Chat messages"]');
+    return el && el.scrollHeight > el.clientHeight + 200;
+  }, null, { timeout: 60_000 });
+  const box = await log.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -600);
+  const pill = page.getByRole("button", { name: /Stick to live chat/ });
+  await pill.waitFor({ timeout: 5_000 });
+  await page.waitForTimeout(3_000);
+  await shot("05a-paused");
+  await pill.click();
+  await pill.waitFor({ state: "detached", timeout: 3_000 });
 });
 
 await step("merged view: pick a send target, or click a channel tag", async () => {

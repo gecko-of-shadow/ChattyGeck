@@ -454,7 +454,3 @@
   vertical-align: middle;
   display: inline-block;
 }
-.chat-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 26px;
-}
