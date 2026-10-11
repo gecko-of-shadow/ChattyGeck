@@ -5,8 +5,8 @@ interface UiState {
   settingsOpen: boolean;
   /** Mobile channel drawer. */
   navOpen: boolean;
-  /** Text the composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
-  insert: { text: string; nonce: number } | null;
+  /** Text a channel's composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
+  insert: { text: string; channel: string; nonce: number } | null;
 }
 
 export const useUi = create<UiState>(() => ({
@@ -16,6 +16,6 @@ export const useUi = create<UiState>(() => ({
   insert: null,
 }));
 
-export function insertIntoComposer(text: string): void {
-  useUi.setState((s) => ({ insert: { text, nonce: (s.insert?.nonce ?? 0) + 1 } }));
+export function insertIntoComposer(text: string, channel: string): void {
+  useUi.setState((s) => ({ insert: { text, channel, nonce: (s.insert?.nonce ?? 0) + 1 } }));
 }

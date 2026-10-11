@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Check, FolderOpen, KeyRound, Palette, Type } from "lucide-react";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
+import { AppWindow, Check, FolderOpen, KeyRound, Palette, Type } from "lucide-react";
+import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,8 @@ import { chat } from "@/lib/chat/controller";
 import { config } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import { SKINS, type FontSize, type Settings } from "@/store/settings";
+import { SKIN_ORDER, THEMES } from "@/lib/themes";
+import type { FontSize, Settings } from "@/store/settings";
 import { useUi } from "@/store/ui";
 
 function Section({ icon: Icon, title, children }: { icon: typeof Palette; title: string; children: React.ReactNode }) {
@@ -87,16 +88,16 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => useUi.setState({ settingsOpen: next })}>
-      <DialogContent className="gecko-scroll max-h-[min(88vh,760px)] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="zoo-scroll max-h-[min(88vh,760px)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-lg">Settings</DialogTitle>
           <DialogDescription>Saved automatically to this ZooChattr folder.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
-          <Section icon={Palette} title="Gecko skin">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {SKINS.map((option) => (
+          <Section icon={Palette} title="Animal theme">
+            <div className="grid grid-cols-2 gap-2">
+              {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
                 <button
                   key={option.id}
                   type="button"
@@ -104,11 +105,11 @@ export function SettingsDialog() {
                   onClick={() => chat.updateSettings({ skin: option.id })}
                   aria-pressed={skin === option.id}
                   className={cn(
-                    "gecko-scales relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                    "zoo-texture relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                     skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
                   )}
                 >
-                  <GeckoMascot className="size-9" anim={skin === option.id ? "idle" : "none"} />
+                  <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
                   <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
                   <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
                   {skin === option.id ? (
@@ -146,8 +147,17 @@ export function SettingsDialog() {
               <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
               <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
               <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
-              <ToggleRow id="pref-zebra" label="Scale stripes" hint="Shade every other line" setting="zebra" />
+              <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
             </div>
+          </Section>
+
+          <Section icon={AppWindow} title="Window">
+            <ToggleRow
+              id="pref-tray"
+              label="Close to tray"
+              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit."
+              setting="closeToTray"
+            />
           </Section>
 
           <Section icon={KeyRound} title="Twitch account">

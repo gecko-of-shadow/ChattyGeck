@@ -67,6 +67,16 @@ export async function clearSession(): Promise<void> {
   sessionStorage.removeItem(SESSION_KEY);
 }
 
+/** Whether closing the window hides ZooChattr in the tray (true) or quits it. */
+export async function setCloseToTray(enabled: boolean): Promise<void> {
+  if (isTauri) await invoke("set_close_to_tray", { enabled });
+}
+
+/** Tray tooltip, e.g. "ZooChattr · 2 mentions". */
+export async function setTrayStatus(mentions: number): Promise<void> {
+  if (isTauri) await invoke("set_tray_status", { mentions });
+}
+
 /** Flashes the taskbar button (Windows) / bounces the dock icon. */
 export async function requestAttention(): Promise<void> {
   if (!isTauri) return;

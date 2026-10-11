@@ -46,7 +46,7 @@ await page.evaluate(() => {
 await page.reload();
 
 await step("empty state on first launch", async () => {
-  await page.getByText("Nothing on the wall yet").waitFor({ timeout: 10_000 });
+  await page.getByText("Nothing in the zoo yet").waitFor({ timeout: 10_000 });
   await shot("01-empty");
 });
 
@@ -65,11 +65,11 @@ await step("join a second channel", async () => {
   await page.getByRole("button", { name: "Open #lizardlounge" }).waitFor();
 });
 
-await step("merged view tags every line with its channel", async () => {
-  await page.getByRole("radio", { name: /merged/i }).click();
-  await page.locator(".chat-row button", { hasText: "#geckotown" }).first().waitFor({ timeout: 20_000 });
-  await page.locator(".chat-row button", { hasText: "#lizardlounge" }).first().waitFor({ timeout: 20_000 });
-  await shot("02-merged");
+await step("grid shows each channel in its own box", async () => {
+  await page.getByRole("radio", { name: /grid/i }).click();
+  await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
+  await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
+  await shot("02-grid");
 });
 
 await step("focused view counts unread on other channels", async () => {
@@ -146,17 +146,19 @@ await step("scrolling up pauses the feed; the toe-pad button sticks back to live
   await pill.waitFor({ state: "detached", timeout: 3_000 });
 });
 
-await step("merged view: pick a send target, or click a channel tag", async () => {
-  await page.getByRole("radio", { name: /merged/i }).click();
-  await page.getByLabel("Send to channel").click();
-  await page.getByRole("option", { name: "#lizardlounge" }).click();
-  const input = page.getByLabel("Message #lizardlounge");
-  await input.fill("hello from the merged feed");
+await step("grid boxes each have their own message input", async () => {
+  await page.getByRole("radio", { name: /grid/i }).click();
+  const box = page.getByRole("region", { name: "#lizardlounge chat" });
+  const input = box.getByLabel("Message #lizardlounge");
+  await input.fill("hello from the lizardlounge box");
   await input.press("Enter");
-  await rowsWith("hello from the merged feed").locator("button", { hasText: "#lizardlounge" }).waitFor({ timeout: 8_000 });
-  await shot("05b-merged-send");
-  await page.locator(".chat-row button", { hasText: "#geckotown" }).first().click();
-  await page.getByLabel("Message #geckotown").waitFor({ timeout: 3_000 });
+  await box.locator(".chat-row", { hasText: "hello from the lizardlounge box" }).first().waitFor({ timeout: 8_000 });
+  const elsewhere = await page
+    .getByRole("region", { name: "#geckotown chat" })
+    .locator(".chat-row", { hasText: "hello from the lizardlounge box" })
+    .count();
+  if (elsewhere) throw new Error("message showed up in the wrong box");
+  await shot("05b-grid-send");
   await page.getByRole("radio", { name: /focused/i }).click();
 });
 
@@ -185,13 +187,19 @@ await step("refreshes an expired token and keeps chatting", async () => {
   await rowsWith("still here after refresh").first().waitFor({ timeout: 8_000 });
 });
 
-await step("gecko skins", async () => {
+await step("animal themes", async () => {
   await page.getByRole("button", { name: "Settings" }).first().click();
-  await page.getByRole("button", { name: /Leopard gecko/ }).click();
-  const skin = await page.evaluate(() => document.documentElement.dataset.skin);
-  if (skin !== "leopard") throw new Error(`skin is ${skin}`);
-  await shot("07-settings-leopard");
-  await page.getByRole("button", { name: /Shadow gecko/ }).click();
+  for (const [name, id] of [
+    ["Penguin", "penguin"],
+    ["Sea turtle", "turtle"],
+    ["Elephant", "elephant"],
+  ]) {
+    await page.getByRole("button", { name: new RegExp(name) }).click();
+    const skin = await page.evaluate(() => document.documentElement.dataset.skin);
+    if (skin !== id) throw new Error(`theme is ${skin}, expected ${id}`);
+    await shot(`07-theme-${id}`);
+  }
+  await page.getByRole("button", { name: /Crested gecko/ }).click();
   await page.keyboard.press("Escape");
 });
 

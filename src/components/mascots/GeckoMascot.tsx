@@ -83,7 +83,7 @@ export function GeckoMascot({
   return (
     <svg
       viewBox="0 0 64 64"
-      className={cn("gecko-mascot overflow-visible", className)}
+      className={cn("mascot gecko-mascot overflow-visible", className)}
       data-anim={anim}
       role={title ? "img" : undefined}
       aria-hidden={title ? undefined : true}
@@ -92,14 +92,14 @@ export function GeckoMascot({
       <g className="gecko-tongue">
         <path
           d="M32 5.2 V1.8 M32 2.1 L30.7 0.5 M32 2.1 L33.3 0.5"
-          stroke="var(--gecko-tongue, #ff6f91)"
+          stroke="var(--mascot-accent)"
           strokeWidth="1.1"
           strokeLinecap="round"
           fill="none"
         />
       </g>
 
-      <g className="gecko-tail" fill="none" stroke="var(--gecko-body)" strokeLinecap="round">
+      <g className="gecko-tail" fill="none" stroke="var(--mascot-body)" strokeLinecap="round">
         <path d="M32 40 C 32.5 46, 31 50.5, 27 53.5" strokeWidth="5.6" />
         <path d="M27 53.5 C 23 56.5, 17.5 56.5, 16 52.5" strokeWidth="3.8" />
         <path d="M16 52.5 C 14.8 49, 18 46.6, 20.2 48.6" strokeWidth="2.3" />
@@ -114,7 +114,7 @@ export function GeckoMascot({
           <path
             d={leg.path}
             fill="none"
-            stroke="var(--gecko-body)"
+            stroke="var(--mascot-body)"
             strokeWidth="3.1"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -126,11 +126,11 @@ export function GeckoMascot({
                 y1={leg.foot[1]}
                 x2={x}
                 y2={y}
-                stroke="var(--gecko-body)"
+                stroke="var(--mascot-body)"
                 strokeWidth="1.3"
                 strokeLinecap="round"
               />
-              <circle cx={x} cy={y} r="1.15" fill="var(--gecko-body)" />
+              <circle cx={x} cy={y} r="1.15" fill="var(--mascot-body)" />
             </g>
           ))}
         </g>
@@ -138,32 +138,32 @@ export function GeckoMascot({
 
       <path
         d="M32 18.5 C 35.5 18.5, 38.6 23, 38.8 29 C 39 35, 36.5 41, 32 42.2 C 27.5 41, 25 35, 25.2 29 C 25.4 23, 28.5 18.5, 32 18.5 Z"
-        fill="var(--gecko-body)"
+        fill="var(--mascot-body)"
       />
-      <ellipse cx="32" cy="30" rx="1.6" ry="9" fill="var(--gecko-belly)" opacity="0.28" />
+      <ellipse cx="32" cy="30" rx="1.6" ry="9" fill="var(--mascot-belly)" opacity="0.28" />
       {SPOTS.map(([cx, cy, r]) => (
-        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="var(--gecko-spot)" />
+        <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill="var(--mascot-spot)" />
       ))}
 
       <path
         d="M32 4.6 C 38.2 4.6, 40.6 9.6, 40 13.6 C 39.4 17.4, 36.2 19.8, 32 19.8 C 27.8 19.8, 24.6 17.4, 24 13.6 C 23.4 9.6, 25.8 4.6, 32 4.6 Z"
-        fill="var(--gecko-body)"
+        fill="var(--mascot-body)"
       />
-      <circle cx="30.6" cy="6.9" r="0.45" fill="var(--gecko-pupil)" opacity="0.6" />
-      <circle cx="33.4" cy="6.9" r="0.45" fill="var(--gecko-pupil)" opacity="0.6" />
+      <circle cx="30.6" cy="6.9" r="0.45" fill="var(--mascot-pupil)" opacity="0.6" />
+      <circle cx="33.4" cy="6.9" r="0.45" fill="var(--mascot-pupil)" opacity="0.6" />
       <path
         d="M28.6 15.4 Q32 17.6 35.4 15.4"
-        stroke="var(--gecko-pupil)"
+        stroke="var(--mascot-pupil)"
         strokeOpacity="0.45"
         strokeWidth="0.75"
         strokeLinecap="round"
         fill="none"
       />
       <g className="gecko-eyes">
-        <circle cx="26.4" cy="11.2" r="2.5" fill="var(--gecko-eye)" />
-        <circle cx="37.6" cy="11.2" r="2.5" fill="var(--gecko-eye)" />
-        <ellipse cx="26.4" cy="11.2" rx="0.55" ry="1.8" fill="var(--gecko-pupil)" />
-        <ellipse cx="37.6" cy="11.2" rx="0.55" ry="1.8" fill="var(--gecko-pupil)" />
+        <circle cx="26.4" cy="11.2" r="2.5" fill="var(--mascot-eye)" />
+        <circle cx="37.6" cy="11.2" r="2.5" fill="var(--mascot-eye)" />
+        <ellipse cx="26.4" cy="11.2" rx="0.55" ry="1.8" fill="var(--mascot-pupil)" />
+        <ellipse cx="37.6" cy="11.2" rx="0.55" ry="1.8" fill="var(--mascot-pupil)" />
         <circle cx="25.7" cy="10.3" r="0.45" fill="#fff" opacity="0.7" />
         <circle cx="36.9" cy="10.3" r="0.45" fill="#fff" opacity="0.7" />
       </g>

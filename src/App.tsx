@@ -1,23 +1,26 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { Composer } from "@/components/chat/Composer";
+import { Composer, LoginPrompt } from "@/components/chat/Composer";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
+import { Mascot } from "@/components/mascots/Mascot";
 import { ChatHeader, ConnectionBanner } from "@/components/layout/ChatHeader";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { EmptyState, FocusedView, MergedView } from "@/components/layout/Views";
+import { EmptyState, FocusedView, GridView } from "@/components/layout/Views";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
+import { setTrayStatus } from "@/lib/platform";
+import { THEMES } from "@/lib/themes";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
 function BootScreen() {
+  const waking = useChat((s) => THEMES[s.settings.skin].waking);
   return (
-    <div className="gecko-scales flex h-full flex-col items-center justify-center gap-4">
-      <GeckoMascot anim="scurry" className="size-20" />
-      <p className="text-sm text-muted-foreground">Waking up the gecko…</p>
+    <div className="zoo-texture flex h-full flex-col items-center justify-center gap-4">
+      <Mascot anim="scurry" className="size-20" />
+      <p className="text-sm text-muted-foreground">{waking}</p>
     </div>
   );
 }
@@ -52,6 +55,7 @@ export default function App() {
   const focused = useChat((s) => s.settings.focused);
   const count = useChat((s) => s.settings.channels.length);
   const mentions = useChat((s) => Object.values(s.channels).reduce((sum, c) => sum + c.mentions, 0));
+  const loggedIn = useChat((s) => s.auth.status === "logged_in");
 
   useEffect(() => {
     void chat.boot();
@@ -63,6 +67,7 @@ export default function App() {
 
   useEffect(() => {
     document.title = mentions > 0 ? `(${mentions}) ZooChattr` : "ZooChattr";
+    void setTrayStatus(mentions).catch(() => undefined);
   }, [mentions]);
 
   return (
@@ -80,12 +85,16 @@ export default function App() {
             <ConnectionBanner />
             {count === 0 ? (
               <EmptyState />
-            ) : mode === "merged" || !focused ? (
-              <MergedView />
+            ) : mode === "grid" || !focused ? (
+              <GridView />
             ) : (
               <FocusedView key={focused} login={focused} />
             )}
-            <Composer />
+            {mode === "focused" && focused ? (
+              <Composer channel={focused} />
+            ) : count > 0 && !loggedIn ? (
+              <LoginPrompt />
+            ) : null}
           </main>
           <LoginDialog />
           <SettingsDialog />

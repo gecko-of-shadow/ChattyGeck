@@ -33,7 +33,7 @@ page.on("console", (msg) => {
 
 await page.goto(url);
 await page.evaluate(
-  (list) => localStorage.setItem("zoochattr.settings", JSON.stringify({ channels: list, mode: "merged" })),
+  (list) => localStorage.setItem("zoochattr.settings", JSON.stringify({ channels: list, mode: "grid" })),
   channels,
 );
 await page.reload();
@@ -60,13 +60,13 @@ while (Date.now() - started < minutes * 60_000) {
   };
   log.write(`${JSON.stringify(row)}\n`);
   console.log(
-    `[${row.minute}m] read=${row.read} received=${row.received} merged=${row.merged} rows=${row.rows} ` +
+    `[${row.minute}m] read=${row.read} received=${row.received} rows=${row.rows} ` +
       `heap=${row.heapMB}MB dom=${row.domNodes} errors=${row.errors.length}`,
   );
   if (sample % 15 === 0) await page.screenshot({ path: path.join(outDir, `soak-${sample}m.png`) });
   // Flip views now and then, like a person would.
   if (sample % 10 === 5) await page.getByRole("radio", { name: /focused/i }).click().catch(() => {});
-  if (sample % 10 === 0) await page.getByRole("radio", { name: /merged/i }).click().catch(() => {});
+  if (sample % 10 === 0) await page.getByRole("radio", { name: /grid/i }).click().catch(() => {});
 }
 
 await page.screenshot({ path: path.join(outDir, "soak-final.png") });

@@ -36,8 +36,8 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --color-gecko-eye: var(--gecko-eye);
-  --color-gecko-spot: var(--gecko-spot);
+  --color-mascot-eye: var(--mascot-eye);
+  --color-mascot-spot: var(--mascot-spot);
   --color-mention: var(--mention);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -48,91 +48,15 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* ---------------------------------------------------------------- skins */
+/* ---------------------------------------------------------------- themes */
+/* Each animal theme sets the shadcn palette, the mascot colours, and a background texture. */
 
 :root,
-[data-skin="shadow"] {
-  --background: #090d0a;
-  --foreground: #dbe7d6;
-  --card: #0e1510;
-  --card-foreground: #dbe7d6;
-  --popover: #101913;
-  --popover-foreground: #e3eedf;
-  --primary: #8fe05a;
-  --primary-foreground: #0a1406;
-  --secondary: #16211a;
-  --secondary-foreground: #d3e2cd;
-  --muted: #121b14;
-  --muted-foreground: #87a083;
-  --accent: #1a2a1e;
-  --accent-foreground: #e8f4e2;
-  --destructive: #ff6b5b;
-  --border: #1d2c21;
-  --input: #263829;
-  --ring: #8fe05a;
-  --radius: 0.7rem;
-  --sidebar: #0b110c;
-  --sidebar-foreground: #d3e2cd;
-  --sidebar-primary: #8fe05a;
-  --sidebar-primary-foreground: #0a1406;
-  --sidebar-accent: #172419;
-  --sidebar-accent-foreground: #ecf7e6;
-  --sidebar-border: #1a281d;
-  --sidebar-ring: #8fe05a;
-
-  --gecko-body: #8fe05a;
-  --gecko-belly: #c6f59e;
-  --gecko-spot: #2f6b24;
-  --gecko-eye: #f6b73c;
-  --gecko-pupil: #0d0f0a;
-  --gecko-tongue: #ff6f91;
-  --scale-rgb: 143 224 90;
-  --glow-rgb: 143 224 90;
-  --mention: #f6b73c;
-  --mention-rgb: 246 183 60;
-}
-
-[data-skin="leopard"] {
-  --background: #0d0b08;
-  --foreground: #ece3d2;
-  --card: #15110b;
-  --popover: #18130c;
-  --popover-foreground: #f1e8d6;
-  --primary: #f4c542;
-  --primary-foreground: #1a1404;
-  --secondary: #201a10;
-  --secondary-foreground: #e6dcc6;
-  --muted: #19140d;
-  --muted-foreground: #a8987a;
-  --accent: #2a2214;
-  --accent-foreground: #f7eedb;
-  --border: #2c2416;
-  --input: #3a301d;
-  --ring: #f4c542;
-  --sidebar: #100d09;
-  --sidebar-foreground: #e6dcc6;
-  --sidebar-primary: #f4c542;
-  --sidebar-primary-foreground: #1a1404;
-  --sidebar-accent: #241d12;
-  --sidebar-accent-foreground: #f7eedb;
-  --sidebar-border: #2a2215;
-  --sidebar-ring: #f4c542;
-
-  --gecko-body: #f4c542;
-  --gecko-belly: #fbe7a8;
-  --gecko-spot: #2a1f12;
-  --gecko-eye: #b9c7a0;
-  --gecko-pupil: #120d06;
-  --scale-rgb: 244 197 66;
-  --glow-rgb: 244 197 66;
-  --mention: #c8a6ff;
-  --mention-rgb: 200 166 255;
-}
-
 [data-skin="crested"] {
   --background: #0f0a08;
   --foreground: #f0e1d4;
   --card: #18100c;
+  --card-foreground: #f0e1d4;
   --popover: #1b120d;
   --popover-foreground: #f6e7da;
   --primary: #ff8c42;
@@ -143,9 +67,11 @@
   --muted-foreground: #b09482;
   --accent: #2e1d13;
   --accent-foreground: #fbeee2;
+  --destructive: #ff6b5b;
   --border: #33221a;
   --input: #432c20;
   --ring: #ff8c42;
+  --radius: 0.7rem;
   --sidebar: #120c09;
   --sidebar-foreground: #ead8c8;
   --sidebar-primary: #ff8c42;
@@ -155,89 +81,155 @@
   --sidebar-border: #301f16;
   --sidebar-ring: #ff8c42;
 
-  --gecko-body: #ff8c42;
-  --gecko-belly: #ffd2a8;
-  --gecko-spot: #f3e1c4;
-  --gecko-eye: #ffd166;
-  --gecko-pupil: #1b0c04;
-  --scale-rgb: 255 140 66;
+  --mascot-body: #ff8c42;
+  --mascot-belly: #ffd2a8;
+  --mascot-spot: #f3e1c4;
+  --mascot-eye: #ffd166;
+  --mascot-pupil: #1b0c04;
+  --mascot-accent: #ff6f91;
+  --texture-rgb: 255 140 66;
   --glow-rgb: 255 140 66;
   --mention: #ffd166;
   --mention-rgb: 255 209 102;
+  /* Granular gecko skin: offset rows of tiny bumps. */
+  --texture-image:
+    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.075) 0 1.6px, transparent 2.1px),
+    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.05) 0 1.6px, transparent 2.1px);
+  --texture-size: 9px 8px, 9px 8px;
+  --texture-position: 0 0, 4.5px 4px;
 }
 
-[data-skin="tokay"] {
-  --background: #090c13;
-  --foreground: #dce4f0;
-  --card: #0f1420;
-  --popover: #111725;
-  --popover-foreground: #e4ebf6;
-  --primary: #7cb8ff;
-  --primary-foreground: #04101f;
-  --secondary: #151c2b;
-  --secondary-foreground: #d3dceb;
-  --muted: #111725;
-  --muted-foreground: #8a98b3;
-  --accent: #1b2438;
-  --accent-foreground: #eaf1fb;
-  --border: #1d2638;
-  --input: #27324a;
-  --ring: #7cb8ff;
-  --sidebar: #0b0f19;
-  --sidebar-foreground: #d3dceb;
-  --sidebar-primary: #7cb8ff;
-  --sidebar-primary-foreground: #04101f;
-  --sidebar-accent: #172033;
-  --sidebar-accent-foreground: #eaf1fb;
-  --sidebar-border: #1a2336;
-  --sidebar-ring: #7cb8ff;
+[data-skin="penguin"] {
+  --background: #070b12;
+  --foreground: #e3ebf5;
+  --card: #0c121c;
+  --card-foreground: #e3ebf5;
+  --popover: #0e1520;
+  --popover-foreground: #edf3fa;
+  --primary: #7dd3fc;
+  --primary-foreground: #04121c;
+  --secondary: #121b28;
+  --secondary-foreground: #d6e2f0;
+  --muted: #0f1724;
+  --muted-foreground: #8b9bb2;
+  --accent: #172234;
+  --accent-foreground: #f0f6fd;
+  --border: #1b2638;
+  --input: #24334a;
+  --ring: #7dd3fc;
+  --sidebar: #090e17;
+  --sidebar-foreground: #d6e2f0;
+  --sidebar-primary: #7dd3fc;
+  --sidebar-primary-foreground: #04121c;
+  --sidebar-accent: #142034;
+  --sidebar-accent-foreground: #f0f6fd;
+  --sidebar-border: #182335;
+  --sidebar-ring: #7dd3fc;
 
-  --gecko-body: #7c95c4;
-  --gecko-belly: #c9d6ee;
-  --gecko-spot: #ff7a45;
-  --gecko-eye: #ffd23f;
-  --gecko-pupil: #0b0d12;
-  --scale-rgb: 124 184 255;
-  --glow-rgb: 124 184 255;
-  --mention: #ff9a5c;
-  --mention-rgb: 255 154 92;
+  --mascot-body: #3b4f6b;
+  --mascot-belly: #f1f5f9;
+  --mascot-spot: #ffcf70;
+  --mascot-eye: #0b1220;
+  --mascot-pupil: #0b1220;
+  --mascot-accent: #ffa94d;
+  --texture-rgb: 186 230 253;
+  --glow-rgb: 125 211 252;
+  --mention: #ffa94d;
+  --mention-rgb: 255 169 77;
+  /* Light snowfall. */
+  --texture-image:
+    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.11) 0 1.2px, transparent 1.6px),
+    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.06) 0 0.9px, transparent 1.3px);
+  --texture-size: 23px 19px, 13px 17px;
+  --texture-position: 0 0, 7px 9px;
 }
 
-[data-skin="day"] {
-  --background: #070f0b;
-  --foreground: #d8eedf;
-  --card: #0c1711;
-  --popover: #0e1a13;
-  --popover-foreground: #e0f4e6;
-  --primary: #3ee07a;
-  --primary-foreground: #021208;
-  --secondary: #122219;
-  --secondary-foreground: #cfe6d6;
-  --muted: #0f1c15;
-  --muted-foreground: #7fa58d;
-  --accent: #15291d;
-  --accent-foreground: #e6f9ec;
-  --border: #183022;
-  --input: #20402c;
-  --ring: #3ee07a;
-  --sidebar: #08120c;
-  --sidebar-foreground: #cfe6d6;
-  --sidebar-primary: #3ee07a;
-  --sidebar-primary-foreground: #021208;
-  --sidebar-accent: #13261a;
-  --sidebar-accent-foreground: #e6f9ec;
-  --sidebar-border: #162c1f;
-  --sidebar-ring: #3ee07a;
+[data-skin="turtle"] {
+  --background: #061210;
+  --foreground: #d9efe9;
+  --card: #0a1a17;
+  --card-foreground: #d9efe9;
+  --popover: #0c1e1a;
+  --popover-foreground: #e4f6f1;
+  --primary: #34d1a8;
+  --primary-foreground: #021511;
+  --secondary: #10241f;
+  --secondary-foreground: #cfe7e0;
+  --muted: #0d1f1b;
+  --muted-foreground: #7fa69b;
+  --accent: #133029;
+  --accent-foreground: #e6f8f3;
+  --border: #16302a;
+  --input: #1f4038;
+  --ring: #34d1a8;
+  --sidebar: #071613;
+  --sidebar-foreground: #cfe7e0;
+  --sidebar-primary: #34d1a8;
+  --sidebar-primary-foreground: #021511;
+  --sidebar-accent: #11291f;
+  --sidebar-accent-foreground: #e6f8f3;
+  --sidebar-border: #142c26;
+  --sidebar-ring: #34d1a8;
 
-  --gecko-body: #3ee07a;
-  --gecko-belly: #b8f7cd;
-  --gecko-spot: #ff4d4d;
-  --gecko-eye: #6ec6ff;
-  --gecko-pupil: #04140a;
-  --scale-rgb: 62 224 122;
-  --glow-rgb: 62 224 122;
-  --mention: #ff6b6b;
-  --mention-rgb: 255 107 107;
+  --mascot-body: #5f8a45;
+  --mascot-belly: #8fd4a8;
+  --mascot-spot: #2f4d22;
+  --mascot-eye: #0b1a14;
+  --mascot-pupil: #0b1a14;
+  --mascot-accent: #e9c46a;
+  --texture-rgb: 52 209 168;
+  --glow-rgb: 52 209 168;
+  --mention: #f2c26b;
+  --mention-rgb: 242 194 107;
+  /* Shell plates: a honeycomb of hexagons. */
+  --texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13.856' height='24'%3E%3Cg fill='none' stroke='%2334d1a8' stroke-opacity='0.09' stroke-width='0.8'%3E%3Cpath d='M6.928 4l6.928 4v8l-6.928 4L0 16V8z'/%3E%3Cpath d='M0 -8l6.928 4v8L0 8l-6.928-4v-8zM13.856 -8l6.928 4v8l-6.928 4-6.928-4v-8zM0 16l6.928 4v8L0 32l-6.928-4v-8zM13.856 16l6.928 4v8l-6.928 4-6.928-4v-8z'/%3E%3C/g%3E%3C/svg%3E");
+  --texture-size: 13.856px 24px;
+  --texture-position: 0 0;
+}
+
+[data-skin="elephant"] {
+  --background: #0e0e12;
+  --foreground: #e6e4ec;
+  --card: #15151b;
+  --card-foreground: #e6e4ec;
+  --popover: #18181f;
+  --popover-foreground: #efedf5;
+  --primary: #b4a5f5;
+  --primary-foreground: #120d26;
+  --secondary: #1d1d26;
+  --secondary-foreground: #dddbe6;
+  --muted: #19191f;
+  --muted-foreground: #9a97a8;
+  --accent: #24232e;
+  --accent-foreground: #f2f0f8;
+  --border: #2a2934;
+  --input: #363544;
+  --ring: #b4a5f5;
+  --sidebar: #111116;
+  --sidebar-foreground: #dddbe6;
+  --sidebar-primary: #b4a5f5;
+  --sidebar-primary-foreground: #120d26;
+  --sidebar-accent: #20202a;
+  --sidebar-accent-foreground: #f2f0f8;
+  --sidebar-border: #26252f;
+  --sidebar-ring: #b4a5f5;
+
+  --mascot-body: #9ca3af;
+  --mascot-belly: #d1d5db;
+  --mascot-spot: #6b7280;
+  --mascot-eye: #111827;
+  --mascot-pupil: #111827;
+  --mascot-accent: #f9a8d4;
+  --texture-rgb: 180 165 245;
+  --glow-rgb: 180 165 245;
+  --mention: #ffb4a2;
+  --mention-rgb: 255 180 162;
+  /* Wrinkly elephant skin. */
+  --texture-image:
+    repeating-linear-gradient(176deg, rgb(var(--texture-rgb) / 0.05) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(184deg, rgb(var(--texture-rgb) / 0.035) 0 1px, transparent 1px 13px);
+  --texture-size: auto, auto;
+  --texture-position: 0 0, 0 0;
 }
 
 /* ---------------------------------------------------------------- base */
@@ -265,58 +257,59 @@
   }
 }
 
-/* Granular gecko skin: offset rows of tiny bumps. */
-.gecko-scales {
+.zoo-texture {
   background-color: var(--sidebar);
-  background-image:
-    radial-gradient(circle at center, rgb(var(--scale-rgb) / 0.075) 0 1.6px, transparent 2.1px),
-    radial-gradient(circle at center, rgb(var(--scale-rgb) / 0.05) 0 1.6px, transparent 2.1px);
-  background-size: 9px 8px;
-  background-position:
-    0 0,
-    4.5px 4px;
+  background-image: var(--texture-image);
+  background-size: var(--texture-size);
+  background-position: var(--texture-position);
 }
 
-.gecko-scales-soft {
-  background-image:
-    radial-gradient(circle at center, rgb(var(--scale-rgb) / 0.035) 0 1.4px, transparent 1.9px),
-    radial-gradient(circle at center, rgb(var(--scale-rgb) / 0.025) 0 1.4px, transparent 1.9px);
-  background-size: 11px 10px;
-  background-position:
-    0 0,
-    5.5px 5px;
+/* Same texture at half strength, behind the content. */
+.zoo-texture-soft {
+  position: relative;
+  isolation: isolate;
+}
+.zoo-texture-soft::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: var(--texture-image);
+  background-size: var(--texture-size);
+  background-position: var(--texture-position);
 }
 
-.gecko-glow {
+.zoo-glow {
   box-shadow:
     0 0 0 1px rgb(var(--glow-rgb) / 0.25),
     0 0 18px -4px rgb(var(--glow-rgb) / 0.55);
 }
 
-.gecko-text-glow {
+.zoo-text-glow {
   text-shadow: 0 0 14px rgb(var(--glow-rgb) / 0.45);
 }
 
-/* Thin tail-like scrollbars. */
-.gecko-scroll {
+.zoo-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--scale-rgb) / 0.35) transparent;
+  scrollbar-color: rgb(var(--texture-rgb) / 0.35) transparent;
 }
-.gecko-scroll::-webkit-scrollbar {
+.zoo-scroll::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
-.gecko-scroll::-webkit-scrollbar-thumb {
-  background: rgb(var(--scale-rgb) / 0.3);
+.zoo-scroll::-webkit-scrollbar-thumb {
+  background: rgb(var(--texture-rgb) / 0.3);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.gecko-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--scale-rgb) / 0.55);
+.zoo-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--texture-rgb) / 0.55);
   background-clip: padding-box;
 }
-.gecko-scroll::-webkit-scrollbar-track {
+.zoo-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -357,7 +350,7 @@
     filter: drop-shadow(0 0 0 transparent);
   }
   50% {
-    filter: drop-shadow(0 0 2.5px var(--gecko-eye));
+    filter: drop-shadow(0 0 2.5px var(--mascot-eye));
   }
 }
 @keyframes gecko-leg-a {
@@ -419,9 +412,137 @@
   }
 }
 
+/* Penguin: waddles and flaps. */
+@keyframes penguin-waddle {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+}
+@keyframes penguin-flap-left {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(14deg);
+  }
+}
+@keyframes penguin-flap-right {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-14deg);
+  }
+}
+/* Turtle: bobs its head and paddles. */
+@keyframes turtle-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.3px);
+  }
+}
+@keyframes turtle-paddle-a {
+  0%,
+  100% {
+    transform: rotate(-10deg);
+  }
+  50% {
+    transform: rotate(10deg);
+  }
+}
+@keyframes turtle-paddle-b {
+  0%,
+  100% {
+    transform: rotate(10deg);
+  }
+  50% {
+    transform: rotate(-10deg);
+  }
+}
+/* Elephant: flaps its ears and swings its trunk. */
+@keyframes elephant-ear {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(0.88);
+  }
+}
+@keyframes elephant-trunk {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+}
+
+.mascot .mascot-part {
+  transform-box: view-box;
+}
+.penguin-mascot[data-anim="idle"] .penguin-body {
+  animation: penguin-waddle 2.6s ease-in-out infinite;
+}
+.penguin-mascot[data-anim="idle"] .penguin-flipper-left {
+  animation: penguin-flap-left 2.6s ease-in-out infinite;
+}
+.penguin-mascot[data-anim="idle"] .penguin-flipper-right {
+  animation: penguin-flap-right 2.6s ease-in-out infinite;
+}
+.penguin-mascot[data-anim="scurry"] .penguin-body {
+  animation: penguin-waddle 0.5s ease-in-out infinite;
+}
+.penguin-mascot[data-anim="scurry"] .penguin-flipper-left {
+  animation: penguin-flap-left 0.5s ease-in-out infinite;
+}
+.penguin-mascot[data-anim="scurry"] .penguin-flipper-right {
+  animation: penguin-flap-right 0.5s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="idle"] .turtle-head {
+  animation: turtle-bob 3.2s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="idle"] .turtle-flipper-a {
+  animation: turtle-paddle-a 3.2s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="idle"] .turtle-flipper-b {
+  animation: turtle-paddle-b 3.2s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="scurry"] .turtle-head {
+  animation: turtle-bob 0.6s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="scurry"] .turtle-flipper-a {
+  animation: turtle-paddle-a 0.6s ease-in-out infinite;
+}
+.turtle-mascot[data-anim="scurry"] .turtle-flipper-b {
+  animation: turtle-paddle-b 0.6s ease-in-out infinite;
+}
+.elephant-mascot[data-anim="idle"] .elephant-ear {
+  animation: elephant-ear 3s ease-in-out infinite;
+}
+.elephant-mascot[data-anim="idle"] .elephant-trunk {
+  animation: elephant-trunk 3.6s ease-in-out infinite;
+}
+.elephant-mascot[data-anim="scurry"] .elephant-ear {
+  animation: elephant-ear 0.6s ease-in-out infinite;
+}
+.elephant-mascot[data-anim="scurry"] .elephant-trunk {
+  animation: elephant-trunk 0.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .gecko-mascot,
-  .gecko-mascot * {
+  .mascot,
+  .mascot * {
     animation: none !important;
   }
 }
@@ -445,7 +566,7 @@
   overflow-anchor: none;
 }
 .chat-log[data-zebra="true"] .chat-row:nth-child(even) {
-  background-color: rgb(var(--scale-rgb) / 0.025);
+  background-color: rgb(var(--texture-rgb) / 0.025);
 }
 .chat-emote {
   height: var(--emote-h);

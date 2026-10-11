@@ -1,29 +1,58 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, Link2, RotateCw, Smile, UserRoundX } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Clock,
+  ExternalLink,
+  Link2,
+  Lock,
+  Maximize2,
+  MoreHorizontal,
+  RefreshCw,
+  RotateCw,
+  Smile,
+  UserRoundX,
+  Users,
+  X,
+} from "lucide-react";
 import { ChatLog } from "@/components/chat/ChatLog";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
+import { Composer } from "@/components/chat/Composer";
+import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chat } from "@/lib/chat/controller";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/lib/emotes/types";
+import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { insertIntoComposer } from "@/store/ui";
-import { AddChannelForm } from "./Sidebar";
+import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 
-const mention = (login: string) => insertIntoComposer(`@${login} `);
+/** Narrowest a grid box gets before the grid wraps to fewer columns. */
+const BOX_MIN_WIDTH = 300;
+/** Shortest a grid box gets before the grid scrolls instead of squeezing. */
+const BOX_MIN_HEIGHT = 260;
+const GRID_GAP = 8;
 
 export function EmptyState() {
   return (
-    <div className="gecko-scales-soft flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
+    <div className="zoo-texture-soft flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
       <div className="w-full max-w-md space-y-6 text-center">
-        <GeckoMascot anim="idle" className="mx-auto size-28 drop-shadow-[0_0_28px_rgb(var(--glow-rgb)/0.4)]" />
+        <Mascot anim="idle" className="mx-auto size-28 drop-shadow-[0_0_28px_rgb(var(--glow-rgb)/0.4)]" />
         <div className="space-y-2">
-          <h1 className="text-2xl font-extrabold tracking-tight">Nothing on the wall yet</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Add a Twitch channel and this gecko will stick to its chat. Add a few more to read them together in one
-            merged feed, or one at a time with unread counts on the rest.
+            Add a Twitch channel and its chat gets its own box here. Add a few more and they tile side by side, or
+            open one at a time with unread counts on the rest.
           </p>
         </div>
         <div className="mx-auto max-w-sm text-left">
@@ -60,7 +89,7 @@ function statusText(status: ProviderStatus): string {
   }
 }
 
-export function EmoteStatusChip({ channel }: { channel: string }) {
+export function EmoteStatusChip({ channel, compact = false }: { channel: string; compact?: boolean }) {
   const version = useChat((s) => `${s.emoteVersions[channel] ?? 0}.${s.globalEmoteVersion}`);
   const [, force] = useState(0);
   useEffect(() => force((n) => n + 1), [version]);
@@ -81,13 +110,14 @@ export function EmoteStatusChip({ channel }: { channel: string }) {
           <Button
             variant="ghost"
             size="xs"
-            className={cn("gap-1 font-normal text-muted-foreground", failing && "text-mention")}
-            aria-label="Emote providers"
+            className={cn("gap-1 font-normal text-muted-foreground", failing && "text-mention", compact && "px-1")}
+            aria-label={`Emotes in #${channel}`}
+            title={`${total} channel emotes`}
           />
         }
       >
         {failing ? <AlertTriangle className="size-3" /> : <Smile className="size-3" />}
-        <span className="hidden lg:inline">{total} channel emotes</span>
+        {compact ? null : <span className="hidden lg:inline">{total} channel emotes</span>}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 text-xs">
         <div className="mb-2 font-semibold">Emotes in #{channel}</div>
@@ -122,67 +152,192 @@ export function EmoteStatusChip({ channel }: { channel: string }) {
   );
 }
 
-export function FocusedView({ login }: { login: string }) {
+/** What a channel's log shows before its first message arrives. */
+function ChannelPlaceholder({ login, compact = false }: { login: string; compact?: boolean }) {
   const view = useChat((s) => s.channels[login]);
   if (!view) return null;
-
-  let empty: React.ReactNode;
+  const size = compact ? "size-10" : "size-16";
   if (view.status === "error") {
-    empty = (
+    return (
       <div className="max-w-sm space-y-3 text-center">
-        <GeckoMascot className="mx-auto size-16 opacity-60 grayscale" />
-        <p className="font-semibold">Couldn't stick to #{login}</p>
+        <Mascot className={cn("mx-auto opacity-60 grayscale", size)} />
+        <p className="font-semibold">Couldn't join #{login}</p>
         <p className="text-sm text-muted-foreground">{view.error}</p>
         <Button variant="outline" size="sm" onClick={() => chat.removeChannel(login)}>
           Remove #{login}
         </Button>
       </div>
     );
-  } else if (view.status === "joining") {
-    empty = (
+  }
+  if (view.status === "joining") {
+    return (
       <div className="space-y-3 text-center">
-        <GeckoMascot anim="scurry" className="mx-auto size-16" />
-        <p className="text-sm text-muted-foreground">Climbing into #{login}…</p>
-      </div>
-    );
-  } else {
-    empty = (
-      <div className="space-y-3 text-center">
-        <GeckoMascot anim="idle" className="mx-auto size-16" />
-        <p className="text-sm text-muted-foreground">
-          Connected to #{login}. It's quiet in here; new messages show up the moment someone chirps.
-        </p>
+        <Mascot anim="scurry" className={cn("mx-auto", size)} />
+        <p className="text-sm text-muted-foreground">Joining #{login}…</p>
       </div>
     );
   }
+  return (
+    <div className="space-y-3 text-center">
+      <Mascot anim="idle" className={cn("mx-auto", size)} />
+      <p className="text-sm text-muted-foreground">
+        Connected to #{login}. New messages show up here the moment someone talks.
+      </p>
+    </div>
+  );
+}
 
+export function FocusedView({ login }: { login: string }) {
+  const view = useChat((s) => s.channels[login]);
+  if (!view) return null;
   return (
     <ChatLog
       messages={view.messages}
       viewKey={`focused:${login}`}
-      showChannel={false}
-      empty={empty}
+      empty={<ChannelPlaceholder login={login} />}
       readMarker={view.readMarker}
-      onNameClick={mention}
+      onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
     />
   );
 }
 
-export function MergedView() {
-  const merged = useChat((s) => s.merged);
+function RoomIcons({ login }: { login: string }) {
+  const room = useChat((s) => s.channels[login]?.roomState);
+  if (!room) return null;
+  const icons: { icon: typeof Clock; label: string }[] = [];
+  if (room.emoteOnly) icons.push({ icon: Smile, label: "Emote-only chat" });
+  if (room.subsOnly) icons.push({ icon: Lock, label: "Subscribers-only chat" });
+  if (room.followersOnly !== undefined && room.followersOnly >= 0) {
+    icons.push({ icon: Users, label: room.followersOnly === 0 ? "Followers-only chat" : `Followers-only (${room.followersOnly}m+)` });
+  }
+  if (room.slow) icons.push({ icon: Clock, label: `Slow mode: ${room.slow}s` });
   return (
-    <ChatLog
-      messages={merged}
-      viewKey="merged"
-      showChannel
-      onChannelClick={(channel) => chat.setSendTarget(channel)}
-      onNameClick={mention}
-      empty={
-        <div className="space-y-3 text-center">
-          <GeckoMascot anim="scurry" className="mx-auto size-16" />
-          <p className="text-sm text-muted-foreground">Listening to all your channels. Messages land here as they arrive.</p>
-        </div>
-      }
-    />
+    <>
+      {icons.map(({ icon: Icon, label }) => (
+        <span key={label} title={label} aria-label={label} className="text-muted-foreground">
+          <Icon className="size-3" />
+        </span>
+      ))}
+    </>
+  );
+}
+
+/** One channel's chat inside the grid: header, its own log, its own message box. */
+function ChatBox({ login }: { login: string }) {
+  const view = useChat((s) => s.channels[login]);
+  const index = useChat((s) => s.settings.channels.indexOf(login));
+  const count = useChat((s) => s.settings.channels.length);
+  if (!view) return null;
+
+  const statusTitle =
+    view.status === "joined" ? "Connected" : view.status === "joining" ? "Joining…" : (view.error ?? "Couldn't join");
+
+  return (
+    <section
+      aria-label={`#${login} chat`}
+      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card/50 shadow-sm"
+    >
+      <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/80 pr-1 pl-2">
+        <span className="relative shrink-0">
+          <ChannelAvatar login={login} className="size-5 text-[10px]" />
+          <span
+            title={statusTitle}
+            className={cn(
+              "absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card",
+              view.status === "joined" && "bg-primary",
+              view.status === "joining" && "animate-pulse bg-mascot-eye",
+              view.status === "error" && "bg-destructive",
+            )}
+          />
+        </span>
+        <span className="min-w-0 truncate text-[13px] font-semibold">#{view.displayName ?? login}</span>
+        <RoomIcons login={login} />
+        <span className="flex-1" />
+        <EmoteStatusChip channel={login} compact />
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => chat.focus(login)}
+          aria-label={`Focus #${login}`}
+          title="Open on its own"
+        >
+          <Maximize2 className="size-3.5" />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={<Button variant="ghost" size="icon-xs" aria-label={`Options for #${login}`} />}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
+              <RefreshCw /> Reload emotes
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
+              <ExternalLink /> Open on twitch.tv
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={index <= 0} onClick={() => chat.moveChannel(login, -1)}>
+              <ArrowLeft /> Move earlier
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={index >= count - 1} onClick={() => chat.moveChannel(login, 1)}>
+              <ArrowRight /> Move later
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
+              <X /> Leave #{login}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+      <ChatLog
+        messages={view.messages}
+        viewKey={`box:${login}`}
+        label={`#${login} messages`}
+        liveRows={120}
+        empty={<ChannelPlaceholder login={login} compact />}
+        onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
+      />
+      <Composer channel={login} compact />
+    </section>
+  );
+}
+
+/** Every joined channel in its own box, tiled to fill the window. */
+export function GridView() {
+  const channels = useChat((s) => s.settings.channels);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [area, setArea] = useState({ width: 1200, height: 800 });
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setArea({ width: el.clientWidth - 2 * GRID_GAP, height: el.clientHeight - 2 * GRID_GAP });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const count = channels.length;
+  const maxColumns = Math.max(1, Math.floor((area.width + GRID_GAP) / (BOX_MIN_WIDTH + GRID_GAP)));
+  const rows = Math.ceil(count / Math.min(count, maxColumns));
+  const columns = Math.ceil(count / rows);
+  const rowHeight = Math.max(BOX_MIN_HEIGHT, Math.floor((area.height - GRID_GAP * (rows - 1)) / rows));
+
+  return (
+    <div ref={scrollRef} className="zoo-scroll min-h-0 flex-1 overflow-y-auto" style={{ padding: GRID_GAP }}>
+      <div
+        className="grid"
+        style={{
+          gap: GRID_GAP,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          gridAutoRows: `${rowHeight}px`,
+        }}
+      >
+        {channels.map((login) => (
+          <ChatBox key={login} login={login} />
+        ))}
+      </div>
+    </div>
   );
 }

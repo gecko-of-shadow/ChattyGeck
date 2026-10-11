@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, ExternalLink, KeyRound, LoaderCircle, ShieldCheck } from "lucide-react";
-import { GeckoMascot } from "@/components/gecko/GeckoMascot";
+import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -179,10 +179,10 @@ export function LoginDialog() {
           <ClientIdSetup />
         ) : phase === "waiting" || phase === "finishing" ? (
           <div className="flex flex-col items-center gap-4 py-2 text-center">
-            <GeckoMascot anim="scurry" className="size-14" />
+            <Mascot anim="scurry" className="size-14" />
             <div>
               <p className="mb-2 text-sm text-muted-foreground">Approve this code on Twitch:</p>
-              <div className="gecko-glow flex items-center gap-2 rounded-xl bg-background px-4 py-2.5">
+              <div className="zoo-glow flex items-center gap-2 rounded-xl bg-background px-4 py-2.5">
                 <span className="font-mono text-2xl font-bold tracking-[0.25em] text-primary sm:text-3xl">
                   {code?.userCode}
                 </span>
@@ -228,7 +228,7 @@ export function LoginDialog() {
               </p>
             ) : null}
             <Button className="w-full gap-2" onClick={() => void start()} disabled={phase === "starting"}>
-              {phase === "starting" ? <LoaderCircle className="size-4 animate-spin" /> : <GeckoMascot className="size-5" />}
+              {phase === "starting" ? <LoaderCircle className="size-4 animate-spin" /> : <Mascot className="size-5" />}
               {phase === "error" ? "Get a fresh code" : "Get a login code"}
             </Button>
           </div>

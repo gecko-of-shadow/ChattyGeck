@@ -1,13 +1,34 @@
 mod secrets;
 mod storage;
 
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+
 use serde::Serialize;
-use tauri::{Manager, State, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Manager, State, WebviewWindowBuilder, WindowEvent,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
+
+const TRAY_ID: &str = "main";
 
 struct AppState {
     data: storage::DataDir,
     /// Commands run on a thread pool; two saves must not share the temp file at once.
-    save_lock: std::sync::Mutex<()>,
+    save_lock: Mutex<()>,
+    /// Closing the window hides it in the tray (chats stay connected) instead of quitting.
+    close_to_tray: AtomicBool,
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
 }
 
 #[derive(Serialize)]
@@ -57,16 +78,36 @@ fn session_clear() -> Result<(), String> {
     secrets::clear()
 }
 
+#[tauri::command]
+fn set_close_to_tray(state: State<'_, AppState>, enabled: bool) {
+    state.close_to_tray.store(enabled, Ordering::Relaxed);
+}
+
+#[tauri::command]
+fn set_tray_status(app: AppHandle, mentions: u32) {
+    let tooltip = match mentions {
+        0 => "ZooChattr".to_string(),
+        1 => "ZooChattr · 1 mention".to_string(),
+        n => format!("ZooChattr · {n} mentions"),
+    };
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(tooltip));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must be first: a second launch just brings the running copy (maybe hidden in the tray) forward.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data = storage::resolve_data_dir(app.handle());
             let webview_dir = data.portable.then(|| data.path.join("webview"));
             app.manage(AppState {
                 data,
-                save_lock: std::sync::Mutex::new(()),
+                save_lock: Mutex::new(()),
+                close_to_tray: AtomicBool::new(true),
             });
 
             let window_config = app
@@ -83,7 +124,43 @@ pub fn run() {
                 builder = builder.data_directory(dir);
             }
             builder.build()?;
+
+            let show = MenuItem::with_id(app, "show", "Show ZooChattr", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit ZooChattr", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let mut tray = TrayIconBuilder::with_id(TRAY_ID)
+                .tooltip("ZooChattr")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => show_main_window(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.app_handle().state::<AppState>();
+                if window.label() == "main" && state.close_to_tray.load(Ordering::Relaxed) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
@@ -91,7 +168,9 @@ pub fn run() {
             settings_save,
             session_load,
             session_save,
-            session_clear
+            session_clear,
+            set_close_to_tray,
+            set_tray_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZooChattr");

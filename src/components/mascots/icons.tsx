@@ -40,12 +40,12 @@ export function GeckoEggIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 16 16" className={cn("size-3.5", className)} aria-hidden>
       <path
         d="M8 1.4 C 11 1.4, 13.2 6, 13.2 9.3 C 13.2 12.5, 10.9 14.6, 8 14.6 C 5.1 14.6, 2.8 12.5, 2.8 9.3 C 2.8 6, 5 1.4, 8 1.4 Z"
-        fill="var(--gecko-belly)"
+        fill="var(--mascot-belly)"
       />
       <path d="M4.2 8.4 L5.8 7.2 L7.2 8.6 L8.8 7.1 L10.2 8.5 L11.8 7.4" stroke="#3b3326" strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <circle cx="6.2" cy="11" r="0.8" fill="var(--gecko-spot)" />
-      <circle cx="9.6" cy="11.8" r="0.6" fill="var(--gecko-spot)" />
-      <circle cx="9.2" cy="4.6" r="0.6" fill="var(--gecko-spot)" />
+      <circle cx="6.2" cy="11" r="0.8" fill="var(--mascot-spot)" />
+      <circle cx="9.6" cy="11.8" r="0.6" fill="var(--mascot-spot)" />
+      <circle cx="9.2" cy="4.6" r="0.6" fill="var(--mascot-spot)" />
     </svg>
   );
 }

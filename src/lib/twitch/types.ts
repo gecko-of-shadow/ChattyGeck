@@ -27,7 +27,7 @@ export interface ChatMessage {
   badges: Badge[];
   text: string;
   twitchEmotes: TwitchEmoteRange[];
-  /** First message ever in this channel ("first chirp"). */
+  /** First message this chatter ever sent in this channel. */
   firstMsg?: boolean;
   /** Highlighted with channel points. */
   highlighted?: boolean;
