@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseIrcLine } from "@/lib/irc/parser";
 import {
+  matchesHighlight,
   mentionsUser,
   normalizeChannelName,
   parseBadges,
@@ -115,5 +116,14 @@ describe("mentionsUser", () => {
   it("escapes regex characters in logins", () => {
     expect(mentionsUser("hello a_b", "a_b")).toBe(true);
     expect(mentionsUser("anything", undefined)).toBe(false);
+  });
+});
+
+describe("matchesHighlight", () => {
+  it("matches whole words from the list, ignoring case", () => {
+    expect(matchesHighlight("big GIVEAWAY tonight", ["giveaway"])).toBe(true);
+    expect(matchesHighlight("giveaways are rigged", ["giveaway"])).toBe(false);
+    expect(matchesHighlight("c++ rocks", ["c++"])).toBe(true);
+    expect(matchesHighlight("nothing here", [])).toBe(false);
   });
 });

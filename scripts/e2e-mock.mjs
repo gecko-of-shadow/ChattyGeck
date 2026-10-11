@@ -130,8 +130,9 @@ await step("/me sends an action", async () => {
 
 await step("7TV, BTTV and FFZ emotes render in chat", async () => {
   await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("geckoWave peepoHappy LilZ KEKW"));
-  const row = rowsWith("geckoWave").last();
-  for (const name of ["geckoWave", "peepoHappy", "LilZ", "KEKW"]) {
+  const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
+  // BTTV's pictures come from its real CDN (not mocked), so offline they fall back to the name.
+  for (const name of ["geckoWave", "peepoHappy", "LilZ"]) {
     await row.locator(`img[alt="${name}"]`).first().waitFor({ timeout: 8_000 });
   }
   await shot("05b-third-party-emotes");
@@ -205,13 +206,13 @@ await step("text size, emote size and sources apply straight away", async () => 
   const font = await page.evaluate(() => document.querySelector(".chat-log")?.style.getPropertyValue("--chat-font"));
   if (font !== "16px") throw new Error(`custom px gave ${font}`);
   await shot("06b-settings-emotes");
-  await page.locator("#pref-provider-7tv").click();
+  await page.locator('label[for="pref-provider-7tv"]').click();
   await page.keyboard.press("Escape");
-  const row = rowsWith("geckoWave").last();
+  const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
   await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
   await row.locator('img[alt="KEKW"]').waitFor({ timeout: 5_000 });
   await page.getByRole("button", { name: "Settings" }).first().click();
-  await page.locator("#pref-provider-7tv").click();
+  await page.locator('label[for="pref-provider-7tv"]').click();
   await page.getByRole("radio", { name: "Medium" }).click();
   await page.getByRole("radio", { name: "1×" }).click();
   await page.keyboard.press("Escape");

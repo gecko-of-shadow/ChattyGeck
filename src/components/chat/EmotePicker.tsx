@@ -53,6 +53,7 @@ function toggleInList(list: string[], value: string): string[] {
 }
 
 function EmoteTile({ emote, favourite, still, onPick }: { emote: Emote; favourite: boolean; still: boolean; onPick: (emote: Emote) => void }) {
+  const [failed, setFailed] = useState(false);
   const urls = emoteUrls(emote, still);
   return (
     <button
@@ -67,7 +68,20 @@ function EmoteTile({ emote, favourite, still, onPick }: { emote: Emote; favourit
       }}
       className="relative grid size-9 place-items-center rounded-md transition hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
     >
-      <img src={urls.url1x} srcSet={urls.url2x ? `${urls.url1x} 1x, ${urls.url2x} 2x` : undefined} alt="" loading="lazy" decoding="async" draggable={false} className="max-h-7 max-w-8 object-contain" />
+      {failed ? (
+        <span className="max-w-8 truncate text-[9px] leading-none text-muted-foreground">{emote.name}</span>
+      ) : (
+        <img
+          src={urls.url1x}
+          srcSet={urls.url2x ? `${urls.url1x} 1x, ${urls.url2x} 2x` : undefined}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onError={() => setFailed(true)}
+          className="max-h-7 max-w-8 object-contain"
+        />
+      )}
       {favourite ? <Star className="absolute top-0.5 right-0.5 size-2.5 fill-mention text-mention" /> : null}
     </button>
   );
