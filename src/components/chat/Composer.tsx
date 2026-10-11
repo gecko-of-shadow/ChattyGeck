@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
+import { findEmotes, wordAt } from "@/lib/emotes/search";
+import { emoteKey, emoteUrls, type Emote } from "@/lib/emotes/types";
 import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
+import { EmotePicker } from "./EmotePicker";
+import { useEmoteIndex } from "./useEmoteIndex";
 
 function RoomChips({ channel }: { channel: string }) {
   const room = useChat((s) => s.channels[channel]?.roomState);
@@ -53,17 +57,74 @@ export function LoginPrompt() {
   );
 }
 
+/** A Tab-completion in progress: which word is being finished and which match is in the box right now. */
+interface Completion {
+  matches: Emote[];
+  index: number;
+  /** Where the typed word started. */
+  start: number;
+  /** Where the inserted name (plus its trailing space) ends. */
+  end: number;
+}
+
+const MIN_TYPED = 2;
+
+function CompletionBar({ completion, onChoose, compact }: { completion: Completion; onChoose: (index: number) => void; compact: boolean }) {
+  const still = useChat((s) => s.settings.emoteAnimation === "never");
+  const activeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [completion.index]);
+  return (
+    <div
+      data-testid="tab-complete"
+      role="listbox"
+      aria-label="Emote suggestions"
+      className="zoo-scroll absolute right-0 bottom-full left-0 z-20 mb-1.5 flex gap-0.5 overflow-x-auto rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+    >
+      {completion.matches.map((emote, i) => {
+        const active = i === completion.index;
+        const urls = emoteUrls(emote, still);
+        return (
+          <button
+            key={emoteKey(emote)}
+            ref={active ? activeRef : undefined}
+            type="button"
+            role="option"
+            aria-selected={active}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onChoose(i)}
+            className={cn(
+              "flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 whitespace-nowrap",
+              compact ? "text-[11px]" : "text-xs",
+              active ? "bg-primary text-primary-foreground" : "hover:bg-accent",
+            )}
+          >
+            <img src={urls.url1x} alt="" className="max-h-6 max-w-7 object-contain" draggable={false} />
+            {emote.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Message input for one channel. `compact` is the slim version used inside grid boxes. */
 export function Composer({ channel, compact = false }: { channel: string | null; compact?: boolean }) {
   const auth = useChat((s) => s.auth);
   const writeStatus = useChat((s) => s.write?.status);
   const theme = useChat((s) => THEMES[s.settings.skin]);
+  const tabComplete = useChat((s) => s.settings.tabComplete);
+  const emotePicker = useChat((s) => s.settings.emotePicker);
   const insert = useUi((s) => s.insert);
+  const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [completion, setCompletion] = useState<Completion | null>(null);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingCaret = useRef<number | null>(null);
 
   useEffect(() => {
     if (!insert || insert.channel !== channel) return;
@@ -76,7 +137,17 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   useEffect(() => {
     setError(null);
+    setCompletion(null);
   }, [channel]);
+
+  // Programmatic edits (Tab, picker) put the caret right after what they inserted.
+  useLayoutEffect(() => {
+    const caret = pendingCaret.current;
+    const el = inputRef.current;
+    if (caret === null || !el) return;
+    pendingCaret.current = null;
+    el.setSelectionRange(caret, caret);
+  }, [text]);
 
   if (!channel) return null;
   if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
@@ -92,12 +163,64 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       historyIndex.current = -1;
       setText("");
       setError(null);
+      setCompletion(null);
     } else if (result.error) {
       setError(result.error);
     }
   };
 
+  /** Replaces text[start..end] with the match's name and a space; returns the updated completion. */
+  const applyMatch = (base: Completion, nextIndex: number) => {
+    const name = base.matches[nextIndex].name;
+    const after = text.slice(base.end);
+    const spacer = after.startsWith(" ") ? "" : " ";
+    const inserted = `${name}${spacer}`;
+    setText(`${text.slice(0, base.start)}${inserted}${after}`);
+    const end = base.start + inserted.length;
+    pendingCaret.current = end;
+    setCompletion({ ...base, index: nextIndex, end });
+  };
+
+  const startCompletion = (backwards: boolean): boolean => {
+    const caret = inputRef.current?.selectionStart ?? text.length;
+    const word = wordAt(text, caret);
+    if (!word || word.word.length < MIN_TYPED) return false;
+    const matches = findEmotes(index, word.word);
+    if (!matches.length) return false;
+    applyMatch({ matches, index: 0, start: word.start, end: word.end }, backwards ? matches.length - 1 : 0);
+    return true;
+  };
+
+  const insertEmote = (emote: Emote) => {
+    const caret = inputRef.current?.selectionStart ?? text.length;
+    const before = text.slice(0, caret);
+    const after = text.slice(caret);
+    const lead = before && !/\s$/.test(before) ? " " : "";
+    const trail = after.startsWith(" ") ? "" : " ";
+    const head = `${before}${lead}${emote.name}${trail}`;
+    setText(`${head}${after}`);
+    setCompletion(null);
+    // The menu hands focus back to its button when it closes; take it back after that.
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(head.length, head.length);
+    }, 0);
+  };
+
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Tab" && tabComplete && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      if (completion) {
+        event.preventDefault();
+        const count = completion.matches.length;
+        applyMatch(completion, (completion.index + (event.shiftKey ? count - 1 : 1)) % count);
+      } else if (startCompletion(event.shiftKey)) {
+        event.preventDefault();
+      }
+      return;
+    }
+    if (completion && event.key !== "Shift") setCompletion(null);
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
@@ -133,15 +256,27 @@ export function Composer({ channel, compact = false }: { channel: string | null;
         }}
       >
         <div className="relative min-w-0 flex-1">
+          {completion && completion.matches.length > 1 ? (
+            <CompletionBar
+              completion={completion}
+              compact={compact}
+              onChoose={(i) => {
+                applyMatch(completion, i);
+                inputRef.current?.focus();
+              }}
+            />
+          ) : null}
           <Input
             ref={inputRef}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
               historyIndex.current = -1;
+              setCompletion(null);
               if (error) setError(null);
             }}
             onKeyDown={onKeyDown}
+            onBlur={() => setCompletion(null)}
             placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
             aria-label={`Message #${channel}`}
             className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
@@ -156,6 +291,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             </span>
           ) : null}
         </div>
+        {emotePicker ? <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} compact={compact} /> : null}
         <Button
           type="submit"
           size={compact ? "icon-sm" : "default"}

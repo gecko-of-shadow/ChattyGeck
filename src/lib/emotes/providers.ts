@@ -36,6 +36,7 @@ interface SevenTvActiveEmote {
   flags?: number;
   data?: {
     flags?: number;
+    animated?: boolean;
     host?: { url: string; files?: SevenTvFile[] };
   };
 }
@@ -49,6 +50,7 @@ export function parseSevenTvEmotes(emotes: SevenTvActiveEmote[] | null | undefin
     const files = host.files ?? [];
     const has = (name: string) => files.length === 0 || files.some((f) => f.name === name);
     const first = files.find((f) => f.name === "1x.webp");
+    const animated = !!emote.data?.animated;
     out.push({
       id: emote.id,
       name: emote.name,
@@ -61,6 +63,11 @@ export function parseSevenTvEmotes(emotes: SevenTvActiveEmote[] | null | undefin
       height: first?.height,
       // Active-emote flag 1 = zero-width override; emote flag 256 = zero-width by design.
       zeroWidth: ((emote.flags ?? 0) & 1) === 1 || ((emote.data?.flags ?? 0) & 256) === 256,
+      animated,
+      // Still frames exist only for animated emotes: 1x_static.webp.
+      still1x: animated ? `${base}/1x_static.webp` : undefined,
+      still2x: animated && has("2x.webp") ? `${base}/2x_static.webp` : undefined,
+      still4x: animated && has("4x.webp") ? `${base}/4x_static.webp` : undefined,
     });
   }
   return out;
@@ -84,6 +91,10 @@ interface BttvEmote {
   id: string;
   code: string;
   modifier?: boolean;
+  animated?: boolean;
+  imageType?: string;
+  width?: number;
+  height?: number;
 }
 
 /** BTTV's overlay emotes; the API doesn't flag them. */
@@ -104,6 +115,7 @@ export function parseBttvEmotes(emotes: BttvEmote[] | null | undefined, scope: E
     // `modifier` emotes (w!, h!, …) are text modifiers, not images.
     if (!emote.id || !emote.code || emote.modifier) continue;
     const base = `https://cdn.betterttv.net/emote/${emote.id}`;
+    const animated = !!emote.animated || emote.imageType === "gif";
     out.push({
       id: emote.id,
       name: emote.code,
@@ -112,7 +124,13 @@ export function parseBttvEmotes(emotes: BttvEmote[] | null | undefined, scope: E
       url1x: `${base}/1x`,
       url2x: `${base}/2x`,
       url4x: `${base}/3x`,
+      width: emote.width,
+      height: emote.height,
       zeroWidth: BTTV_ZERO_WIDTH.has(emote.code),
+      animated,
+      still1x: animated ? `${base}/static/1x.webp` : undefined,
+      still2x: animated ? `${base}/static/2x.webp` : undefined,
+      still4x: animated ? `${base}/static/3x.webp` : undefined,
     });
   }
   return out;
@@ -136,7 +154,9 @@ interface FfzEmote {
   name: string;
   width?: number;
   height?: number;
+  hidden?: boolean;
   modifier?: boolean;
+  modifier_flags?: number;
   urls: Record<string, string>;
   animated?: Record<string, string> | null;
 }
@@ -148,10 +168,15 @@ interface FfzSet {
 export function parseFfzEmotes(emotes: FfzEmote[] | null | undefined, scope: EmoteScope): Emote[] {
   const out: Emote[] = [];
   for (const emote of emotes ?? []) {
-    const urls = emote.animated ?? emote.urls;
+    if (!emote || emote.hidden || !emote.name) continue;
+    // Effect modifiers (rainbow, hyper, …) change the previous emote with CSS; they're skipped.
+    if (emote.modifier && emote.modifier_flags) continue;
+    const moving = emote.animated ?? undefined;
+    const urls = moving ?? emote.urls;
     const url1x = urls?.["1"] ?? emote.urls?.["1"];
-    if (!url1x || !emote.name) continue;
+    if (!url1x) continue;
     const abs = (url?: string) => (url ? (url.startsWith("//") ? `https:${url}` : url) : undefined);
+    const animated = !!moving;
     out.push({
       id: String(emote.id),
       name: emote.name,
@@ -163,6 +188,11 @@ export function parseFfzEmotes(emotes: FfzEmote[] | null | undefined, scope: Emo
       width: emote.width,
       height: emote.height,
       zeroWidth: !!emote.modifier,
+      animated,
+      // FFZ's plain `urls` are the still frames of an animated emote.
+      still1x: animated ? abs(emote.urls?.["1"]) : undefined,
+      still2x: animated ? abs(emote.urls?.["2"]) : undefined,
+      still4x: animated ? abs(emote.urls?.["4"]) : undefined,
     });
   }
   return out;
@@ -199,16 +229,22 @@ export const channelFetchers: Record<ThirdPartyProvider, (twitchId: string) => P
   ffz: fetchFfzChannel,
 };
 
+/** Twitch's own emotes come from chat tags. Every Twitch emote has a still frame at `/static/`. */
 export function twitchEmote(id: string, name: string): Emote {
-  const base = `https://static-cdn.jtvnw.net/emoticons/v2/${id}/default/dark`;
+  const base = `https://static-cdn.jtvnw.net/emoticons/v2/${id}`;
   return {
     id,
     name,
     provider: "twitch",
     scope: "global",
-    url1x: `${base}/1.0`,
-    url2x: `${base}/2.0`,
-    url4x: `${base}/3.0`,
+    url1x: `${base}/default/dark/1.0`,
+    url2x: `${base}/default/dark/2.0`,
+    url4x: `${base}/default/dark/3.0`,
     zeroWidth: false,
+    // Twitch doesn't say which emotes move; the static picture is identical for still ones, so it's safe for all.
+    animated: true,
+    still1x: `${base}/static/dark/1.0`,
+    still2x: `${base}/static/dark/2.0`,
+    still4x: `${base}/static/dark/3.0`,
   };
 }

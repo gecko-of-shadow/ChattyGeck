@@ -549,21 +549,18 @@
 
 /* ---------------------------------------------------------------- chat rows */
 
-.chat-log[data-font="sm"] {
-  --chat-font: 12.5px;
-  --emote-h: 24px;
-}
-.chat-log[data-font="md"] {
-  --chat-font: 13.5px;
-  --emote-h: 28px;
-}
-.chat-log[data-font="lg"] {
-  --chat-font: 15.5px;
-  --emote-h: 32px;
-}
+/* --chat-font (px) and --emote-scale are set inline from Settings. Emotes are drawn about twice the text
+   height, like Twitch's own (28px emotes next to 14px text), times the emote size setting. */
 .chat-log {
+  --chat-font: 13.5px;
+  --emote-scale: 1;
+  --emote-h: calc(var(--chat-font) * 2.07 * var(--emote-scale));
   font-size: var(--chat-font);
   overflow-anchor: none;
+}
+.chat-row.chat-row-deleted .chat-text {
+  text-decoration: line-through;
+  text-decoration-color: rgb(var(--texture-rgb) / 0.6);
 }
 .chat-log[data-zebra="true"] .chat-row:nth-child(even) {
   background-color: rgb(var(--texture-rgb) / 0.025);

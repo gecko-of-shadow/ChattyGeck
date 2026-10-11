@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { AppWindow, Check, FolderOpen, KeyRound, Palette, Type } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AppWindow, Check, ClipboardCopy, Download, FolderOpen, KeyRound, Palette, RotateCcw, Smile, Type, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,10 +9,24 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { chat } from "@/lib/chat/controller";
 import { config } from "@/lib/config";
+import { emoteRegistry } from "@/lib/emotes/registry";
+import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
-import type { FontSize, Settings } from "@/store/settings";
+import {
+  DEFAULT_SETTINGS,
+  TEXT_SIZE_MAX,
+  TEXT_SIZE_MIN,
+  TEXT_SIZE_PRESETS,
+  clampTextSize,
+  makeBackup,
+  parseWordList,
+  readBackup,
+  type EmoteAnimation,
+  type EmoteSize,
+  type Settings,
+} from "@/store/settings";
 import { useUi } from "@/store/ui";
 
 function Section({ icon: Icon, title, children }: { icon: typeof Palette; title: string; children: React.ReactNode }) {
@@ -25,8 +40,10 @@ function Section({ icon: Icon, title, children }: { icon: typeof Palette; title:
   );
 }
 
-function ToggleRow({ id, label, hint, setting }: { id: string; label: string; hint?: string; setting: keyof Settings }) {
-  const value = useChat((s) => s.settings[setting]) as boolean;
+type BooleanKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
+
+function ToggleRow({ id, label, hint, setting }: { id: string; label: string; hint?: string; setting: BooleanKey }) {
+  const value = useChat((s) => s.settings[setting]);
   return (
     <div className="flex items-center justify-between gap-4">
       <Label htmlFor={id} className="flex flex-col items-start gap-0.5">
@@ -34,6 +51,149 @@ function ToggleRow({ id, label, hint, setting }: { id: string; label: string; hi
         {hint ? <span className="text-xs font-normal text-muted-foreground">{hint}</span> : null}
       </Label>
       <Switch id={id} checked={value} onCheckedChange={(checked) => chat.updateSettings({ [setting]: checked })} />
+    </div>
+  );
+}
+
+/** A row of pill buttons where exactly one is chosen. */
+function Choice<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-sm">{label}</span>
+      <div className="flex rounded-lg border bg-muted/60 p-0.5" role="radiogroup" aria-label={label}>
+        {options.map((option) => (
+          <button
+            key={String(option.value)}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "h-6.5 rounded-md px-2.5 text-xs font-medium",
+              value === option.value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TextSizeRow() {
+  const textSize = useChat((s) => s.settings.textSize);
+  const [draft, setDraft] = useState(String(textSize));
+  useEffect(() => setDraft(String(textSize)), [textSize]);
+  const commit = () => {
+    const next = clampTextSize(draft);
+    setDraft(String(next));
+    if (next !== textSize) chat.updateSettings({ textSize: next });
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm">Text size</span>
+        <div className="flex items-center gap-1.5">
+          <div className="flex rounded-lg border bg-muted/60 p-0.5" role="radiogroup" aria-label="Text size presets">
+            {TEXT_SIZE_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                role="radio"
+                aria-checked={textSize === preset.px}
+                onClick={() => chat.updateSettings({ textSize: preset.px })}
+                className={cn(
+                  "h-6.5 rounded-md px-2 text-xs font-medium",
+                  textSize === preset.px ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={TEXT_SIZE_MIN}
+            max={TEXT_SIZE_MAX}
+            step={0.5}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit();
+              }
+            }}
+            aria-label="Text size in pixels"
+            className="h-7 w-[4.5rem] text-xs tabular-nums"
+          />
+          <span className="text-xs text-muted-foreground">px</span>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Any size from {TEXT_SIZE_MIN} to {TEXT_SIZE_MAX}px. Emotes grow and shrink with the text.
+      </p>
+    </div>
+  );
+}
+
+/** A list setting edited as free text; saved when you click away or press Ctrl+Enter. */
+function WordListField({
+  id,
+  label,
+  hint,
+  placeholder,
+  setting,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  placeholder: string;
+  setting: "highlightWords" | "blockedEmotes";
+}) {
+  const saved = useChat((s) => s.settings[setting]);
+  const [draft, setDraft] = useState(saved.join("\n"));
+  useEffect(() => setDraft(saved.join("\n")), [saved]);
+  const commit = () => {
+    const next = parseWordList(draft);
+    if (next.join("\n") !== saved.join("\n")) chat.updateSettings({ [setting]: next });
+    else setDraft(next.join("\n"));
+  };
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="flex flex-col items-start gap-0.5">
+        <span className="text-sm">{label}</span>
+        <span className="text-xs font-normal text-muted-foreground">{hint}</span>
+      </Label>
+      <textarea
+        id={id}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            commit();
+          }
+        }}
+        placeholder={placeholder}
+        rows={3}
+        spellCheck={false}
+        className="zoo-scroll w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+      />
     </div>
   );
 }
@@ -79,10 +239,209 @@ function ClientIdField() {
   );
 }
 
+function EmotesSection() {
+  const providers = useChat((s) => s.settings.emoteProviders);
+  const emoteSize = useChat((s) => s.settings.emoteSize);
+  const animation = useChat((s) => s.settings.emoteAnimation);
+  const remember = useChat((s) => s.settings.rememberEmotes);
+  const [cacheSize, setCacheSize] = useState(() => emoteRegistry.cacheSize);
+  useEffect(() => {
+    setCacheSize(emoteRegistry.cacheSize);
+  }, [remember]);
+
+  return (
+    <Section icon={Smile} title="Emotes">
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <span className="text-sm">Emote sources</span>
+          <div className="grid grid-cols-3 gap-2">
+            {THIRD_PARTY_PROVIDERS.map((provider) => (
+              <Label
+                key={provider}
+                htmlFor={`pref-provider-${provider}`}
+                className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
+              >
+                {PROVIDER_LABELS[provider]}
+                <Switch
+                  id={`pref-provider-${provider}`}
+                  checked={providers[provider]}
+                  onCheckedChange={(checked) =>
+                    chat.updateSettings((s) => ({ emoteProviders: { ...s.emoteProviders, [provider]: checked } }))
+                  }
+                />
+              </Label>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Twitch's own emotes always show. Switch a source off and its emotes turn back into plain words.</p>
+        </div>
+        <Choice<EmoteSize>
+          label="Emote size"
+          value={emoteSize}
+          options={[
+            { value: 1, label: "1×" },
+            { value: 1.5, label: "1.5×" },
+            { value: 2, label: "2×" },
+          ]}
+          onChange={(value) => chat.updateSettings({ emoteSize: value })}
+        />
+        <Choice<EmoteAnimation>
+          label="Moving emotes"
+          value={animation}
+          options={[
+            { value: "always", label: "Always" },
+            { value: "hover", label: "On hover" },
+            { value: "never", label: "Never" },
+          ]}
+          onChange={(value) => chat.updateSettings({ emoteAnimation: value })}
+        />
+        <ToggleRow id="pref-overlays" label="Overlay emotes" hint="Zero-width emotes stack on top of the one before them" setting="overlayEmotes" />
+        <ToggleRow id="pref-preview" label="Preview on hover" hint="Point at an emote to see it big with its name and source" setting="emotePreview" />
+        <ToggleRow id="pref-tab" label="Tab finishes emote names" hint="Type the first letters, press Tab; Tab again cycles the matches" setting="tabComplete" />
+        <ToggleRow id="pref-picker" label="Emote menu" hint="The animal button next to the message box" setting="emotePicker" />
+        <div className="space-y-1.5">
+          <ToggleRow
+            id="pref-remember"
+            label="Remember emotes"
+            hint="Keep emote lists on this device so pictures show the moment a channel opens"
+            setting="rememberEmotes"
+          />
+          {remember ? (
+            <div className="flex items-center justify-between gap-3 pl-0.5 text-xs text-muted-foreground">
+              <span>{cacheSize === 0 ? "Nothing remembered yet." : `${cacheSize} emote ${cacheSize === 1 ? "list" : "lists"} remembered.`}</span>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={cacheSize === 0}
+                onClick={() => {
+                  chat.forgetEmotes();
+                  setCacheSize(0);
+                  toast("Forgot the remembered emotes", { description: "Fetching fresh lists now." });
+                }}
+              >
+                Forget them
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        <WordListField
+          id="pref-blocked"
+          label="Blocked emotes"
+          hint="Names that should stay plain text. One per line (spaces and commas work too)."
+          placeholder={"KEKW\nmonkaS"}
+          setting="blockedEmotes"
+        />
+      </div>
+    </Section>
+  );
+}
+
+function BackupRow() {
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  useEffect(() => {
+    if (!confirmReset) return;
+    const timer = setTimeout(() => setConfirmReset(false), 4_000);
+    return () => clearTimeout(timer);
+  }, [confirmReset]);
+
+  const backupText = () => JSON.stringify(makeBackup(useChat.getState().settings), null, 2);
+
+  const download = () => {
+    const blob = new Blob([backupText()], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `zoochattr-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    toast("Backup saved", { description: "Check your Downloads folder. Includes your channel list, not your login." });
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(backupText());
+      toast("Settings copied", { description: "Paste them somewhere safe, or straight into another ZooChattr." });
+    } catch {
+      toast.error("Couldn't reach the clipboard");
+    }
+  };
+
+  const restoreText = (text: string, source: string) => {
+    const settings = readBackup(text);
+    if (!settings) {
+      toast.error(`That ${source} isn't a ZooChattr settings backup.`);
+      return;
+    }
+    chat.replacePreferences(settings);
+    const before = new Set(useChat.getState().settings.channels);
+    const added = settings.channels.filter((c) => !before.has(c));
+    for (const channel of added) chat.addChannel(channel);
+    toast.success("Settings restored", {
+      description: added.length
+        ? `Joined ${added.length} channel${added.length === 1 ? "" : "s"} from the backup too. Your login was left alone.`
+        : "Your channels and login were left as they were.",
+    });
+  };
+
+  const onFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    restoreText(await file.text(), "file");
+  };
+
+  const pasteRestore = async () => {
+    try {
+      restoreText(await navigator.clipboard.readText(), "clipboard text");
+    } catch {
+      toast.error("Couldn't read the clipboard", { description: "Use Restore from file instead." });
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        <Button variant="outline" size="sm" onClick={download}>
+          <Download /> Back up
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => void copy()}>
+          <ClipboardCopy /> Copy
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
+          <Upload /> Restore from file
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => void pasteRestore()}>
+          Restore from clipboard
+        </Button>
+        <Button
+          variant={confirmReset ? "destructive" : "outline"}
+          size="sm"
+          onClick={() => {
+            if (!confirmReset) {
+              setConfirmReset(true);
+              return;
+            }
+            chat.replacePreferences(DEFAULT_SETTINGS);
+            setConfirmReset(false);
+            toast("Settings reset", { description: "Everything but your channels and login is back to the defaults." });
+          }}
+        >
+          <RotateCcw /> {confirmReset ? "Really reset?" : "Reset"}
+        </Button>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void onFile(event)} aria-hidden />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Backups hold your preferences, favourites and channel list as plain JSON. Your Twitch login is never included.
+      </p>
+    </div>
+  );
+}
+
 export function SettingsDialog() {
   const open = useUi((s) => s.settingsOpen);
   const skin = useChat((s) => s.settings.skin);
-  const fontSize = useChat((s) => s.settings.fontSize);
   const appInfo = useChat((s) => s.appInfo);
   const auth = useChat((s) => s.auth);
 
@@ -124,32 +483,28 @@ export function SettingsDialog() {
 
           <Section icon={Type} title="Chat display">
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm">Text size</span>
-                <div className="flex rounded-lg border bg-muted/60 p-0.5" role="radiogroup" aria-label="Text size">
-                  {(["sm", "md", "lg"] as FontSize[]).map((size) => (
-                    <button
-                      key={size}
-                      type="button"
-                      role="radio"
-                      aria-checked={fontSize === size}
-                      onClick={() => chat.updateSettings({ fontSize: size })}
-                      className={cn(
-                        "h-6.5 rounded-md px-2.5 text-xs font-medium",
-                        fontSize === size ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {size === "sm" ? "Small" : size === "md" ? "Medium" : "Large"}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <TextSizeRow />
               <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
               <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
               <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
               <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
+              <ToggleRow
+                id="pref-deleted"
+                label="Show deleted messages"
+                hint="Keep what a mod removed readable, faded and crossed out, instead of hiding it"
+                setting="showDeleted"
+              />
+              <WordListField
+                id="pref-highlight"
+                label="Highlight words"
+                hint="Besides your own name, messages with these words light up and count as mentions."
+                placeholder={"giveaway\nmy_nickname"}
+                setting="highlightWords"
+              />
             </div>
           </Section>
+
+          <EmotesSection />
 
           <Section icon={AppWindow} title="Window">
             <ToggleRow
@@ -194,6 +549,7 @@ export function SettingsDialog() {
               <dt className="text-muted-foreground">Version</dt>
               <dd>ZooChattr {appInfo?.version ?? ""}</dd>
             </dl>
+            <BackupRow />
           </Section>
         </div>
       </DialogContent>

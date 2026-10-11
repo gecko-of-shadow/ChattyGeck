@@ -1,13 +1,27 @@
 import { DEFAULT_SKIN, SKIN_ORDER, type Skin } from "@/lib/themes";
+import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
 export type { Skin } from "@/lib/themes";
-export type FontSize = "sm" | "md" | "lg";
 /** `grid`: every channel in its own box. `focused`: one channel fills the window. */
 export type ViewMode = "grid" | "focused";
+/** How many times their normal size emotes are drawn. */
+export type EmoteSize = 1 | 1.5 | 2;
+/** Moving emotes: always, only while pointed at, or shown as a still frame. */
+export type EmoteAnimation = "always" | "hover" | "never";
+export type PickerTab = "fav" | "channel" | "all";
+
+export const TEXT_SIZE_MIN = 10;
+export const TEXT_SIZE_MAX = 40;
+export const TEXT_SIZE_PRESETS: { label: string; px: number }[] = [
+  { label: "Small", px: 12.5 },
+  { label: "Medium", px: 13.5 },
+  { label: "Large", px: 15.5 },
+  { label: "Huge", px: 20 },
+];
 
 export interface Settings {
-  version: 1;
+  version: 2;
   channels: string[];
   mode: ViewMode;
   focused: string | null;
@@ -15,17 +29,47 @@ export interface Settings {
   showTimestamps: boolean;
   use24h: boolean;
   showBadges: boolean;
-  fontSize: FontSize;
+  /** Chat text size in pixels. Emotes grow and shrink with it. */
+  textSize: number;
   /** Alternate row shading. */
   zebra: boolean;
   /** Closing the window hides ZooChattr in the system tray instead of quitting. */
   closeToTray: boolean;
   /** Overrides the Client ID baked in at build time. */
   clientId: string;
+
+  // ---- emotes (each feature has its own switch, like Geckmotes) ----
+  /** Which third-party emote sources are shown. Twitch's own emotes always are. */
+  emoteProviders: Record<ThirdPartyProvider, boolean>;
+  emoteSize: EmoteSize;
+  emoteAnimation: EmoteAnimation;
+  /** Overlay (zero-width) emotes sit on top of the emote before them instead of next to it. */
+  overlayEmotes: boolean;
+  /** Emote names that stay plain words. */
+  blockedEmotes: string[];
+  /** Keep emote lists on disk so pictures show instantly next launch. */
+  rememberEmotes: boolean;
+  /** Tab finishes emote names in the message box. */
+  tabComplete: boolean;
+  /** The emote menu button in the message box. */
+  emotePicker: boolean;
+  /** Point at an emote to see it big. */
+  emotePreview: boolean;
+  /** "provider:id" of favourite emotes in the picker. */
+  favoriteEmotes: string[];
+  /** Picker sections folded shut, as "scope:provider". */
+  pickerFolded: string[];
+  pickerTab: PickerTab;
+
+  // ---- reading ----
+  /** Besides your own name, these words make a message stand out. */
+  highlightWords: string[];
+  /** Keep deleted messages readable (faded and crossed out) instead of hiding what they said. */
+  showDeleted: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  version: 1,
+  version: 2,
   channels: [],
   mode: "grid",
   focused: null,
@@ -33,16 +77,62 @@ export const DEFAULT_SETTINGS: Settings = {
   showTimestamps: true,
   use24h: true,
   showBadges: true,
-  fontSize: "md",
+  textSize: 13.5,
   zebra: false,
   closeToTray: true,
   clientId: "",
+  emoteProviders: { "7tv": true, bttv: true, ffz: true },
+  emoteSize: 1,
+  emoteAnimation: "always",
+  overlayEmotes: true,
+  blockedEmotes: [],
+  rememberEmotes: true,
+  tabComplete: true,
+  emotePicker: true,
+  emotePreview: true,
+  favoriteEmotes: [],
+  pickerFolded: [],
+  pickerTab: "all",
+  highlightWords: [],
+  showDeleted: true,
 };
 
-const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+/** Settings that are the user's preferences (everything but the channel list and view). */
+export type PreferenceKey = Exclude<keyof Settings, "version" | "channels" | "focused">;
+
+const pick = <T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
 
 const bool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
+
+const MAX_LIST = 200;
+
+/** Distinct, trimmed, non-empty strings; at most MAX_LIST of them. */
+export function cleanWordList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string") continue;
+    const word = entry.trim();
+    if (word && !out.includes(word)) out.push(word);
+    if (out.length >= MAX_LIST) break;
+  }
+  return out;
+}
+
+/** Textarea text, one entry per line (spaces and commas also separate), to a clean list. */
+export function parseWordList(text: string): string[] {
+  return cleanWordList(text.split(/[\n,\s]+/));
+}
+
+/** Older builds saved "sm" / "md" / "lg". */
+const LEGACY_FONT: Record<string, number> = { sm: 12.5, md: 13.5, lg: 15.5 };
+
+export function clampTextSize(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.textSize;
+  return Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(n * 2) / 2));
+}
 
 /** Accepts whatever was on disk (including older versions) and returns a valid Settings object. */
 export function sanitizeSettings(raw: unknown): Settings {
@@ -57,9 +147,19 @@ export function sanitizeSettings(raw: unknown): Settings {
   const focused = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
+  const textSize =
+    typeof input.textSize === "number"
+      ? clampTextSize(input.textSize)
+      : typeof input.fontSize === "string" && input.fontSize in LEGACY_FONT
+        ? LEGACY_FONT[input.fontSize]
+        : DEFAULT_SETTINGS.textSize;
+  const providers = (input.emoteProviders && typeof input.emoteProviders === "object" ? input.emoteProviders : {}) as Record<
+    string,
+    unknown
+  >;
 
   return {
-    version: 1,
+    version: 2,
     channels,
     mode,
     focused,
@@ -67,9 +167,54 @@ export function sanitizeSettings(raw: unknown): Settings {
     showTimestamps: bool(input.showTimestamps, DEFAULT_SETTINGS.showTimestamps),
     use24h: bool(input.use24h, DEFAULT_SETTINGS.use24h),
     showBadges: bool(input.showBadges, DEFAULT_SETTINGS.showBadges),
-    fontSize: pick(input.fontSize, ["sm", "md", "lg"] as const, DEFAULT_SETTINGS.fontSize),
+    textSize,
     zebra: bool(input.zebra, DEFAULT_SETTINGS.zebra),
     closeToTray: bool(input.closeToTray, DEFAULT_SETTINGS.closeToTray),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",
+    emoteProviders: {
+      "7tv": bool(providers["7tv"], true),
+      bttv: bool(providers.bttv, true),
+      ffz: bool(providers.ffz, true),
+    },
+    emoteSize: pick(input.emoteSize, [1, 1.5, 2] as const, DEFAULT_SETTINGS.emoteSize),
+    emoteAnimation: pick(input.emoteAnimation, ["always", "hover", "never"] as const, DEFAULT_SETTINGS.emoteAnimation),
+    overlayEmotes: bool(input.overlayEmotes, DEFAULT_SETTINGS.overlayEmotes),
+    blockedEmotes: cleanWordList(input.blockedEmotes),
+    rememberEmotes: bool(input.rememberEmotes, DEFAULT_SETTINGS.rememberEmotes),
+    tabComplete: bool(input.tabComplete, DEFAULT_SETTINGS.tabComplete),
+    emotePicker: bool(input.emotePicker, DEFAULT_SETTINGS.emotePicker),
+    emotePreview: bool(input.emotePreview, DEFAULT_SETTINGS.emotePreview),
+    favoriteEmotes: cleanWordList(input.favoriteEmotes),
+    pickerFolded: cleanWordList(input.pickerFolded),
+    pickerTab: pick(input.pickerTab, ["fav", "channel", "all"] as const, DEFAULT_SETTINGS.pickerTab),
+    highlightWords: cleanWordList(input.highlightWords),
+    showDeleted: bool(input.showDeleted, DEFAULT_SETTINGS.showDeleted),
   };
+}
+
+/** What a settings backup file holds. */
+export interface SettingsBackup {
+  zoochattr: 1;
+  savedAt: string;
+  settings: Settings;
+}
+
+export function makeBackup(settings: Settings): SettingsBackup {
+  return { zoochattr: 1, savedAt: new Date().toISOString(), settings };
+}
+
+/** Reads a backup file (or a bare settings object). Returns null when it isn't one of ours. */
+export function readBackup(text: string): Settings | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const obj = parsed as Record<string, unknown>;
+  const body = obj.zoochattr === 1 && obj.settings && typeof obj.settings === "object" ? obj.settings : obj;
+  const keys = Object.keys(body as object);
+  const known = keys.filter((k) => k in DEFAULT_SETTINGS);
+  return known.length ? sanitizeSettings(body) : null;
 }

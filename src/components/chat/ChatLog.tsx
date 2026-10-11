@@ -50,12 +50,16 @@ export function ChatLog({
   label = "Chat messages",
   onNameClick,
 }: ChatLogProps) {
-  const prefs: RowPrefs & { fontSize: string; zebra: boolean } = useChat(
+  const prefs: RowPrefs & { textSize: number; emoteSize: number; emotePreview: boolean; zebra: boolean } = useChat(
     useShallow((s) => ({
       showTimestamps: s.settings.showTimestamps,
       use24h: s.settings.use24h,
       showBadges: s.settings.showBadges,
-      fontSize: s.settings.fontSize,
+      emoteAnimation: s.settings.emoteAnimation,
+      showDeleted: s.settings.showDeleted,
+      textSize: s.settings.textSize,
+      emoteSize: s.settings.emoteSize,
+      emotePreview: s.settings.emotePreview,
       zebra: s.settings.zebra,
     })),
   );
@@ -111,7 +115,7 @@ export function ChatLog({
       el.scrollTop = el.scrollHeight - anchorFromBottom.current;
       anchorFromBottom.current = null;
     }
-  }, [visible, frozen, prefs.fontSize]);
+  }, [visible, frozen, prefs.textSize, prefs.emoteSize]);
 
   // Emotes load after the row renders and grow it; keep pinned to the bottom while live.
   useEffect(() => {
@@ -144,6 +148,7 @@ export function ChatLog({
   };
 
   const onMouseOver = (event: React.MouseEvent) => {
+    if (!prefs.emotePreview) return;
     const target = event.target as HTMLElement;
     if (target instanceof HTMLImageElement && target.dataset.emoteName) {
       setHover({
@@ -178,7 +183,7 @@ export function ChatLog({
         <div
           ref={contentRef}
           className="chat-log flex min-h-full flex-col justify-end py-2"
-          data-font={prefs.fontSize}
+          style={{ "--chat-font": `${prefs.textSize}px`, "--emote-scale": prefs.emoteSize } as React.CSSProperties}
           data-zebra={prefs.zebra}
           role="log"
           aria-live="off"
