@@ -241,6 +241,44 @@ await step("settings back up, reset and restore", async () => {
   await page.keyboard.press("Escape");
 });
 
+await step("per-channel overrides turn a source off in one channel only", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.getByLabel("Channel for feature overrides").fill("geckotown");
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByTestId("channel-override-geckotown").waitFor({ timeout: 3_000 });
+  await page.locator('label[for="override-geckotown-7tv"]').click();
+  await page.keyboard.press("Escape");
+  const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
+  await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
+  await row.getByText("geckoWave").waitFor({ timeout: 5_000 });
+  await row.locator('img[alt="LilZ"]').waitFor({ timeout: 2_000 });
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.locator('label[for="override-geckotown-7tv"]').click();
+  await page.getByRole("button", { name: "Remove" }).click();
+  await page.keyboard.press("Escape");
+  await row.locator('img[alt="geckoWave"]').waitFor({ timeout: 5_000 });
+});
+
+await step("Problems lists a failed emote download", async () => {
+  await mockPost("/__fail-emotes?provider=7tv");
+  await page.getByRole("button", { name: "Emotes in #geckotown" }).first().click();
+  await page.getByRole("button", { name: "Reload emotes" }).click();
+  await page.waitForTimeout(1_000);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  const list = page.getByTestId("problems-list");
+  await list.waitFor({ timeout: 5_000 });
+  await list.getByText(/7TV/).first().waitFor({ timeout: 3_000 });
+  await shot("06c-problems");
+  await page.getByRole("button", { name: "Clear the list" }).click();
+  await page.getByText("No problems so far.").waitFor({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
+  await mockPost("/__unfail-emotes");
+  await page.getByRole("button", { name: "Emotes in #geckotown" }).first().click();
+  await page.getByRole("button", { name: "Reload emotes" }).click();
+  await page.keyboard.press("Escape");
+});
+
 await step("scrolling up pauses the feed; the toe-pad button sticks back to live", async () => {
   const log = page.getByLabel("Chat messages");
   await mockPost("/__burst?channel=geckotown&n=60");

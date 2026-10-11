@@ -7,6 +7,7 @@ import { PROVIDER_LABELS, type EmoteProvider } from "@/lib/emotes/types";
 import { THEMES } from "@/lib/themes";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
+import { isFeatureOn } from "@/store/settings";
 import { MessageRow, type RowPrefs } from "./MessageRow";
 
 interface HoverEmote {
@@ -29,6 +30,8 @@ function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
 
 interface ChatLogProps {
   messages: ChatMessage[];
+  /** Channel these messages belong to (used for per-channel feature overrides). */
+  channel: string;
   /** Changing this resets scroll position (switching channel or view). */
   viewKey: string;
   empty?: ReactNode;
@@ -43,6 +46,7 @@ interface ChatLogProps {
 
 export function ChatLog({
   messages,
+  channel,
   viewKey,
   empty,
   readMarker,
@@ -56,10 +60,10 @@ export function ChatLog({
       use24h: s.settings.use24h,
       showBadges: s.settings.showBadges,
       emoteAnimation: s.settings.emoteAnimation,
-      showDeleted: s.settings.showDeleted,
+      showDeleted: isFeatureOn(s.settings, channel, "showDeleted"),
       textSize: s.settings.textSize,
       emoteSize: s.settings.emoteSize,
-      emotePreview: s.settings.emotePreview,
+      emotePreview: isFeatureOn(s.settings, channel, "emotePreview"),
       zebra: s.settings.zebra,
     })),
   );

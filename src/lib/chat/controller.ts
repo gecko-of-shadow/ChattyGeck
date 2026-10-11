@@ -27,7 +27,7 @@ import {
 } from "@/lib/twitch/messages";
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
-import { sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
 export const ALL_CHANNELS = "*";
@@ -61,11 +61,16 @@ function errorText(err: unknown): string {
 }
 
 function emotePrefsFrom(settings: Settings): EmotePrefs {
+  const off: EmotePrefs["off"] = {};
+  for (const [channel, list] of Object.entries(settings.channelOverrides)) {
+    if (list.length) off[channel] = new Set(list);
+  }
   return {
     providers: settings.emoteProviders,
     overlays: settings.overlayEmotes,
     blocked: new Set(settings.blockedEmotes),
     remember: settings.rememberEmotes,
+    off,
   };
 }
 
@@ -418,7 +423,9 @@ class ChatController {
   /** The user's extra highlight words count like a mention (never for their own messages). */
   private withHighlight(message: ChatMessage): ChatMessage {
     if (message.self || message.mention) return message;
-    return matchesHighlight(message.text, get().settings.highlightWords) ? { ...message, mention: true } : message;
+    const settings = get().settings;
+    if (!isFeatureOn(settings, message.channel, "highlightWords")) return message;
+    return matchesHighlight(message.text, settings.highlightWords) ? { ...message, mention: true } : message;
   }
 
   private onWriteMessage(message: IrcMessage): void {

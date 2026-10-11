@@ -1,5 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { AppWindow, Check, ClipboardCopy, Download, FolderOpen, KeyRound, Palette, RotateCcw, Smile, Type, Upload } from "lucide-react";
+import {
+  AppWindow,
+  Check,
+  ClipboardCopy,
+  Download,
+  FolderOpen,
+  Hash,
+  KeyRound,
+  Palette,
+  RotateCcw,
+  Smile,
+  TriangleAlert,
+  Type,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
@@ -9,12 +23,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { chat } from "@/lib/chat/controller";
 import { config } from "@/lib/config";
+import { problemLog, type EmoteProblem } from "@/lib/emotes/problems";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
+import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import {
+  CHANNEL_FEATURES,
   DEFAULT_SETTINGS,
   TEXT_SIZE_MAX,
   TEXT_SIZE_MIN,
@@ -23,6 +40,7 @@ import {
   makeBackup,
   parseWordList,
   readBackup,
+  type ChannelFeature,
   type EmoteAnimation,
   type EmoteSize,
   type Settings,
@@ -341,6 +359,161 @@ function EmotesSection() {
   );
 }
 
+function setChannelFeature(channel: string, feature: ChannelFeature, on: boolean): void {
+  chat.updateSettings((s) => {
+    const current = s.channelOverrides[channel] ?? [];
+    const next = on ? current.filter((f) => f !== feature) : current.includes(feature) ? current : [...current, feature];
+    return { channelOverrides: { ...s.channelOverrides, [channel]: next } };
+  });
+}
+
+function ChannelOverridesSection() {
+  const overrides = useChat((s) => s.settings.channelOverrides);
+  const joined = useChat((s) => s.settings.channels);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const names = Object.keys(overrides).sort();
+
+  const add = (raw: string) => {
+    const name = normalizeChannelName(raw);
+    if (!name) {
+      setError("That doesn't look like a Twitch channel. Use letters, numbers and underscores.");
+      return;
+    }
+    if (!(name in overrides)) {
+      chat.updateSettings((s) => ({ channelOverrides: { ...s.channelOverrides, [name]: [] } }));
+    }
+    setDraft("");
+    setError(null);
+  };
+
+  return (
+    <Section icon={Hash} title="Per channel">
+      <p className="text-xs text-muted-foreground">
+        Switch features off on one channel only: add the channel, then untick what you don't want there. Everything else keeps your global switches.
+      </p>
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          add(draft);
+        }}
+      >
+        <Input
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            if (error) setError(null);
+          }}
+          placeholder="Channel name, for example xqc"
+          aria-label="Channel for feature overrides"
+          className="text-sm"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button type="submit" variant="outline" size="sm">
+          Add
+        </Button>
+      </form>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {joined.length && names.length === 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {joined.map((channel) => (
+            <Button key={channel} type="button" variant="outline" size="xs" onClick={() => add(channel)}>
+              #{channel}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {names.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No per-channel overrides yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {names.map((channel) => {
+            const off = new Set(overrides[channel] ?? []);
+            return (
+              <div key={channel} className="space-y-2 rounded-xl border px-3 py-2.5" data-testid={`channel-override-${channel}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold">#{channel}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="text-muted-foreground"
+                    onClick={() =>
+                      chat.updateSettings((s) => {
+                        const channelOverrides = { ...s.channelOverrides };
+                        delete channelOverrides[channel];
+                        return { channelOverrides };
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {CHANNEL_FEATURES.map((feature) => (
+                    <Label
+                      key={feature.id}
+                      htmlFor={`override-${channel}-${feature.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-xs"
+                    >
+                      {feature.label}
+                      <Switch
+                        id={`override-${channel}-${feature.id}`}
+                        checked={!off.has(feature.id)}
+                        onCheckedChange={(checked) => setChannelFeature(channel, feature.id, checked)}
+                      />
+                    </Label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function ProblemsSection() {
+  const [problems, setProblems] = useState<EmoteProblem[]>(() => problemLog.list());
+  useEffect(() => problemLog.subscribe(() => setProblems(problemLog.list())), []);
+
+  return (
+    <Section icon={TriangleAlert} title="Problems">
+      <p className="text-xs text-muted-foreground">
+        When a 7TV, BetterTTV or FrankerFaceZ download fails, the last 20 times are listed here so you can see why emotes went quiet.
+      </p>
+      {problems.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No problems so far.</p>
+      ) : (
+        <div className="space-y-2">
+          <ul className="zoo-scroll max-h-48 space-y-1.5 overflow-y-auto text-xs" data-testid="problems-list">
+            {[...problems].reverse().map((problem) => (
+              <li key={problem.id} className="rounded-lg border px-2.5 py-1.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+                  <span className="font-semibold">
+                    {PROVIDER_LABELS[problem.provider]}
+                    {problem.scope === "channel" && problem.channel ? ` · #${problem.channel}` : " · global"}
+                  </span>
+                  <time className="text-[11px] text-muted-foreground tabular-nums" dateTime={new Date(problem.at).toISOString()}>
+                    {new Date(problem.at).toLocaleString()}
+                  </time>
+                </div>
+                <p className="mt-0.5 text-muted-foreground">{problem.message}</p>
+              </li>
+            ))}
+          </ul>
+          <Button type="button" variant="outline" size="xs" onClick={() => problemLog.clear()}>
+            Clear the list
+          </Button>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function BackupRow() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -512,6 +685,8 @@ export function SettingsDialog() {
 
           <EmotesSection />
 
+          <ChannelOverridesSection />
+
           <Section icon={AppWindow} title="Window">
             <ToggleRow
               id="pref-tray"
@@ -557,6 +732,8 @@ export function SettingsDialog() {
             </dl>
             <BackupRow />
           </Section>
+
+          <ProblemsSection />
         </div>
       </DialogContent>
     </Dialog>

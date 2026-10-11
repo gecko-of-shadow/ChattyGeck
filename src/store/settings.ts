@@ -66,6 +66,83 @@ export interface Settings {
   highlightWords: string[];
   /** Keep deleted messages readable (faded and crossed out) instead of hiding what they said. */
   showDeleted: boolean;
+
+  /**
+   * Features switched off for one channel only (like Geckmotes' per-channel overrides).
+   * Key is the channel login; value is the feature ids that are off there.
+   */
+  channelOverrides: Record<string, ChannelFeature[]>;
+}
+
+/** Features that can be switched off for one channel without changing the global switches. */
+export type ChannelFeature =
+  | ThirdPartyProvider
+  | "overlayEmotes"
+  | "tabComplete"
+  | "emotePicker"
+  | "emotePreview"
+  | "highlightWords"
+  | "showDeleted";
+
+export const CHANNEL_FEATURES: { id: ChannelFeature; label: string }[] = [
+  { id: "7tv", label: "7TV" },
+  { id: "bttv", label: "BetterTTV" },
+  { id: "ffz", label: "FrankerFaceZ" },
+  { id: "overlayEmotes", label: "Overlay emotes" },
+  { id: "tabComplete", label: "Tab finishes emote names" },
+  { id: "emotePicker", label: "Emote menu" },
+  { id: "emotePreview", label: "Preview on hover" },
+  { id: "highlightWords", label: "Highlight words" },
+  { id: "showDeleted", label: "Show deleted messages" },
+];
+
+const CHANNEL_FEATURE_IDS = new Set(CHANNEL_FEATURES.map((f) => f.id));
+
+/** True when the feature is on globally and not switched off for `channel`. */
+export function isFeatureOn(settings: Settings, channel: string | null | undefined, feature: ChannelFeature): boolean {
+  switch (feature) {
+    case "7tv":
+    case "bttv":
+    case "ffz":
+      if (!settings.emoteProviders[feature]) return false;
+      break;
+    case "overlayEmotes":
+    case "tabComplete":
+    case "emotePicker":
+    case "emotePreview":
+    case "showDeleted":
+      if (!settings[feature]) return false;
+      break;
+    case "highlightWords":
+      // Extra words only; your own name always lights up. An empty list matches nothing either way.
+      break;
+  }
+  if (!channel) return true;
+  return !settings.channelOverrides[channel]?.includes(feature);
+}
+
+/** Distinct, known feature ids from a saved override list. */
+export function cleanFeatureList(value: unknown): ChannelFeature[] {
+  if (!Array.isArray(value)) return [];
+  const out: ChannelFeature[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && CHANNEL_FEATURE_IDS.has(entry as ChannelFeature) && !out.includes(entry as ChannelFeature)) {
+      out.push(entry as ChannelFeature);
+    }
+  }
+  return out;
+}
+
+/** Channel login -> features off there. Unknown channels and feature ids are dropped. */
+export function cleanChannelOverrides(value: unknown): Record<string, ChannelFeature[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, ChannelFeature[]> = {};
+  for (const [raw, list] of Object.entries(value as Record<string, unknown>)) {
+    const channel = normalizeChannelName(raw);
+    if (!channel) continue;
+    out[channel] = cleanFeatureList(list);
+  }
+  return out;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -95,6 +172,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pickerTab: "all",
   highlightWords: [],
   showDeleted: true,
+  channelOverrides: {},
 };
 
 /** Settings that are the user's preferences (everything but the channel list and view). */
@@ -191,6 +269,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     pickerTab: pick(input.pickerTab, ["fav", "channel", "all"] as const, DEFAULT_SETTINGS.pickerTab),
     highlightWords: cleanWordList(input.highlightWords),
     showDeleted: bool(input.showDeleted, DEFAULT_SETTINGS.showDeleted),
+    channelOverrides: cleanChannelOverrides(input.channelOverrides),
   };
 }
 

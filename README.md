@@ -22,6 +22,8 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
   - **Switches for everything.** Turn each source on or off, keep or drop overlay emotes, block emotes by name so they stay plain words, and toggle the hover preview.
   - **Remember emotes.** Emote lists are kept on this device (channel sets for an hour, global sets for twelve) so pictures show the moment a channel opens, then refresh in the background. One button forgets them all.
 - **Reading comfort.** Any chat text size from 10 to 40px (emotes scale with it), extra highlight words that light up messages and count as mentions like your name does, and deleted messages kept readable (faded and crossed out) or hidden, your choice.
+- **Per channel.** Switch any of the emote sources, the menu, Tab completion, preview, highlight words or deleted-message display off for one channel only, without changing your global switches.
+- **Problems.** When a 7TV, BetterTTV or FrankerFaceZ download fails, Settings keeps the last 20 so you can see why emotes went quiet; Clear empties the list.
 - **IRC feel.** Dense dark log with timestamps, badges, name colors (lifted for readability), reply context, sub/raid events, first-time-chatter eggs, moderator deletions, and links that open in your browser.
 - **A zoo of themes.** Crested gecko, Penguin, Sea turtle and Elephant, each with its own animated mascot, colors, background texture (gecko scales, snowfall, shell plates, elephant wrinkles) and a little personality: the send button chirps, squawks, bloops or trumpets. More animals are on the way.
 - **Remembers you.** Channels, reading mode, theme, favourites and every preference survive restarts. Back them up to a JSON file (or the clipboard), restore them on another machine, or reset to the defaults from Settings → Storage. Your Twitch login is never part of a backup.
@@ -88,7 +90,7 @@ release/
   ZooChattr-portable/
     ZooChattr.exe      ← the whole app (about 3.5 MB)
     README.txt
-  ZooChattr-portable-0.3.1.zip
+  ZooChattr-portable-0.3.2.zip
 ```
 
 Copy `ZooChattr-portable` anywhere, such as a USB stick or Dropbox, and double-click `ZooChattr.exe`. On first run it creates `ZooChattr-data\` next to itself, holding `settings.json` and the WebView cache. If the folder isn't writable (e.g. under Program Files), it falls back to `%APPDATA%\com.geckoofshadow.zoochattr`. Settings shows which location is in use.
@@ -173,7 +175,7 @@ The emote features above were ported from the Geckmotes browser extension and fo
 - `src/components/chat/EmotePicker.tsx` (menu), `Composer.tsx` (Tab completion), `MessageRow.tsx` / `ChatLog.tsx` (sizes, animation, deleted rows, hover preview).
 - `src/store/settings.ts`: the settings model, backup format and migration from older files.
 
-Not ported (yet): Geckmotes' per-channel overrides of these switches, and its "Problems" list of provider errors (the channel header's smiley chip covers the latter).
+Per-channel overrides and the Problems list live in Settings (same idea as Geckmotes' options page). The channel header's smiley chip still shows live provider status for the channel you're reading.
 
 ## Project layout
 
