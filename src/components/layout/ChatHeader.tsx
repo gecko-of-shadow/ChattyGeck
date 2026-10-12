@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutGrid, Menu, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
+import { LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
@@ -156,6 +156,16 @@ export function ChatHeader() {
         <ConnectionPill />
       </div>
       <ModeToggle />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => chat.updateSettings({ chromeHidden: true })}
+        aria-label="Hide sidebar and top bar"
+        title="More room for chat — hide the sidebar and top bar"
+        data-testid="hide-chrome"
+      >
+        <PanelLeftClose className="size-4" />
+      </Button>
       <Button
         variant="ghost"
         size="icon-sm"

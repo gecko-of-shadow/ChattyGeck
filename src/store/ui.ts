@@ -5,6 +5,8 @@ interface UiState {
   settingsOpen: boolean;
   /** Mobile channel drawer. */
   navOpen: boolean;
+  /** Tray "Quit" asked the UI to confirm before exiting. */
+  quitConfirmOpen: boolean;
   /** Text a channel's composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
   insert: { text: string; channel: string; nonce: number } | null;
 }
@@ -13,6 +15,7 @@ export const useUi = create<UiState>(() => ({
   loginOpen: false,
   settingsOpen: false,
   navOpen: false,
+  quitConfirmOpen: false,
   insert: null,
 }));
 

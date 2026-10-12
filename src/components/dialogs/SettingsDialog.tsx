@@ -8,6 +8,8 @@ import {
   Hash,
   KeyRound,
   Palette,
+  PanelLeftClose,
+  RefreshCw,
   RotateCcw,
   Smile,
   TriangleAlert,
@@ -26,6 +28,8 @@ import { config } from "@/lib/config";
 import { problemLog, type EmoteProblem } from "@/lib/emotes/problems";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
+import { isTauri, openExternal } from "@/lib/platform";
+import { applyUpdate, fetchLatestRelease, isNewerVersion, type UpdateInfo } from "@/lib/updates";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -514,6 +518,76 @@ function ProblemsSection() {
   );
 }
 
+function UpdateRow() {
+  const version = useChat((s) => s.appInfo?.version ?? "");
+  const [busy, setBusy] = useState<"check" | "install" | null>(null);
+  const [latest, setLatest] = useState<UpdateInfo | null>(null);
+  const [status, setStatus] = useState<string>("");
+
+  const check = async () => {
+    setBusy("check");
+    setStatus("");
+    try {
+      const info = await fetchLatestRelease();
+      setLatest(info);
+      if (!info) setStatus("No portable release found on GitHub yet.");
+      else if (!version || version === "dev" || !isNewerVersion(info.version, version)) {
+        setStatus(`You're on the latest (${info.tag}).`);
+      } else {
+        setStatus(`Update available: ${info.tag}`);
+      }
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn't reach GitHub.");
+      setLatest(null);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const install = async () => {
+    if (!latest) return;
+    setBusy("install");
+    setStatus("Downloading update… ZooChattr will restart. Your channels stay in ZooChattr-data.");
+    try {
+      await applyUpdate(latest.downloadUrl);
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Couldn't install the update.");
+      setBusy(null);
+    }
+  };
+
+  const newer = latest && version && version !== "dev" && isNewerVersion(latest.version, version);
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void check()} data-testid="check-updates">
+          <RefreshCw className={cn("size-3.5", busy === "check" && "animate-spin")} />
+          Check for updates
+        </Button>
+        {newer ? (
+          <Button type="button" size="sm" disabled={busy !== null || !isTauri} onClick={() => void install()} data-testid="install-update">
+            <Download className="size-3.5" />
+            Install {latest.tag}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => void openExternal("https://github.com/gecko-of-shadow/ZooChattr/releases")}
+        >
+          Releases
+        </Button>
+      </div>
+      {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
+      <p className="text-[11px] text-muted-foreground">
+        Updates replace only ZooChattr.exe next to this copy. Your <code className="font-mono">ZooChattr-data</code> folder (channels, settings) is never overwritten.
+      </p>
+    </div>
+  );
+}
+
 function BackupRow() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -691,9 +765,25 @@ export function SettingsDialog() {
             <ToggleRow
               id="pref-tray"
               label="Close to tray"
-              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit."
+              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit — you'll get a confirmation first."
               setting="closeToTray"
             />
+            <ToggleRow
+              id="pref-startup"
+              label="Start with Windows"
+              hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
+              setting="startOnLogin"
+            />
+            <ToggleRow
+              id="pref-chrome"
+              label="Hide sidebar & top bar"
+              hint="Gives the chat grid more room. Use the floating button (or Settings) to bring the chrome back."
+              setting="chromeHidden"
+            />
+            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              <PanelLeftClose className="mt-0.5 size-3.5 shrink-0" />
+              <p>In Grid view you can also hide chrome with the button in the top bar — same as this switch.</p>
+            </div>
           </Section>
 
           <Section icon={KeyRound} title="Twitch account">
@@ -730,6 +820,7 @@ export function SettingsDialog() {
               <dt className="text-muted-foreground">Version</dt>
               <dd>ZooChattr {appInfo?.version ?? ""}</dd>
             </dl>
+            <UpdateRow />
             <BackupRow />
           </Section>
 

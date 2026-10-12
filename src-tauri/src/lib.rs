@@ -1,5 +1,7 @@
 mod secrets;
+mod startup;
 mod storage;
+mod update;
 
 use std::sync::{
     Mutex,
@@ -8,7 +10,7 @@ use std::sync::{
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Manager, State, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, State, WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
@@ -95,6 +97,42 @@ fn set_tray_status(app: AppHandle, mentions: u32) {
     }
 }
 
+#[tauri::command]
+fn quit_app(app: AppHandle) {
+    app.exit(0);
+}
+
+#[tauri::command]
+fn get_launch_at_login() -> Result<bool, String> {
+    startup::get_launch_at_login()
+}
+
+#[tauri::command]
+fn set_launch_at_login(enabled: bool) -> Result<(), String> {
+    startup::set_launch_at_login(enabled)
+}
+
+#[tauri::command]
+fn check_for_update() -> Result<Option<update::UpdateInfo>, String> {
+    update::check_for_update()
+}
+
+/// Downloads the portable zip, swaps only the exe (ZooChattr-data stays), then restarts.
+#[tauri::command]
+fn apply_update(app: AppHandle, download_url: String) -> Result<(), String> {
+    update::apply_update(&download_url)?;
+    // Helper script waits for this process to exit, then launches the new exe.
+    app.exit(0);
+    Ok(())
+}
+
+fn request_quit_confirm(app: &AppHandle) {
+    show_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("quit-requested", ());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -140,7 +178,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_main_window(app),
-                    "quit" => app.exit(0),
+                    "quit" => request_quit_confirm(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -176,7 +214,12 @@ pub fn run() {
             session_save,
             session_clear,
             set_close_to_tray,
-            set_tray_status
+            set_tray_status,
+            quit_app,
+            get_launch_at_login,
+            set_launch_at_login,
+            check_for_update,
+            apply_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZooChattr");

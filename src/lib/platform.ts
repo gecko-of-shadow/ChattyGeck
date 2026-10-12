@@ -92,3 +92,20 @@ export async function openExternal(url: string): Promise<void> {
   }
   window.open(url, "_blank", "noopener,noreferrer");
 }
+
+/** Really quit (after the user confirmed). Closing the window only hides to the tray. */
+export async function quitApp(): Promise<void> {
+  if (isTauri) await invoke("quit_app");
+  else window.close();
+}
+
+/** Whether ZooChattr is set to start when Windows signs you in. */
+export async function getLaunchAtLogin(): Promise<boolean> {
+  if (isTauri) return invoke<boolean>("get_launch_at_login");
+  return false;
+}
+
+/** Start (or stop starting) ZooChattr when Windows signs you in. */
+export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
+  if (isTauri) await invoke("set_launch_at_login", { enabled });
+}

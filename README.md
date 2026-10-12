@@ -12,11 +12,11 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **Two reading modes.**
   - **Grid:** every channel gets its own clean box, tiled to fill the window, each with its own chat log and message box. Small windows stack the boxes and scroll.
   - **Focused:** one channel at a time. The others show unread counts, plus an eye badge when someone mentions you.
-- **Lives in the tray.** Closing the window keeps ZooChattr running in the system tray, so chats stay connected; the tray tooltip counts your mentions. Right-click the tray icon to quit (or turn this off in Settings). Opening the exe again brings the running copy back instead of starting a second one.
+- **Lives in the tray.** Closing the window keeps ZooChattr running in the system tray, so chats stay connected; the tray tooltip counts your mentions. Right-click the tray icon and choose Quit to get a confirmation (or turn close-to-tray off in Settings). Opening the exe again brings the running copy back instead of starting a second one. Optional **Start with Windows**.
 - **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.
 - **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped and the smiley chip in the channel header says why.
 - **Emotes your way** (the favourite bits of the Geckmotes browser extension, built in):
-  - **Emote menu.** The animal button next to the message box opens an FFZ-style picker: sections per source (this channel / global × 7TV / BTTV / FFZ) that fold shut and stay folded, a search box, and tabs for ★ Favourites, This channel and All. Right-click any emote to make it a favourite.
+  - **Emote menu.** The animal button next to the message box opens a compact vertical list (bigger pictures + names), with tabs for ★ / Channel / All and a search box. Scroll loads more so big packs don't freeze. Right-click any emote to favourite it.
   - **Tab finishes emote names.** Type the first letters and press Tab; Tab again cycles the matches (Shift+Tab goes back), or click one in the strip above the box. Names that start with what you typed come first, then names that contain it.
   - **Size and motion.** Draw emotes at 1×, 1.5× or 2×. Moving emotes can play always, only while pointed at, or never (still frames from each provider).
   - **Switches for everything.** Turn each source on or off, keep or drop overlay emotes, block emotes by name so they stay plain words, and toggle the hover preview.
@@ -27,7 +27,8 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **IRC feel.** Dense dark log with timestamps, badges, name colors (lifted for readability), reply context, sub/raid events, first-time-chatter eggs, moderator deletions, and links that open in your browser.
 - **A zoo of themes.** Crested gecko, Penguin, Sea turtle and Elephant, each with its own animated mascot, colors, background texture (gecko scales, snowfall, shell plates, elephant wrinkles) and a little personality: the send button chirps, squawks, bloops or trumpets. More animals are on the way.
 - **Remembers you.** Channels, reading mode, theme, favourites and every preference survive restarts. Back them up to a JSON file (or the clipboard), restore them on another machine, or reset to the defaults from Settings → Storage. Your Twitch login is never part of a backup.
-- **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it.
+- **More room for chat.** In Grid view, hide the sidebar and top bar with one click so the chat boxes fill the window; a floating button brings them back.
+- **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it. Unzipping a new release over the old folder (or using **Settings → Check for updates**) replaces only the exe and keeps your channels.
 
 ## Run it in development
 

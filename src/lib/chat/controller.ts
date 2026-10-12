@@ -128,6 +128,7 @@ class ChatController {
     ]);
     const settings = sanitizeSettings(rawSettings);
     void platform.setCloseToTray(settings.closeToTray).catch(() => undefined);
+    void platform.setLaunchAtLogin(settings.startOnLogin).catch(() => undefined);
     emoteRegistry.setPrefs(emotePrefsFrom(settings));
     set({
       settings,
@@ -834,6 +835,12 @@ class ChatController {
     set((s) => ({ settings: { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) } }));
     const after = get().settings;
     if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
+    if (after.startOnLogin !== before.startOnLogin) {
+      void platform.setLaunchAtLogin(after.startOnLogin).catch((err) => {
+        toast.error("Couldn't change start on login", { description: errorText(err) });
+        set((s) => ({ settings: { ...s.settings, startOnLogin: before.startOnLogin } }));
+      });
+    }
     emoteRegistry.setPrefs(emotePrefsFrom(after));
     if (after.rememberEmotes && !before.rememberEmotes) {
       // Turning "remember" on: fetch once more so every current list gets stored.

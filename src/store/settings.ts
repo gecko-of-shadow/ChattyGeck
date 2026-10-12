@@ -35,6 +35,10 @@ export interface Settings {
   zebra: boolean;
   /** Closing the window hides ZooChattr in the system tray instead of quitting. */
   closeToTray: boolean;
+  /** Hide the sidebar and top bar so the chat boxes fill the window (toggle from the header). */
+  chromeHidden: boolean;
+  /** Start ZooChattr when Windows signs you in (portable: a Startup shortcut to this exe). */
+  startOnLogin: boolean;
   /** Overrides the Client ID baked in at build time. */
   clientId: string;
 
@@ -157,6 +161,8 @@ export const DEFAULT_SETTINGS: Settings = {
   textSize: 13.5,
   zebra: false,
   closeToTray: true,
+  chromeHidden: false,
+  startOnLogin: false,
   clientId: "",
   emoteProviders: { "7tv": true, bttv: true, ffz: true },
   emoteSize: 1,
@@ -250,6 +256,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     textSize,
     zebra: bool(input.zebra, DEFAULT_SETTINGS.zebra),
     closeToTray: bool(input.closeToTray, DEFAULT_SETTINGS.closeToTray),
+    chromeHidden: bool(input.chromeHidden, DEFAULT_SETTINGS.chromeHidden),
+    startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",
     emoteProviders: {
       "7tv": bool(providers["7tv"], true),
