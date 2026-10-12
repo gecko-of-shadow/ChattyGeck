@@ -1211,6 +1211,39 @@ class ChatController {
     }
   }
 
+  /**
+   * Tray "Check for updates…": toast only. Does not open Settings, show the
+   * main window, or start a download until the user clicks Install.
+   */
+  async checkForUpdateFromTray(): Promise<void> {
+    const version = get().appInfo?.version;
+    try {
+      const info = await fetchLatestRelease();
+      if (!info) {
+        toast.error("Couldn't check for updates");
+        return;
+      }
+      if (!version || version === "dev" || !isNewerVersion(info.version, version)) {
+        toast("You're on the latest version");
+        return;
+      }
+      toast(`ZooChattr ${info.tag} is out`, {
+        description: "Your channels stay in ZooChattr-data when you update.",
+        duration: 20_000,
+        action: {
+          label: "Install",
+          onClick: () => {
+            void applyUpdate(info.downloadUrl).catch((err) => {
+              toast.error("Couldn't install the update", { description: errorText(err) });
+            });
+          },
+        },
+      });
+    } catch (err) {
+      toast.error("Couldn't check for updates", { description: errorText(err) });
+    }
+  }
+
   // ---------------------------------------------------------------- badges & profiles
 
   badgeImage(channel: string, badge: Badge): BadgeImage | undefined {

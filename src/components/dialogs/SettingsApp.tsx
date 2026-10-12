@@ -1,17 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { isTauri } from "@/lib/platform";
 import { useChat } from "@/store/chat";
-import { closeSettingsWindow, useUi } from "@/store/ui";
+import { closeSettingsWindow } from "@/store/ui";
 import { SettingsBody } from "./SettingsDialog";
 
 /** Full-window Settings surface for the Tauri `settings` popout. */
 export function SettingsApp() {
   const ready = useChat((s) => s.ready);
   const skin = useChat((s) => s.settings.skin);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     void chat.bootSettingsUi();
@@ -21,23 +23,6 @@ export function SettingsApp() {
     document.documentElement.dataset.skin = skin;
     document.title = "ZooChattr Settings";
   }, [skin]);
-
-  useEffect(() => {
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    void (async () => {
-      const { listen } = await import("@tauri-apps/api/event");
-      if (cancelled) return;
-      unlisten = await listen("update-requested", () => {
-        useUi.setState((s) => ({ updateCheckNonce: s.updateCheckNonce + 1 }));
-      });
-    })();
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -59,25 +44,36 @@ export function SettingsApp() {
   return (
     <>
       <div className="flex h-full flex-col bg-background" data-testid="settings-window">
-        <header className="sticky top-0 z-20 flex shrink-0 items-start justify-between gap-3 border-b border-border/70 bg-background/95 px-4 pt-4 pr-3 pb-3 backdrop-blur">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold">Settings</h1>
-            <p className="text-sm text-muted-foreground">Saved automatically to this ZooChattr folder.</p>
+        <header className="sticky top-0 z-20 flex shrink-0 flex-col gap-3 border-b border-border/70 bg-background/95 px-4 pt-4 pr-3 pb-3 backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold">Settings</h1>
+              <p className="text-sm text-muted-foreground">Saved automatically to this ZooChattr folder.</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="sticky top-3 shrink-0"
+              aria-label="Close settings"
+              data-testid="settings-window-close"
+              onClick={() => void closeSettingsWindow()}
+            >
+              <X className="size-4" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="sticky top-3 shrink-0"
-            aria-label="Close settings"
-            data-testid="settings-window-close"
-            onClick={() => void closeSettingsWindow()}
-          >
-            <X className="size-4" />
-          </Button>
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search settings…"
+            aria-label="Search settings"
+            data-testid="settings-search"
+            className="h-8"
+          />
         </header>
         <div className="zoo-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <SettingsBody
+            searchQuery={searchQuery}
             onRequestLogin={() => {
               void (async () => {
                 if (isTauri) {

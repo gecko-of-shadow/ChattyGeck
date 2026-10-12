@@ -97,7 +97,6 @@ export default function App() {
     void (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       if (cancelled) return;
-      // Settings / update checks open the dedicated Settings window (Rust).
       unlistens.push(
         await listen("login-requested", () => {
           useUi.setState({ loginOpen: true, navOpen: false });
@@ -111,6 +110,12 @@ export default function App() {
       unlistens.push(
         await listen("session-changed", () => {
           void chat.pullSessionFromDisk();
+        }),
+      );
+      // Tray "Check for updates…" — toast only; never opens Settings.
+      unlistens.push(
+        await listen("tray-update-check", () => {
+          void chat.checkForUpdateFromTray();
         }),
       );
     })();

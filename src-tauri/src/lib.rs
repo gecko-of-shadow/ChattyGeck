@@ -171,7 +171,7 @@ fn release_main_after_settings(app: &AppHandle) {
 }
 
 /// Opens Settings as its own window and disables the main window until it closes.
-fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), String> {
+fn open_settings_window(app: &AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(SETTINGS_LABEL) {
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.set_enabled(false);
@@ -179,9 +179,6 @@ fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), Stri
         let _ = existing.unminimize();
         let _ = existing.show();
         let _ = existing.set_focus();
-        if check_updates {
-            let _ = existing.emit("update-requested", ());
-        }
         return Ok(());
     }
 
@@ -225,24 +222,20 @@ fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), Stri
         }
     });
 
-    if check_updates {
-        // Let the settings UI finish booting before asking it to check.
-        let window = settings.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(400));
-            let _ = window.emit("update-requested", ());
-        });
-    }
     Ok(())
 }
 
+/// Tray "Check for updates…" — toast-only path on the main webview. Does not open
+/// Settings, show/focus/disable the main window, or start a download.
 fn request_update_check(app: &AppHandle) {
-    let _ = open_settings_window(app, true);
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.emit("tray-update-check", ());
+    }
 }
 
 #[tauri::command]
 fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
-    open_settings_window(&app, false)
+    open_settings_window(&app)
 }
 
 fn apply_saved_geom(window: &WebviewWindow, geom: &storage::WindowGeom) {
@@ -390,7 +383,7 @@ pub fn run() {
                         }
                     }
                     "settings" => {
-                        let _ = open_settings_window(app, false);
+                        let _ = open_settings_window(app);
                     }
                     "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
