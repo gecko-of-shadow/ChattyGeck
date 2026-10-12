@@ -190,7 +190,11 @@ fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), Stri
         .ok_or_else(|| "Main window isn't open.".to_string())?;
 
     let state = app.state::<AppState>();
-    let mut builder = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
+    let mut builder = WebviewWindowBuilder::new(
+        app,
+        SETTINGS_LABEL,
+        WebviewUrl::App("index.html?window=settings".into()),
+    )
         .title("ZooChattr Settings")
         .inner_size(520.0, 740.0)
         .min_inner_size(400.0, 480.0)

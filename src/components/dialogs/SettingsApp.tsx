@@ -39,6 +39,17 @@ export function SettingsApp() {
     };
   }, []);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void closeSettingsWindow();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   if (!ready) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading settings…</div>
@@ -48,7 +59,7 @@ export function SettingsApp() {
   return (
     <>
       <div className="flex h-full flex-col bg-background" data-testid="settings-window">
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border/70 px-4 pt-4 pr-3 pb-3">
+        <header className="sticky top-0 z-20 flex shrink-0 items-start justify-between gap-3 border-b border-border/70 bg-background/95 px-4 pt-4 pr-3 pb-3 backdrop-blur">
           <div className="min-w-0">
             <h1 className="text-lg font-semibold">Settings</h1>
             <p className="text-sm text-muted-foreground">Saved automatically to this ZooChattr folder.</p>
@@ -57,7 +68,7 @@ export function SettingsApp() {
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="shrink-0"
+            className="sticky top-3 shrink-0"
             aria-label="Close settings"
             data-testid="settings-window-close"
             onClick={() => void closeSettingsWindow()}
