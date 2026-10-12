@@ -116,6 +116,7 @@ function Choice<T extends string | number>({
 function TextSizeRow() {
   const textSize = useChat((s) => s.settings.textSize);
   const [draft, setDraft] = useState(String(textSize));
+  // Keep the box in sync when Settings resets/restores text size from elsewhere.
   useEffect(() => setDraft(String(textSize)), [textSize]);
   const commit = () => {
     if (!draft.trim()) {
@@ -671,6 +672,7 @@ function BackupRow() {
         <Button
           variant={confirmReset ? "destructive" : "outline"}
           size="sm"
+          data-testid="settings-reset"
           onClick={() => {
             if (!confirmReset) {
               setConfirmReset(true);

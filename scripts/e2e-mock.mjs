@@ -168,8 +168,9 @@ await step("emote menu inserts emotes and remembers favourites", async () => {
   if ((await input.inputValue()) !== "catJAM ") throw new Error(`picker inserted "${await input.inputValue()}"`);
   await input.fill("");
   await page.getByTestId("emote-picker-button").first().click();
+  await picker.waitFor({ timeout: 3_000 });
   await picker.locator('[data-emote-tile="peepoHappy"]').click({ button: "right" });
-  await picker.getByRole("tab", { name: /Favourites/ }).click();
+  await picker.getByRole("tab", { name: "★" }).click();
   await picker.locator('[data-emote-tile="peepoHappy"]').waitFor({ timeout: 3_000 });
   if (await picker.locator('[data-emote-tile="catJAM"]').count()) throw new Error("non-favourite shown on the favourites tab");
   await shot("05e-favourites");
@@ -228,19 +229,31 @@ await step("settings back up, reset and restore", async () => {
   const px = page.getByLabel("Text size in pixels");
   await px.fill("17");
   await px.press("Enter");
+  await px.blur();
   const downloading = page.waitForEvent("download", { timeout: 5_000 });
   await page.getByRole("button", { name: "Back up" }).click();
   const file = await (await downloading).path();
   const backup = JSON.parse(fs.readFileSync(file, "utf8"));
   if (backup.zoochattr !== 1 || backup.settings.textSize !== 17) throw new Error("backup file looks wrong");
-  await page.getByRole("button", { name: "Reset" }).click();
-  await page.getByRole("button", { name: "Really reset?" }).click();
-  if ((await px.inputValue()) !== "13.5") throw new Error(`reset left text size at ${await px.inputValue()}`);
+  const reset = page.getByTestId("settings-reset");
+  await reset.scrollIntoViewIfNeeded();
+  await reset.click();
+  await page.getByRole("button", { name: "Really reset?", exact: true }).waitFor({ timeout: 3_000 });
+  await reset.click();
+  await page.getByText("Settings reset").waitFor({ timeout: 3_000 });
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[aria-label="Text size in pixels"]');
+    return el instanceof HTMLInputElement && el.value === "13.5";
+  }, { timeout: 3_000 });
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.getByText("Settings restored").waitFor({ timeout: 3_000 });
-  if ((await px.inputValue()) !== "17") throw new Error(`restore left text size at ${await px.inputValue()}`);
+  await page.waitForFunction(() => {
+    const el = document.querySelector('[aria-label="Text size in pixels"]');
+    return el instanceof HTMLInputElement && el.value === "17";
+  }, { timeout: 3_000 });
   await px.fill("13.5");
   await px.press("Enter");
+  await px.blur();
   await page.keyboard.press("Escape");
 });
 
