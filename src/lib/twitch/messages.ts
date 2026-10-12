@@ -198,12 +198,20 @@ export function parseUserState(message: IrcMessage): UserState {
   };
 }
 
-/** Accepts `xqc`, `#xqc`, `@xqc`, `twitch.tv/xqc`, or a full channel URL. */
+/**
+ * twitch.tv path segments that look like logins but aren't channels
+ * (a pasted video, directory, settings, … address).
+ */
+const NOT_CHANNELS =
+  /^(videos|directory|popout|moderator|settings|downloads|jobs|turbo|store|search|drops|inventory|wallet|subscriptions|friends|messages|bits|prime|clips?|embed|p|u)$/;
+
+/** Accepts `xqc`, `#xqc`, `@xqc`, `twitch.tv/xqc`, or a full channel / popout / mod-view URL. */
 export function normalizeChannelName(input: string): string | null {
   let value = input.trim();
   if (!value) return null;
-  const urlMatch = value.match(/twitch\.tv\/(?:popout\/)?([A-Za-z0-9_]+)/i);
+  const urlMatch = value.match(/twitch\.tv\/(?:popout\/|moderator\/)?([A-Za-z0-9_]+)/i);
   if (urlMatch) value = urlMatch[1];
   value = value.replace(/^[#@]/, "").toLowerCase();
+  if (NOT_CHANNELS.test(value)) return null;
   return /^[a-z0-9_]{2,25}$/.test(value) ? value : null;
 }
