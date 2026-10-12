@@ -237,9 +237,9 @@ function ChatBox({ login }: { login: string }) {
   return (
     <section
       aria-label={`#${login} chat`}
-      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card/50 shadow-sm"
+      className="flex min-h-0 min-w-0 flex-col rounded-xl border border-border/80 bg-card/50 shadow-sm"
     >
-      <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/80 pr-1 pl-2">
+      <header className="flex h-9 shrink-0 items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2">
         <span className="relative shrink-0">
           <ChannelAvatar login={login} className="size-5 text-[10px]" />
           <span
@@ -294,16 +294,21 @@ function ChatBox({ login }: { login: string }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <ChatLog
-        messages={view.messages}
-        channel={login}
-        viewKey={`box:${login}`}
-        label={`#${login} messages`}
-        liveRows={120}
-        empty={<ChannelPlaceholder login={login} compact />}
-        onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
-      />
-      <Composer channel={login} compact />
+      {/* Clip only the log so Tab-complete / picker popovers above the composer aren't cut off. */}
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <ChatLog
+          messages={view.messages}
+          channel={login}
+          viewKey={`box:${login}`}
+          label={`#${login} messages`}
+          liveRows={120}
+          empty={<ChannelPlaceholder login={login} compact />}
+          onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
+        />
+      </div>
+      <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
+        <Composer channel={login} compact />
+      </div>
     </section>
   );
 }

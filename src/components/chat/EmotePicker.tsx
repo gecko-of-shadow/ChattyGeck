@@ -98,7 +98,7 @@ function EmoteRow({ emote, favourite, still, onPick }: { emote: Emote; favourite
           <span className="text-[10px] text-muted-foreground">?</span>
         ) : (
           <img
-            src={urls.url2x ?? urls.url1x}
+            src={urls.url1x}
             srcSet={urls.url2x ? `${urls.url1x} 1x, ${urls.url2x} 2x` : undefined}
             alt=""
             loading="lazy"

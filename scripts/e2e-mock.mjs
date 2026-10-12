@@ -157,17 +157,25 @@ await step("Tab finishes emote names and cycles the matches", async () => {
   await input.fill("hi geck");
   await input.press("Tab");
   if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Tab: "${await input.inputValue()}"`);
-  await page.getByTestId("tab-complete").waitFor({ timeout: 2_000 });
+  const list = page.getByTestId("tab-complete");
+  await list.waitFor({ timeout: 2_000 });
+  // Pictures must show in the suggestion list (url1x, not a broken 2x-only src).
+  const thumbs = list.locator("img");
+  if ((await thumbs.count()) < 2) throw new Error("tab-complete list missing emote pictures");
+  await thumbs.first().waitFor({ state: "visible", timeout: 3_000 });
   await input.press("Tab");
   if ((await input.inputValue()) !== "hi geckoHype ") throw new Error(`after 2nd Tab: "${await input.inputValue()}"`);
   await input.press("ArrowDown");
   const afterDown = await input.inputValue();
   if (afterDown === "hi geckoHype ") throw new Error("ArrowDown did not move to the next emote");
-  await page.getByTestId("tab-complete").waitFor({ timeout: 2_000 });
+  await list.waitFor({ timeout: 2_000 });
   await input.press("ArrowUp");
   if ((await input.inputValue()) !== "hi geckoHype ") throw new Error(`after ArrowUp: "${await input.inputValue()}"`);
   await input.press("Shift+Tab");
   if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Shift+Tab: "${await input.inputValue()}"`);
+  // Click a suggestion (portaled list must stay interactive).
+  await list.getByRole("option", { name: "geckoWave" }).click();
+  if ((await input.inputValue()) !== "hi geckoWave ") throw new Error(`after click: "${await input.inputValue()}"`);
   await shot("05c-tab-complete");
   await input.fill("");
 });
@@ -343,6 +351,20 @@ await step("grid boxes each have their own message input", async () => {
     .count();
   if (elsewhere) throw new Error("message showed up in the wrong box");
   await shot("05b-grid-send");
+});
+
+await step("grid Tab-complete list stays visible (not clipped by the box)", async () => {
+  const box = page.getByRole("region", { name: "#geckotown chat" });
+  const input = box.getByLabel("Message #geckotown");
+  await input.fill("geck");
+  await input.press("Tab");
+  const list = page.getByTestId("tab-complete");
+  await list.waitFor({ state: "visible", timeout: 3_000 });
+  const box2 = await list.boundingBox();
+  if (!box2 || box2.height < 20) throw new Error("tab-complete clipped or zero-height in grid");
+  await list.locator("img").first().waitFor({ state: "visible", timeout: 3_000 });
+  await shot("05b2-grid-tab-complete");
+  await input.fill("");
   await page.getByRole("radio", { name: /focused/i }).click();
 });
 

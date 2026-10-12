@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,33 @@ import { isFeatureOn } from "@/store/settings";
 import { useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
+
+function srcSet(urls: { url1x: string; url2x?: string; url4x?: string }): string | undefined {
+  const parts = [`${urls.url1x} 1x`];
+  if (urls.url2x) parts.push(`${urls.url2x} 2x`);
+  if (urls.url4x) parts.push(`${urls.url4x} 4x`);
+  return parts.length > 1 ? parts.join(", ") : undefined;
+}
+
+function CompletionEmoteThumb({ emote, still }: { emote: Emote; still: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const urls = emoteUrls(emote, still);
+  if (failed) {
+    return <span className="text-[10px] font-medium text-muted-foreground">?</span>;
+  }
+  return (
+    <img
+      src={urls.url1x}
+      srcSet={srcSet(urls)}
+      alt=""
+      loading="eager"
+      decoding="async"
+      draggable={false}
+      className="max-h-7 max-w-9 object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function RoomChips({ channel }: { channel: string }) {
   const room = useChat((s) => s.channels[channel]?.roomState);
@@ -75,28 +103,59 @@ function CompletionBar({
   completion,
   onChoose,
   compact,
+  anchorRef,
 }: {
   id: string;
   completion: Completion;
   onChoose: (index: number) => void;
   compact: boolean;
+  /** Position the list above this input (portaled so grid overflow can't clip it). */
+  anchorRef: RefObject<HTMLElement | null>;
 }) {
   const still = useChat((s) => s.settings.emoteAnimation === "never");
   const activeRef = useRef<HTMLButtonElement>(null);
+  const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    const place = () => {
+      const rect = el.getBoundingClientRect();
+      setBox({
+        left: rect.left,
+        width: rect.width,
+        bottom: Math.max(8, window.innerHeight - rect.top + 6),
+      });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchorRef, completion.matches.length, completion.index]);
+
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [completion.index]);
-  return (
+
+  if (!box || typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       id={id}
       data-testid="tab-complete"
       role="listbox"
       aria-label="Emote suggestions"
-      className="zoo-scroll absolute right-0 bottom-full left-0 z-20 mb-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      className="zoo-scroll fixed z-50 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      style={{ left: box.left, width: box.width, bottom: box.bottom }}
     >
       {completion.matches.map((emote, i) => {
         const active = i === completion.index;
-        const urls = emoteUrls(emote, still);
         return (
           <button
             key={emoteKey(emote)}
@@ -114,18 +173,14 @@ function CompletionBar({
             )}
           >
             <span className="grid size-7 shrink-0 place-items-center">
-              <img
-                src={urls.url2x ?? urls.url1x}
-                alt=""
-                className="max-h-7 max-w-9 object-contain"
-                draggable={false}
-              />
+              <CompletionEmoteThumb emote={emote} still={still} />
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">{emote.name}</span>
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -332,11 +387,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           }}
         >
           <div className="relative min-w-0 flex-1">
-            {completion && completion.matches.length > 1 ? (
+            {completion && completion.matches.length > 0 ? (
               <CompletionBar
                 id={listId}
                 completion={completion}
                 compact={compact}
+                anchorRef={inputRef}
                 onChoose={(i) => {
                   applyMatch(completion, i);
                   inputRef.current?.focus();
@@ -357,9 +413,9 @@ export function Composer({ channel, compact = false }: { channel: string | null;
               placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
               aria-label={`Message #${channel}`}
               aria-autocomplete={tabComplete ? "list" : undefined}
-              aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
-              aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
-              aria-activedescendant={completion && completion.matches.length > 1 ? `${listId}-${completion.index}` : undefined}
+              aria-controls={completion ? listId : undefined}
+              aria-expanded={tabComplete ? !!completion : undefined}
+              aria-activedescendant={completion ? `${listId}-${completion.index}` : undefined}
               className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
               autoComplete="off"
               spellCheck
