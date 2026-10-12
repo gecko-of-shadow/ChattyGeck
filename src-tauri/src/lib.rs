@@ -66,6 +66,27 @@ fn settings_save(state: State<'_, AppState>, settings: serde_json::Value) -> Res
 }
 
 #[tauri::command]
+fn chat_history_load(state: State<'_, AppState>, channel: String) -> Result<Option<serde_json::Value>, String> {
+    storage::load_chat_history(&state.data, &channel)
+}
+
+#[tauri::command]
+fn chat_history_save(
+    state: State<'_, AppState>,
+    channel: String,
+    messages: serde_json::Value,
+) -> Result<(), String> {
+    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    storage::save_chat_history(&state.data, &channel, &messages)
+}
+
+#[tauri::command]
+fn chat_history_clear(state: State<'_, AppState>, channel: Option<String>) -> Result<(), String> {
+    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    storage::clear_chat_history(&state.data, channel.as_deref())
+}
+
+#[tauri::command]
 fn session_load() -> Result<Option<String>, String> {
     secrets::load()
 }
@@ -217,6 +238,9 @@ pub fn run() {
             app_info,
             settings_load,
             settings_save,
+            chat_history_load,
+            chat_history_save,
+            chat_history_clear,
             session_load,
             session_save,
             session_clear,

@@ -39,6 +39,10 @@ export interface Settings {
   chromeHidden: boolean;
   /** Start ZooChattr when Windows signs you in (portable: a Startup shortcut to this exe). */
   startOnLogin: boolean;
+  /** Keep ~48 hours of chat per channel in ZooChattr-data so logs survive restarts. */
+  rememberChatHistory: boolean;
+  /** Ask GitHub for a newer portable build when ZooChattr starts (and every few hours). */
+  autoCheckUpdates: boolean;
   /** Overrides the Client ID baked in at build time. */
   clientId: string;
 
@@ -163,6 +167,8 @@ export const DEFAULT_SETTINGS: Settings = {
   closeToTray: true,
   chromeHidden: false,
   startOnLogin: false,
+  rememberChatHistory: true,
+  autoCheckUpdates: true,
   clientId: "",
   emoteProviders: { "7tv": true, bttv: true, ffz: true },
   emoteSize: 1,
@@ -258,6 +264,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     closeToTray: bool(input.closeToTray, DEFAULT_SETTINGS.closeToTray),
     chromeHidden: bool(input.chromeHidden, DEFAULT_SETTINGS.chromeHidden),
     startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
+    rememberChatHistory: bool(input.rememberChatHistory, DEFAULT_SETTINGS.rememberChatHistory),
+    autoCheckUpdates: bool(input.autoCheckUpdates, DEFAULT_SETTINGS.autoCheckUpdates),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",
     emoteProviders: {
       "7tv": bool(providers["7tv"], true),

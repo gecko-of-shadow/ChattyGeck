@@ -109,3 +109,40 @@ export async function getLaunchAtLogin(): Promise<boolean> {
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (isTauri) await invoke("set_launch_at_login", { enabled });
 }
+
+const chatHistoryKey = (channel: string) => `zoochattr.chat.${channel}`;
+
+/** Last saved chat lines for a channel (or null when none). */
+export async function loadChatHistory(channel: string): Promise<unknown | null> {
+  if (isTauri) return invoke<unknown | null>("chat_history_load", { channel });
+  const raw = localStorage.getItem(chatHistoryKey(channel));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveChatHistory(channel: string, messages: unknown): Promise<void> {
+  if (isTauri) {
+    await invoke("chat_history_save", { channel, messages });
+    return;
+  }
+  localStorage.setItem(chatHistoryKey(channel), JSON.stringify(messages));
+}
+
+/** Wipe one channel's history, or every channel when `channel` is omitted. */
+export async function clearChatHistory(channel?: string): Promise<void> {
+  if (isTauri) {
+    await invoke("chat_history_clear", { channel: channel ?? null });
+    return;
+  }
+  if (channel) {
+    localStorage.removeItem(chatHistoryKey(channel));
+    return;
+  }
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("zoochattr.chat.")) localStorage.removeItem(key);
+  }
+}

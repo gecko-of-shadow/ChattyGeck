@@ -28,7 +28,9 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **A zoo of themes.** Crested gecko, Penguin, Sea turtle and Elephant, each with its own animated mascot, colors, background texture (gecko scales, snowfall, shell plates, elephant wrinkles) and a little personality: the send button chirps, squawks, bloops or trumpets. More animals are on the way.
 - **Remembers you.** Channels, reading mode, theme, favourites and every preference survive restarts. Back them up to a JSON file (or the clipboard), restore them on another machine, or reset to the defaults from Settings → Storage. Your Twitch login is never part of a backup.
 - **More room for chat.** In Grid view, hide the sidebar and top bar with one click so the chat boxes fill the window; a floating button brings them back.
-- **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it. Unzipping a new release over the old folder (or using **Settings → Check for updates**) replaces only the exe and keeps your channels.
+- **Chat history.** Keeps about 48 hours of messages per channel in `ZooChattr-data/chat` so logs come back after you quit (toggle in Settings).
+- **Updates.** Checks GitHub for a newer portable build on launch (and every few hours); Settings still has a manual check. Install keeps your data folder.
+- **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it. Unzipping a new release over the old folder (or using in-app update) replaces only the exe and keeps your channels.
 
 ## Run it in development
 

@@ -99,6 +99,72 @@ pub fn save_settings(data: &DataDir, value: &serde_json::Value) -> Result<(), St
     fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save {}: {err}", display_path(&file)))
 }
 
+const CHAT_DIR: &str = "chat";
+
+fn chat_dir(data: &DataDir) -> PathBuf {
+    data.path.join(CHAT_DIR)
+}
+
+/// Channel login → safe file name (Twitch logins are already [a-z0-9_]).
+fn chat_file(data: &DataDir, channel: &str) -> Result<PathBuf, String> {
+    let safe: String = channel
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .collect();
+    if safe.is_empty() || safe.len() > 64 {
+        return Err("That channel name can't be saved.".into());
+    }
+    Ok(chat_dir(data).join(format!("{safe}.json")))
+}
+
+pub fn load_chat_history(data: &DataDir, channel: &str) -> Result<Option<serde_json::Value>, String> {
+    let file = chat_file(data, channel)?;
+    let text = match fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(err) => return Err(format!("Couldn't read chat history: {err}")),
+    };
+    match serde_json::from_str(&text) {
+        Ok(value) => Ok(Some(value)),
+        Err(_) => {
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or_default();
+            let _ = fs::rename(&file, chat_dir(data).join(format!("{channel}.corrupt-{stamp}.json")));
+            Ok(None)
+        }
+    }
+}
+
+pub fn save_chat_history(data: &DataDir, channel: &str, messages: &serde_json::Value) -> Result<(), String> {
+    let dir = chat_dir(data);
+    fs::create_dir_all(&dir).map_err(|err| format!("Couldn't make the chat history folder: {err}"))?;
+    let file = chat_file(data, channel)?;
+    let tmp = file.with_extension("json.tmp");
+    let text = serde_json::to_string(messages).map_err(|err| err.to_string())?;
+    fs::write(&tmp, text).map_err(|err| format!("Couldn't write chat history: {err}"))?;
+    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save chat history: {err}"))
+}
+
+pub fn clear_chat_history(data: &DataDir, channel: Option<&str>) -> Result<(), String> {
+    if let Some(name) = channel {
+        let file = chat_file(data, name)?;
+        match fs::remove_file(&file) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(format!("Couldn't clear chat history: {err}")),
+        }
+    } else {
+        let dir = chat_dir(data);
+        match fs::remove_dir_all(&dir) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(format!("Couldn't clear chat history: {err}")),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -521,6 +521,7 @@ function ProblemsSection() {
 
 function UpdateRow() {
   const version = useChat((s) => s.appInfo?.version ?? "");
+  const autoCheck = useChat((s) => s.settings.autoCheckUpdates);
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [latest, setLatest] = useState<UpdateInfo | null>(null);
   const [status, setStatus] = useState<string>("");
@@ -561,10 +562,16 @@ function UpdateRow() {
 
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3">
+      <ToggleRow
+        id="pref-auto-updates"
+        label="Check for updates automatically"
+        hint="Looks on GitHub when ZooChattr starts and every few hours. You'll get a toast if a newer portable build is out."
+        setting="autoCheckUpdates"
+      />
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void check()} data-testid="check-updates">
           <RefreshCw className={cn("size-3.5", busy === "check" && "animate-spin")} />
-          Check for updates
+          Check now
         </Button>
         {newer ? (
           <Button type="button" size="sm" disabled={busy !== null || !isTauri} onClick={() => void install()} data-testid="install-update">
@@ -583,8 +590,18 @@ function UpdateRow() {
       </div>
       {status ? <p className="text-xs text-muted-foreground">{status}</p> : null}
       <p className="text-[11px] text-muted-foreground">
-        Updates replace only ZooChattr.exe next to this copy. Your <code className="font-mono">ZooChattr-data</code> folder (channels, settings) is never overwritten.
+        {autoCheck ? "Auto-check is on. " : "Auto-check is off — use Check now anytime. "}
+        Updates replace only ZooChattr.exe. Your <code className="font-mono">ZooChattr-data</code> folder (channels, chat history, settings) stays put.
       </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        data-testid="clear-chat-history"
+        onClick={() => void chat.clearSavedHistory()}
+      >
+        Clear saved chat history
+      </Button>
     </div>
   );
 }
@@ -781,6 +798,12 @@ export function SettingsDialog() {
               label="Hide sidebar & top bar"
               hint="Gives the chat grid more room. Use the floating button (or Settings) to bring the chrome back."
               setting="chromeHidden"
+            />
+            <ToggleRow
+              id="pref-chat-history"
+              label="Remember chat history"
+              hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
+              setting="rememberChatHistory"
             />
             <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
               <PanelLeftClose className="mt-0.5 size-3.5 shrink-0" />

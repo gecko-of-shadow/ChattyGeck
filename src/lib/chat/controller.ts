@@ -1,9 +1,11 @@
 import { toast } from "sonner";
 import { config } from "@/lib/config";
+import { historyBoundary, messagesForDisk, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
+import { applyUpdate, fetchLatestRelease, isNewerVersion } from "@/lib/updates";
 import { refreshSession, revokeToken, validateToken, type Session } from "@/lib/twitch/auth";
 import {
   HelixUnauthorizedError,
@@ -35,6 +37,8 @@ export const ALL_CHANNELS = "*";
 const JOIN_TIMEOUT_MS = 45_000;
 const EMOTE_RELOAD_GAP_MS = 5 * 60_000;
 const REFRESH_MARGIN_MS = 5 * 60_000;
+const HISTORY_SAVE_GAP_MS = 2_000;
+const UPDATE_CHECK_GAP_MS = 6 * 60 * 60_000;
 
 interface PendingSend {
   id: string;
@@ -94,6 +98,9 @@ class ChatController {
   private dropAnnounced = false;
   private booted = false;
   private lastAttention = 0;
+  private historyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private historyDirty = new Set<string>();
+  private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
     this.read = new IrcConnection({
@@ -137,6 +144,10 @@ class ChatController {
       ready: true,
     });
 
+    if (settings.rememberChatHistory) {
+      await this.restoreHistory(settings.channels);
+    }
+
     const stored = await platform.loadSession().catch((err) => {
       toast.error("Couldn't read your saved Twitch login", { description: errorText(err) });
       return null;
@@ -166,8 +177,12 @@ class ChatController {
       this.read.retryNow();
       this.write?.retryNow();
     });
+    window.addEventListener("beforeunload", () => {
+      void this.flushHistoryNow();
+    });
     setInterval(() => this.tick(), 5_000);
     setInterval(() => void this.validateHourly(), 60 * 60_000);
+    this.armUpdateChecks(settings.autoCheckUpdates);
   }
 
   // ---------------------------------------------------------------- auth
@@ -665,13 +680,20 @@ class ChatController {
         const c = counts.get(channel);
         channels[channel] = {
           ...view,
-          messages: next.length > config.messageCapPerChannel ? next.slice(-config.messageCapPerChannel) : next,
+          messages: this.capMessages(next),
           unread: view.unread + (c?.unread ?? 0),
           mentions: view.mentions + (c?.mentions ?? 0),
         };
+        this.scheduleHistorySave(channel);
       }
       return { channels };
     });
+  }
+
+  /** With history on: keep ~48h. Otherwise keep the short live buffer. */
+  private capMessages(messages: ChatMessage[]): ChatMessage[] {
+    if (get().settings.rememberChatHistory) return trimLiveBuffer(messages);
+    return messages.length > config.messageCapPerChannel ? messages.slice(-config.messageCapPerChannel) : messages;
   }
 
   private replaceMessage(id: string, update: (message: ChatMessage) => ChatMessage): void {
@@ -697,16 +719,19 @@ class ChatController {
 
   private markDeleted(channel: string, match: (message: ChatMessage) => boolean): void {
     this.flush();
+    let changed = false;
     set((state) => {
       const view = state.channels[channel];
       if (!view) return {};
       const hit = (m: ChatMessage) => m.channel === channel && !m.deleted && match(m);
       if (!view.messages.some(hit)) return {};
+      changed = true;
       const mark = (m: ChatMessage) => (hit(m) ? { ...m, deleted: true } : m);
       return {
         channels: { ...state.channels, [channel]: { ...view, messages: view.messages.map(mark) } },
       };
     });
+    if (changed) this.scheduleHistorySave(channel);
   }
 
   private patchChannel(channel: string, update: (view: ChannelView) => ChannelView): void {
@@ -730,6 +755,7 @@ class ChatController {
       channels: [...s.channels, name],
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
+    if (get().settings.rememberChatHistory) void this.restoreHistory([name]);
     this.read.join(name);
     if (this.session) void this.loadProfiles([name]);
     return { ok: true, channel: name };
@@ -848,8 +874,32 @@ class ChatController {
     } else if (!after.rememberEmotes && before.rememberEmotes) {
       emoteRegistry.forgetCache();
     }
+    if (after.rememberChatHistory && !before.rememberChatHistory) {
+      for (const channel of Object.keys(get().channels)) this.scheduleHistorySave(channel);
+    } else if (!after.rememberChatHistory && before.rememberChatHistory) {
+      void this.forgetAllHistory();
+    }
+    if (after.autoCheckUpdates !== before.autoCheckUpdates) {
+      this.armUpdateChecks(after.autoCheckUpdates);
+    }
     this.saveDirty = true;
     void this.persistSettings();
+  }
+
+  /** Wipe every saved chat log (Settings → Storage). */
+  async clearSavedHistory(): Promise<void> {
+    for (const timer of this.historyTimers.values()) clearTimeout(timer);
+    this.historyTimers.clear();
+    this.historyDirty.clear();
+    await platform.clearChatHistory();
+    set((state) => {
+      const channels = { ...state.channels };
+      for (const [name, view] of Object.entries(channels)) {
+        channels[name] = { ...view, messages: [] };
+      }
+      return { channels };
+    });
+    toast("Chat history cleared", { description: "Saved logs for every channel are gone." });
   }
 
   /** Replaces every preference (not the channel list or view) with the ones from a backup or the defaults. */
@@ -898,6 +948,107 @@ class ChatController {
           error: `Twitch never confirmed #${c.login}. Check the spelling; the channel may not exist or may be banned.`,
         }));
       }
+    }
+  }
+
+  // ---------------------------------------------------------------- chat history & updates
+
+  private async restoreHistory(channels: string[]): Promise<void> {
+    await Promise.all(
+      channels.map(async (channel) => {
+        try {
+          const raw = await platform.loadChatHistory(channel);
+          const history = sanitizeHistory(raw);
+          if (!history.length) return;
+          this.patchChannel(channel, (view) => {
+            // Keep any lines that arrived while history was loading.
+            const seen = new Set(history.map((m) => m.id));
+            const live = view.messages.filter((m) => !seen.has(m.id) && !m.id.startsWith("hist-boundary:"));
+            return { ...view, messages: this.capMessages([...history, historyBoundary(channel), ...live]) };
+          });
+        } catch {
+          // Missing or unreadable history is fine — start empty.
+        }
+      }),
+    );
+  }
+
+  private scheduleHistorySave(channel: string): void {
+    if (!get().settings.rememberChatHistory) return;
+    this.historyDirty.add(channel);
+    if (this.historyTimers.has(channel)) return;
+    this.historyTimers.set(
+      channel,
+      setTimeout(() => {
+        this.historyTimers.delete(channel);
+        void this.persistHistory(channel);
+      }, HISTORY_SAVE_GAP_MS),
+    );
+  }
+
+  private async persistHistory(channel: string): Promise<void> {
+    if (!get().settings.rememberChatHistory) return;
+    this.historyDirty.delete(channel);
+    const view = get().channels[channel];
+    if (!view) return;
+    try {
+      await platform.saveChatHistory(channel, messagesForDisk(view.messages));
+    } catch {
+      // Don't toast on every chat line; Settings will surface disk issues elsewhere.
+    }
+  }
+
+  private async flushHistoryNow(): Promise<void> {
+    for (const timer of this.historyTimers.values()) clearTimeout(timer);
+    this.historyTimers.clear();
+    const channels = [...this.historyDirty];
+    this.historyDirty.clear();
+    await Promise.all(channels.map((channel) => this.persistHistory(channel)));
+  }
+
+  private async forgetAllHistory(): Promise<void> {
+    for (const timer of this.historyTimers.values()) clearTimeout(timer);
+    this.historyTimers.clear();
+    this.historyDirty.clear();
+    try {
+      await platform.clearChatHistory();
+    } catch (err) {
+      toast.error("Couldn't clear saved chat history", { description: errorText(err) });
+    }
+  }
+
+  private armUpdateChecks(enabled: boolean): void {
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer);
+      this.updateCheckTimer = null;
+    }
+    if (!enabled) return;
+    void this.checkForUpdateQuietly();
+    this.updateCheckTimer = setInterval(() => void this.checkForUpdateQuietly(), UPDATE_CHECK_GAP_MS);
+  }
+
+  /** Background check — toast only when a newer portable build exists. */
+  private async checkForUpdateQuietly(): Promise<void> {
+    if (!get().settings.autoCheckUpdates) return;
+    const version = get().appInfo?.version;
+    if (!version || version === "dev") return;
+    try {
+      const info = await fetchLatestRelease();
+      if (!info || !isNewerVersion(info.version, version)) return;
+      toast(`ZooChattr ${info.tag} is out`, {
+        description: "Your channels stay in ZooChattr-data when you update.",
+        duration: 20_000,
+        action: {
+          label: "Install",
+          onClick: () => {
+            void applyUpdate(info.downloadUrl).catch((err) => {
+              toast.error("Couldn't install the update", { description: errorText(err) });
+            });
+          },
+        },
+      });
+    } catch {
+      // Quiet on network blips — manual Check for updates still works in Settings.
     }
   }
 
