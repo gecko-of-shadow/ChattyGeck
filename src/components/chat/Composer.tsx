@@ -247,7 +247,26 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       }
       return;
     }
-    if (completion && event.key !== "Shift") setCompletion(null);
+    if (completion) {
+      const count = completion.matches.length;
+      if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+        event.preventDefault();
+        applyMatch(completion, (completion.index + 1) % count);
+        return;
+      }
+      if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        applyMatch(completion, (completion.index + count - 1) % count);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setCompletion(null);
+        return;
+      }
+      // Typing / Enter / etc. closes the list; Shift alone does not.
+      if (event.key !== "Shift") setCompletion(null);
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();

@@ -149,6 +149,10 @@ await step("Tab finishes emote names and cycles the matches", async () => {
   await page.getByTestId("tab-complete").waitFor({ timeout: 2_000 });
   await input.press("Tab");
   if ((await input.inputValue()) !== "hi geckoHype ") throw new Error(`after 2nd Tab: "${await input.inputValue()}"`);
+  await input.press("ArrowDown");
+  if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after ArrowDown wrap: "${await input.inputValue()}"`);
+  await input.press("ArrowUp");
+  if ((await input.inputValue()) !== "hi geckoHype ") throw new Error(`after ArrowUp: "${await input.inputValue()}"`);
   await input.press("Shift+Tab");
   if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Shift+Tab: "${await input.inputValue()}"`);
   await shot("05c-tab-complete");
