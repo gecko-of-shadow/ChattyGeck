@@ -522,9 +522,11 @@ function ProblemsSection() {
 function UpdateRow() {
   const version = useChat((s) => s.appInfo?.version ?? "");
   const autoCheck = useChat((s) => s.settings.autoCheckUpdates);
+  const updateCheckNonce = useUi((s) => s.updateCheckNonce);
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [latest, setLatest] = useState<UpdateInfo | null>(null);
   const [status, setStatus] = useState<string>("");
+  const lastTrayCheck = useRef(0);
 
   const check = async () => {
     setBusy("check");
@@ -545,6 +547,14 @@ function UpdateRow() {
       setBusy(null);
     }
   };
+
+  // Tray "Check for updates…" opens Settings and bumps this nonce.
+  useEffect(() => {
+    if (updateCheckNonce <= 0 || updateCheckNonce === lastTrayCheck.current) return;
+    lastTrayCheck.current = updateCheckNonce;
+    void check();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on tray nonce
+  }, [updateCheckNonce]);
 
   const install = async () => {
     if (!latest) return;

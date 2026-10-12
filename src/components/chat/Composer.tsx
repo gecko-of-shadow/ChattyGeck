@@ -141,10 +141,13 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
+  /** After a channel switch, send is blocked until the user confirms the target name. */
+  const [unlockedFor, setUnlockedFor] = useState<string | null>(channel);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
+  const prevChannel = useRef(channel);
   const listId = useId();
 
   useEffect(() => {
@@ -157,6 +160,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   }, [insert, channel]);
 
   useEffect(() => {
+    if (prevChannel.current !== channel) {
+      prevChannel.current = channel;
+      setUnlockedFor(null);
+    }
     setError(null);
     setCompletion(null);
   }, [channel]);
@@ -174,10 +181,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
 
   const connected = writeStatus === "connected";
+  const locked = unlockedFor !== channel;
   const length = Array.from(text).length;
 
   const submit = () => {
-    if (!text.trim()) return;
+    if (locked || !text.trim()) return;
     const result = chat.send(channel, text);
     if (result.ok) {
       history.current = [text, ...history.current.filter((h) => h !== text)].slice(0, 50);
@@ -294,71 +302,94 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           {error}
         </div>
       ) : null}
-      <form
-        className="flex items-center gap-1.5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <div className="relative min-w-0 flex-1">
-          {completion && completion.matches.length > 1 ? (
-            <CompletionBar
-              id={listId}
-              completion={completion}
-              compact={compact}
-              onChoose={(i) => {
-                applyMatch(completion, i);
-                inputRef.current?.focus();
-              }}
-            />
-          ) : null}
-          <Input
-            ref={inputRef}
-            value={text}
-            onChange={(event) => {
-              setText(event.target.value);
-              historyIndex.current = -1;
-              setCompletion(null);
-              if (error) setError(null);
-            }}
-            onKeyDown={onKeyDown}
-            onBlur={() => setCompletion(null)}
-            placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
-            aria-label={`Message #${channel}`}
-            aria-autocomplete={tabComplete ? "list" : undefined}
-            aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
-            aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
-            aria-activedescendant={completion && completion.matches.length > 1 ? `${listId}-${completion.index}` : undefined}
-            className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
-            autoComplete="off"
-            spellCheck
-          />
-          {length > 400 ? (
-            <span
-              className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
-            >
-              {500 - length}
-            </span>
-          ) : null}
-        </div>
-        {emotePicker ? (
-          <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} returnFocus={inputRef} compact={compact} />
-        ) : null}
-        <Button
-          type="submit"
-          size={compact ? "icon-sm" : "default"}
-          className={cn(!compact && "h-9 gap-1.5 px-3.5")}
-          disabled={!text.trim() || !connected}
-          aria-label={theme.sendVerb}
-          title={theme.sendVerb}
+      {locked ? (
+        <div
+          className={cn("flex flex-col gap-1.5", compact ? "gap-1" : "")}
+          data-testid="channel-switch-ack"
         >
-          {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
-          <SendHorizontal className="size-4" />
-        </Button>
-      </form>
+          <p className={cn("text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>
+            You switched channels. Confirm before sending.
+          </p>
+          <Button
+            type="button"
+            size={compact ? "sm" : "default"}
+            className={cn("w-full", compact ? "h-8 text-[13px]" : "h-9")}
+            data-testid="channel-switch-unlock"
+            onClick={() => {
+              setUnlockedFor(channel);
+              setTimeout(() => inputRef.current?.focus(), 0);
+            }}
+          >
+            Send to #{channel}
+          </Button>
+        </div>
+      ) : (
+        <form
+          className="flex items-center gap-1.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <div className="relative min-w-0 flex-1">
+            {completion && completion.matches.length > 1 ? (
+              <CompletionBar
+                id={listId}
+                completion={completion}
+                compact={compact}
+                onChoose={(i) => {
+                  applyMatch(completion, i);
+                  inputRef.current?.focus();
+                }}
+              />
+            ) : null}
+            <Input
+              ref={inputRef}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                historyIndex.current = -1;
+                setCompletion(null);
+                if (error) setError(null);
+              }}
+              onKeyDown={onKeyDown}
+              onBlur={() => setCompletion(null)}
+              placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
+              aria-label={`Message #${channel}`}
+              aria-autocomplete={tabComplete ? "list" : undefined}
+              aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
+              aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
+              aria-activedescendant={completion && completion.matches.length > 1 ? `${listId}-${completion.index}` : undefined}
+              className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
+              autoComplete="off"
+              spellCheck
+            />
+            {length > 400 ? (
+              <span
+                className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {500 - length}
+              </span>
+            ) : null}
+          </div>
+          {emotePicker ? (
+            <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} returnFocus={inputRef} compact={compact} />
+          ) : null}
+          <Button
+            type="submit"
+            size={compact ? "icon-sm" : "default"}
+            className={cn(!compact && "h-9 gap-1.5 px-3.5")}
+            disabled={!text.trim() || !connected}
+            aria-label={theme.sendVerb}
+            title={theme.sendVerb}
+          >
+            {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
+            <SendHorizontal className="size-4" />
+          </Button>
+        </form>
+      )}
       {compact ? null : <RoomChips channel={channel} />}
-      {!compact && !connected ? (
+      {!compact && !connected && !locked ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">Connecting your account to Twitch chat…</p>
       ) : null}
     </div>

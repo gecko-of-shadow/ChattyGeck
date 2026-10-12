@@ -7,11 +7,13 @@ use std::sync::{
     Mutex,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewWindowBuilder, WindowEvent,
-    menu::{Menu, MenuItem},
+    AppHandle, Emitter, Manager, Position, Size, State, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
@@ -23,6 +25,10 @@ struct AppState {
     save_lock: Mutex<()>,
     /// Closing the window hides it in the tray (chats stay connected) instead of quitting.
     close_to_tray: AtomicBool,
+    /// Last non-maximized outer bounds (so maximize doesn't overwrite them).
+    normal_geom: Mutex<Option<storage::WindowGeom>>,
+    /// Debounce window-layout writes while the user drags/resizes.
+    geom_save_after: Mutex<Option<Instant>>,
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -154,6 +160,96 @@ fn request_quit_confirm(app: &AppHandle) {
     }
 }
 
+fn request_update_check(app: &AppHandle) {
+    show_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("update-requested", ());
+    }
+}
+
+fn apply_saved_geom(window: &WebviewWindow, geom: &storage::WindowGeom) {
+    if geom.maximized {
+        let _ = window.set_position(Position::Physical(tauri::PhysicalPosition { x: geom.x, y: geom.y }));
+        let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+            width: geom.width.max(360),
+            height: geom.height.max(420),
+        }));
+        let _ = window.maximize();
+    } else {
+        let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+            width: geom.width.max(360),
+            height: geom.height.max(420),
+        }));
+        let _ = window.set_position(Position::Physical(tauri::PhysicalPosition { x: geom.x, y: geom.y }));
+    }
+}
+
+fn capture_window_geom(window: &WebviewWindow, state: &AppState) -> Option<storage::WindowGeom> {
+    let maximized = window.is_maximized().ok()?;
+    if maximized {
+        let mut normal = state.normal_geom.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(prev) = normal.as_mut() {
+            prev.maximized = true;
+            return Some(prev.clone());
+        }
+        let pos = window.outer_position().ok()?;
+        let size = window.outer_size().ok()?;
+        return Some(storage::WindowGeom {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+            maximized: true,
+        });
+    }
+    let pos = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    let geom = storage::WindowGeom {
+        x: pos.x,
+        y: pos.y,
+        width: size.width,
+        height: size.height,
+        maximized: false,
+    };
+    *state.normal_geom.lock().unwrap_or_else(|p| p.into_inner()) = Some(geom.clone());
+    Some(geom)
+}
+
+fn persist_window_geom(window: &WebviewWindow, state: &AppState) {
+    let Some(geom) = capture_window_geom(window, state) else {
+        return;
+    };
+    let _guard = state.save_lock.lock().unwrap_or_else(|p| p.into_inner());
+    let _ = storage::save_window_geom(&state.data, &geom);
+}
+
+fn schedule_window_geom_save(window: &WebviewWindow) {
+    let app = window.app_handle().clone();
+    let label = window.label().to_string();
+    {
+        let state = app.state::<AppState>();
+        *state.geom_save_after.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Instant::now() + Duration::from_millis(400));
+    }
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(450));
+        let state = app.state::<AppState>();
+        let due = {
+            let guard = state.geom_save_after.lock().unwrap_or_else(|p| p.into_inner());
+            match *guard {
+                Some(at) if Instant::now() >= at => true,
+                _ => false,
+            }
+        };
+        if !due {
+            return;
+        }
+        if let Some(window) = app.get_webview_window(&label) {
+            persist_window_geom(&window, &state);
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -168,11 +264,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data = storage::resolve_data_dir(app.handle());
+            let saved_geom = storage::load_window_geom(&data);
             let webview_dir = data.portable.then(|| data.path.join("webview"));
             app.manage(AppState {
                 data,
                 save_lock: Mutex::new(()),
                 close_to_tray: AtomicBool::new(true),
+                normal_geom: Mutex::new(saved_geom.clone().map(|mut g| {
+                    g.maximized = false;
+                    g
+                })),
+                geom_save_after: Mutex::new(None),
             });
 
             let window_config = app
@@ -188,12 +290,17 @@ pub fn run() {
                 // Keeps the webview cache inside the portable folder instead of %LOCALAPPDATA%.
                 builder = builder.data_directory(dir);
             }
-            builder.build()?;
+            let window = builder.build()?;
+            if let Some(geom) = &saved_geom {
+                apply_saved_geom(&window, geom);
+            }
 
             let show = MenuItem::with_id(app, "show", "Show ZooChattr", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+            let update = MenuItem::with_id(app, "update", "Check for updates…", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit ZooChattr", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &update, &sep, &quit])?;
             let mut tray = TrayIconBuilder::with_id(TRAY_ID)
                 .tooltip("ZooChattr")
                 .menu(&menu)
@@ -206,6 +313,7 @@ pub fn run() {
                             let _ = window.emit("settings-requested", ());
                         }
                     }
+                    "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
                     _ => {}
                 })
@@ -226,12 +334,29 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let state = window.app_handle().state::<AppState>();
-                if window.label() == "main" && state.close_to_tray.load(Ordering::Relaxed) {
-                    api.prevent_close();
-                    let _ = window.hide();
+            if window.label() != "main" {
+                return;
+            }
+            let Some(webview) = window.app_handle().get_webview_window(window.label()) else {
+                return;
+            };
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    let state = window.app_handle().state::<AppState>();
+                    persist_window_geom(&webview, &state);
+                    if state.close_to_tray.load(Ordering::Relaxed) {
+                        api.prevent_close();
+                        let _ = webview.hide();
+                    }
                 }
+                WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                    schedule_window_geom_save(&webview);
+                }
+                WindowEvent::Destroyed => {
+                    let state = window.app_handle().state::<AppState>();
+                    persist_window_geom(&webview, &state);
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

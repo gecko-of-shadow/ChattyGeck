@@ -165,6 +165,36 @@ pub fn clear_chat_history(data: &DataDir, channel: Option<&str>) -> Result<(), S
     }
 }
 
+const WINDOW_FILE: &str = "window.json";
+
+/// Last known main-window placement (physical pixels).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowGeom {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub maximized: bool,
+}
+
+pub fn load_window_geom(data: &DataDir) -> Option<WindowGeom> {
+    let text = fs::read_to_string(data.path.join(WINDOW_FILE)).ok()?;
+    let geom: WindowGeom = serde_json::from_str(&text).ok()?;
+    if geom.width < 200 || geom.height < 200 {
+        return None;
+    }
+    Some(geom)
+}
+
+pub fn save_window_geom(data: &DataDir, geom: &WindowGeom) -> Result<(), String> {
+    let file = data.path.join(WINDOW_FILE);
+    let tmp = data.path.join(format!("{WINDOW_FILE}.tmp"));
+    let text = serde_json::to_string_pretty(geom).map_err(|err| err.to_string())?;
+    fs::write(&tmp, text).map_err(|err| format!("Couldn't write window layout: {err}"))?;
+    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save window layout: {err}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +237,25 @@ mod tests {
             .filter_map(Result::ok)
             .any(|entry| entry.file_name().to_string_lossy().starts_with("settings.corrupt-"));
         assert!(kept, "corrupt settings file should be renamed, not deleted");
+    }
+
+    #[test]
+    fn window_geom_round_trip() {
+        let data = temp_data_dir("window");
+        assert!(load_window_geom(&data).is_none());
+        let geom = WindowGeom {
+            x: 40,
+            y: 80,
+            width: 1280,
+            height: 800,
+            maximized: true,
+        };
+        save_window_geom(&data, &geom).unwrap();
+        let loaded = load_window_geom(&data).expect("window.json");
+        assert_eq!(loaded.x, 40);
+        assert_eq!(loaded.y, 80);
+        assert_eq!(loaded.width, 1280);
+        assert_eq!(loaded.height, 800);
+        assert!(loaded.maximized);
     }
 }

@@ -92,18 +92,29 @@ export default function App() {
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
-    let unlisten: (() => void) | undefined;
+    const unlistens: Array<() => void> = [];
     let cancelled = false;
     void (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       if (cancelled) return;
-      unlisten = await listen("settings-requested", () => {
-        useUi.setState({ settingsOpen: true, navOpen: false });
-      });
+      unlistens.push(
+        await listen("settings-requested", () => {
+          useUi.setState({ settingsOpen: true, navOpen: false });
+        }),
+      );
+      unlistens.push(
+        await listen("update-requested", () => {
+          useUi.setState((s) => ({
+            settingsOpen: true,
+            navOpen: false,
+            updateCheckNonce: s.updateCheckNonce + 1,
+          }));
+        }),
+      );
     })();
     return () => {
       cancelled = true;
-      unlisten?.();
+      for (const off of unlistens) off();
     };
   }, []);
 

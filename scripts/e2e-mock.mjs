@@ -98,6 +98,17 @@ await step("device-code login", async () => {
   await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
 });
 
+await step("channel switch blocks send until unlock", async () => {
+  await page.getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
+  const unlock = page.getByTestId("channel-switch-unlock");
+  if ((await unlock.innerText()).trim() !== "Send to #geckotown") {
+    throw new Error(`unlock button text: "${await unlock.innerText()}"`);
+  }
+  await shot("04b-channel-ack");
+  await unlock.click();
+  await page.getByLabel("Message #geckotown").waitFor({ timeout: 3_000 });
+});
+
 await step("send a message; Twitch's echo replaces the local copy (with emote)", async () => {
   const input = page.getByLabel("Message #geckotown");
   await input.fill("hello from ZooChattr Kappa");
