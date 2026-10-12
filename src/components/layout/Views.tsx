@@ -31,18 +31,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { chat } from "@/lib/chat/controller";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/lib/emotes/types";
+import { GRID_EDGE, GRID_GAP, layoutChatGrid } from "@/lib/gridLayout";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer } from "@/store/ui";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
-
-/** Narrowest a grid box gets before the grid wraps to fewer columns. */
-const BOX_MIN_WIDTH = 300;
-/** Shortest a grid box gets before the grid scrolls instead of squeezing. */
-const BOX_MIN_HEIGHT = 260;
-const GRID_GAP = 8;
 
 export function EmptyState() {
   return (
@@ -323,7 +318,8 @@ export function GridView() {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setArea({ width: el.clientWidth - 2 * GRID_GAP, height: el.clientHeight - 2 * GRID_GAP });
+    const measure = () =>
+      setArea({ width: el.clientWidth - 2 * GRID_EDGE, height: el.clientHeight - 2 * GRID_EDGE });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -346,20 +342,20 @@ export function GridView() {
     );
   }
 
-  const count = channels.length;
-  const maxColumns = Math.max(1, Math.floor((area.width + GRID_GAP) / (BOX_MIN_WIDTH + GRID_GAP)));
-  const rows = Math.ceil(count / Math.min(count, maxColumns));
-  const columns = Math.ceil(count / rows);
-  const rowHeight = Math.max(BOX_MIN_HEIGHT, Math.floor((area.height - GRID_GAP * (rows - 1)) / rows));
+  const { columns, cellWidth, cellHeight } = layoutChatGrid(channels.length, area.width, area.height);
 
   return (
-    <div ref={scrollRef} className="zoo-scroll min-h-0 flex-1 overflow-y-auto" style={{ padding: GRID_GAP }}>
+    <div
+      ref={scrollRef}
+      className="zoo-scroll zoo-texture-soft min-h-0 flex-1 overflow-y-auto"
+      style={{ padding: GRID_EDGE }}
+    >
       <div
-        className="grid"
+        className="grid justify-items-stretch"
         style={{
           gap: GRID_GAP,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          gridAutoRows: `${rowHeight}px`,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, ${cellWidth}px))`,
+          gridAutoRows: `${cellHeight}px`,
         }}
       >
         {channels.map((login) => (
