@@ -453,9 +453,11 @@ class ChatController {
     }));
     if (state.roomId && (nowJoined || roomChanged)) {
       const lastLoad = this.emoteLoadedAt.get(channel) ?? 0;
-      if (roomChanged || Date.now() - lastLoad > EMOTE_RELOAD_GAP_MS) {
+      // Retry right away when a previous download failed (don't remember a blip as "no emotes").
+      const retry = emoteRegistry.channelNeedsRetry(channel);
+      if (roomChanged || retry || Date.now() - lastLoad > EMOTE_RELOAD_GAP_MS) {
         this.emoteLoadedAt.set(channel, Date.now());
-        void emoteRegistry.loadChannel(channel, state.roomId);
+        void emoteRegistry.loadChannel(channel, state.roomId, retry);
       }
       if (this.session && (roomChanged || !this.channelBadges.has(channel))) {
         void this.loadChannelBadges(channel, state.roomId);

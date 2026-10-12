@@ -58,6 +58,9 @@ await step("join a channel and read mock chat", async () => {
 await step("reject an invalid channel name", async () => {
   await addChannel("bad name!");
   await page.getByText("doesn't look like a Twitch channel").waitFor({ timeout: 3_000 });
+  // A pasted VOD address must not become the channel "videos".
+  await addChannel("https://www.twitch.tv/videos/1234567890");
+  await page.getByText("doesn't look like a Twitch channel").waitFor({ timeout: 3_000 });
 });
 
 await step("join a second channel", async () => {

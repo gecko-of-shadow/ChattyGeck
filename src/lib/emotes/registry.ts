@@ -248,6 +248,13 @@ export class EmoteRegistry {
     return entry ? { ...entry.status } : null;
   }
 
+  /** True when a previous download failed for this channel (worth asking again on the next join). */
+  channelNeedsRetry(channel: string): boolean {
+    const entry = this.channels.get(channel);
+    if (!entry) return true;
+    return THIRD_PARTY_PROVIDERS.some((p) => entry.status[p].state === "error");
+  }
+
   channelEmotes(channel: string): Emote[] {
     const entry = this.channels.get(channel);
     if (!entry) return [];

@@ -101,14 +101,20 @@ describe("normalizeChannelName", () => {
     ["@Some_Body", "some_body"],
     ["https://www.twitch.tv/summit1g", "summit1g"],
     ["twitch.tv/popout/kato_junichi0817/chat", "kato_junichi0817"],
+    ["https://www.twitch.tv/moderator/xqc", "xqc"],
   ])("%s -> %s", (input, expected) => {
     expect(normalizeChannelName(input)).toBe(expected);
   });
 
-  it("rejects invalid names", () => {
+  it("rejects invalid names and non-channel twitch.tv pages", () => {
     expect(normalizeChannelName("")).toBeNull();
     expect(normalizeChannelName("has space")).toBeNull();
     expect(normalizeChannelName("x".repeat(26))).toBeNull();
+    // Pasted video / directory / settings addresses used to be taken as the channel "videos", etc.
+    expect(normalizeChannelName("https://www.twitch.tv/videos/1234567890")).toBeNull();
+    expect(normalizeChannelName("twitch.tv/directory/game/Just%20Chatting")).toBeNull();
+    expect(normalizeChannelName("https://www.twitch.tv/settings")).toBeNull();
+    expect(normalizeChannelName("videos")).toBeNull();
   });
 });
 
