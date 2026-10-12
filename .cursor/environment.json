@@ -1,0 +1,5 @@
+{
+  "name": "ZooChattr",
+  "install": "npm ci\ntest -f .env || cp .env.example .env",
+  "start": "npm run mock:twitch > /tmp/zoochattr-mock.log 2>&1 &\nexec npm run dev:mock -- --host 127.0.0.1 --port 17440"
+}
