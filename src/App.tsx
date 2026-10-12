@@ -97,18 +97,20 @@ export default function App() {
     void (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       if (cancelled) return;
+      // Settings / update checks open the dedicated Settings window (Rust).
       unlistens.push(
-        await listen("settings-requested", () => {
-          useUi.setState({ settingsOpen: true, navOpen: false });
+        await listen("login-requested", () => {
+          useUi.setState({ loginOpen: true, navOpen: false });
         }),
       );
       unlistens.push(
-        await listen("update-requested", () => {
-          useUi.setState((s) => ({
-            settingsOpen: true,
-            navOpen: false,
-            updateCheckNonce: s.updateCheckNonce + 1,
-          }));
+        await listen("settings-changed", () => {
+          void chat.pullSettingsFromDisk();
+        }),
+      );
+      unlistens.push(
+        await listen("session-changed", () => {
+          void chat.pullSessionFromDisk();
         }),
       );
     })();

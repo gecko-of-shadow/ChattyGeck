@@ -11,13 +11,14 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Position, Size, State, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Emitter, Manager, Position, Size, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 const TRAY_ID: &str = "main";
+const SETTINGS_LABEL: &str = "settings";
 
 struct AppState {
     data: storage::DataDir,
@@ -160,11 +161,84 @@ fn request_quit_confirm(app: &AppHandle) {
     }
 }
 
-fn request_update_check(app: &AppHandle) {
-    show_main_window(app);
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit("update-requested", ());
+fn release_main_after_settings(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_enabled(true);
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
     }
+}
+
+/// Opens Settings as its own window and disables the main window until it closes.
+fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(SETTINGS_LABEL) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_enabled(false);
+        }
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        if check_updates {
+            let _ = existing.emit("update-requested", ());
+        }
+        return Ok(());
+    }
+
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window isn't open.".to_string())?;
+
+    let state = app.state::<AppState>();
+    let mut builder = WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html".into()))
+        .title("ZooChattr Settings")
+        .inner_size(520.0, 740.0)
+        .min_inner_size(400.0, 480.0)
+        .resizable(true)
+        .maximizable(false)
+        .center();
+    if state.data.portable {
+        builder = builder.data_directory(state.data.path.join("webview-settings"));
+    }
+    let builder = builder.parent(&main).map_err(|err| err.to_string())?;
+
+    let _ = main.set_enabled(false);
+    let settings = match builder.build() {
+        Ok(window) => window,
+        Err(err) => {
+            let _ = main.set_enabled(true);
+            return Err(format!("Couldn't open Settings: {err}"));
+        }
+    };
+
+    let app_handle = app.clone();
+    settings.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }) {
+            // Destroyed is the reliable "gone" signal; also catch close for quicker re-enable.
+            if matches!(event, WindowEvent::Destroyed) {
+                release_main_after_settings(&app_handle);
+            }
+        }
+    });
+
+    if check_updates {
+        // Let the settings UI finish booting before asking it to check.
+        let window = settings.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            let _ = window.emit("update-requested", ());
+        });
+    }
+    Ok(())
+}
+
+fn request_update_check(app: &AppHandle) {
+    let _ = open_settings_window(app, true);
+}
+
+#[tauri::command]
+fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
+    open_settings_window(&app, false)
 }
 
 fn apply_saved_geom(window: &WebviewWindow, geom: &storage::WindowGeom) {
@@ -306,12 +380,13 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => show_main_window(app),
-                    "settings" => {
-                        show_main_window(app);
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.emit("settings-requested", ());
+                    "show" => {
+                        if app.get_webview_window(SETTINGS_LABEL).is_none() {
+                            show_main_window(app);
                         }
+                    }
+                    "settings" => {
+                        let _ = open_settings_window(app, false);
                     }
                     "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
@@ -334,6 +409,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == SETTINGS_LABEL {
+                if matches!(event, WindowEvent::Destroyed) {
+                    release_main_after_settings(window.app_handle());
+                }
+                return;
+            }
             if window.label() != "main" {
                 return;
             }
@@ -375,7 +456,8 @@ pub fn run() {
             get_launch_at_login,
             set_launch_at_login,
             check_for_update,
-            apply_update
+            apply_update,
+            open_settings_window_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZooChattr");

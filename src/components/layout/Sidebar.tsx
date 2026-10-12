@@ -32,7 +32,7 @@ import { openExternal } from "@/lib/platform";
 import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import { useUi } from "@/store/ui";
+import { openSettings, useUi } from "@/store/ui";
 
 export function ChannelAvatar({ login, className }: { login: string; className?: string }) {
   const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl);
@@ -267,7 +267,7 @@ function AccountPanel() {
       <Button
         variant="ghost"
         size="icon-sm"
-        onClick={() => useUi.setState({ settingsOpen: true })}
+        onClick={() => void openSettings()}
         aria-label="Settings"
         title="Settings"
       >

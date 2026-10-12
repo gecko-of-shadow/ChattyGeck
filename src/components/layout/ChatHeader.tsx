@@ -7,7 +7,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import type { ViewMode } from "@/store/settings";
-import { useUi } from "@/store/ui";
+import { openSettings, useUi } from "@/store/ui";
 import { ChannelAvatar } from "./Sidebar";
 import { EmoteStatusChip } from "./Views";
 
@@ -176,7 +176,7 @@ export function ChatHeader() {
         variant="ghost"
         size="icon-sm"
         className="hidden md:inline-flex"
-        onClick={() => useUi.setState({ settingsOpen: true })}
+        onClick={() => void openSettings()}
         aria-label="Settings"
         title="Settings"
       >
