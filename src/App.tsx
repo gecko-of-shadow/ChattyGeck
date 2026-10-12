@@ -90,6 +90,23 @@ export default function App() {
     void setTrayStatus(mentions).catch(() => undefined);
   }, [mentions]);
 
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    void (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      if (cancelled) return;
+      unlisten = await listen("settings-requested", () => {
+        useUi.setState({ settingsOpen: true, navOpen: false });
+      });
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   return (
     <>
       {!ready ? (

@@ -170,14 +170,21 @@ pub fn run() {
             builder.build()?;
 
             let show = MenuItem::with_id(app, "show", "Show ZooChattr", true, None::<&str>)?;
+            let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit ZooChattr", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
             let mut tray = TrayIconBuilder::with_id(TRAY_ID)
                 .tooltip("ZooChattr")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_main_window(app),
+                    "settings" => {
+                        show_main_window(app);
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.emit("settings-requested", ());
+                        }
+                    }
                     "quit" => request_quit_confirm(app),
                     _ => {}
                 })

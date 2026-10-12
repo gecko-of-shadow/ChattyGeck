@@ -92,7 +92,7 @@ function CompletionBar({
       data-testid="tab-complete"
       role="listbox"
       aria-label="Emote suggestions"
-      className="zoo-scroll absolute right-0 bottom-full left-0 z-20 mb-1.5 flex gap-0.5 overflow-x-auto rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      className="zoo-scroll absolute right-0 bottom-full left-0 z-20 mb-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
     >
       {completion.matches.map((emote, i) => {
         const active = i === completion.index;
@@ -108,13 +108,20 @@ function CompletionBar({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => onChoose(i)}
             className={cn(
-              "flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 whitespace-nowrap",
+              "flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left",
               compact ? "text-[11px]" : "text-xs",
               active ? "bg-primary text-primary-foreground" : "hover:bg-accent",
             )}
           >
-            <img src={urls.url1x} alt="" className="max-h-6 max-w-7 object-contain" draggable={false} />
-            {emote.name}
+            <span className="grid size-7 shrink-0 place-items-center">
+              <img
+                src={urls.url2x ?? urls.url1x}
+                alt=""
+                className="max-h-7 max-w-9 object-contain"
+                draggable={false}
+              />
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">{emote.name}</span>
           </button>
         );
       })}
