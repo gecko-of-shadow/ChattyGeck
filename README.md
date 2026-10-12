@@ -8,9 +8,9 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 
 ## What it does
 
-- **Many channels, one window.** Join and leave channels freely. Connections stay open while the app runs, and drops are recovered automatically with backoff.
+- **Many channels, one window.** Follow as many Twitch chats as you want. Connections stay open while the app runs, and drops are recovered automatically with backoff.
 - **Two reading modes.**
-  - **Grid:** every channel gets its own clean box, tiled to fill the window, each with its own chat log and message box. Small windows stack the boxes and scroll.
+  - **Grid:** up to four channels on screen in their own boxes. Extra follows stay tucked in the sidebar until you pin them or open Focused.
   - **Focused:** one channel at a time. The others show unread counts, plus an eye badge when someone mentions you.
 - **Lives in the tray.** Closing the window keeps ZooChattr running in the system tray, so chats stay connected; the tray tooltip counts your mentions. Right-click the tray icon and choose Quit to get a confirmation (or turn close-to-tray off in Settings). Opening the exe again brings the running copy back instead of starting a second one. Optional **Start with Windows**.
 - **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The composer shows emote-only, followers-only, subs-only and slow mode.

@@ -719,13 +719,13 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => useUi.setState({ settingsOpen: next })}>
-      <DialogContent className="zoo-scroll max-h-[min(88vh,760px)] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[min(88vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 border-b border-border/70 px-4 pt-4 pr-12 pb-3">
           <DialogTitle className="text-lg">Settings</DialogTitle>
           <DialogDescription>Saved automatically to this ZooChattr folder.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="zoo-scroll min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4">
           <Section icon={Palette} title="Animal theme">
             <div className="grid grid-cols-2 gap-2">
               {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (

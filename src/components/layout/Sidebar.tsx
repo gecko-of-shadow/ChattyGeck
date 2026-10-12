@@ -3,15 +3,18 @@ import {
   ArrowDown,
   ArrowUp,
   ExternalLink,
+  EyeOff,
   LayoutGrid,
   LogIn,
   LogOut,
+  Maximize2,
   MoreHorizontal,
   Plus,
   RefreshCw,
   Settings,
   X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Mascot } from "@/components/mascots/Mascot";
 import { GeckoEyeIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
@@ -93,6 +96,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
   const view = useChat((s) => s.channels[login]);
   const index = useChat((s) => s.settings.channels.indexOf(login));
   const count = useChat((s) => s.settings.channels.length);
+  const onGrid = useChat((s) => s.settings.gridChannels.includes(login));
   if (!view) return null;
 
   const statusTitle =
@@ -103,6 +107,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
       className={cn(
         "group relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors",
         active ? "bg-sidebar-accent shadow-[inset_2px_0_0_var(--primary)]" : "hover:bg-sidebar-accent/60",
+        !onGrid && !active && "opacity-85",
       )}
     >
       <button
@@ -132,7 +137,11 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
           <span className="block truncate text-[11px] text-destructive" title={view.error}>
             {view.error}
           </span>
-        ) : null}
+        ) : onGrid ? (
+          <span className="block truncate text-[10px] text-primary/90">On grid</span>
+        ) : (
+          <span className="block truncate text-[10px] text-muted-foreground">Following</span>
+        )}
       </span>
 
       {view.mentions > 0 ? (
@@ -150,6 +159,8 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
         >
           {view.unread > 999 ? "999+" : view.unread}
         </span>
+      ) : onGrid ? (
+        <LayoutGrid className="pointer-events-none size-3.5 shrink-0 text-primary/70" aria-hidden />
       ) : null}
 
       <DropdownMenu>
@@ -165,7 +176,28 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
         >
           <MoreHorizontal className="size-3.5" />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={() => {
+              chat.focus(login);
+            }}
+          >
+            <Maximize2 /> Open focused
+          </DropdownMenuItem>
+          {onGrid ? (
+            <DropdownMenuItem onClick={() => chat.hideFromGrid(login)}>
+              <EyeOff /> Hide from grid
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              onClick={() => {
+                const result = chat.showInGrid(login);
+                if (!result.ok) toast.error(result.error ?? "Couldn't show on the grid");
+              }}
+            >
+              <LayoutGrid /> Show in grid
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
             <RefreshCw /> Reload emotes
           </DropdownMenuItem>
@@ -286,18 +318,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <span className="grid size-7 place-items-center rounded-full bg-primary/15 text-primary">
               <LayoutGrid className="size-3.5" />
             </span>
-            <span className="flex-1">All chats</span>
-            <span className="font-mono text-[11px] text-muted-foreground">grid</span>
+            <span className="flex-1">Grid</span>
+            <span className="font-mono text-[11px] text-muted-foreground">up to 4</span>
           </button>
         ) : null}
 
         {order.length > 0 ? (
           <div className="px-2 pt-3 pb-1 text-[10.5px] font-semibold tracking-[0.12em] text-muted-foreground/80 uppercase">
-            Channels · {order.length}
+            Following · {order.length}
           </div>
         ) : (
           <p className="px-2 pt-2 text-xs leading-relaxed text-muted-foreground">
-            No channels yet. Type a channel name above, or paste a twitch.tv link.
+            No channels yet. Type a channel name above, or paste a twitch.tv link. Follow many — pin up to 4 on the grid.
           </p>
         )}
 

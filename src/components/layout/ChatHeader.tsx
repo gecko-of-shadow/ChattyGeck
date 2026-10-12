@@ -106,7 +106,8 @@ function ModeToggle() {
 export function ChatHeader() {
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
-  const count = useChat((s) => s.settings.channels.length);
+  const gridCount = useChat((s) => s.settings.gridChannels.length);
+  const followCount = useChat((s) => s.settings.channels.length);
   const view = useChat((s) => (focused ? s.channels[focused] : undefined));
   const unreadElsewhere = useChat((s) =>
     Object.values(s.channels).reduce((sum, c) => sum + (c.login === s.settings.focused ? 0 : c.mentions), 0),
@@ -132,9 +133,14 @@ export function ChatHeader() {
               <LayoutGrid className="size-3.5" />
             </span>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">All chats</div>
+              <div className="truncate text-sm font-semibold">Grid</div>
               <div className="truncate text-[11px] text-muted-foreground">
-                {count === 0 ? "No channels yet" : `${count} chat${count === 1 ? "" : "s"}, each in its own box`}
+                {followCount === 0
+                  ? "No channels yet"
+                  : gridCount === 0
+                    ? `${followCount} followed · none on the grid`
+                    : `${gridCount} on grid` +
+                      (followCount > gridCount ? ` · ${followCount - gridCount} tucked` : "")}
               </div>
             </div>
           </>

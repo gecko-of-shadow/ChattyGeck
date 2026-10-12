@@ -52,8 +52,8 @@ export function EmptyState() {
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Add a Twitch channel and its chat gets its own box here. Add a few more and they tile side by side, or
-            open one at a time with unread counts on the rest.
+            Follow Twitch channels — up to four sit on this grid. Add more to keep watching from the sidebar, then pin
+            them here or open one in Focused.
           </p>
         </div>
         <div className="mx-auto max-w-sm text-left">
@@ -232,8 +232,8 @@ function RoomIcons({ login }: { login: string }) {
 /** One channel's chat inside the grid: header, its own log, its own message box. */
 function ChatBox({ login }: { login: string }) {
   const view = useChat((s) => s.channels[login]);
-  const index = useChat((s) => s.settings.channels.indexOf(login));
-  const count = useChat((s) => s.settings.channels.length);
+  const index = useChat((s) => s.settings.gridChannels.indexOf(login));
+  const count = useChat((s) => s.settings.gridChannels.length);
   if (!view) return null;
 
   const statusTitle =
@@ -283,15 +283,18 @@ function ChatBox({ login }: { login: string }) {
             <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
               <ExternalLink /> Open on twitch.tv
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={index <= 0} onClick={() => chat.moveChannel(login, -1)}>
+            <DropdownMenuItem disabled={index <= 0} onClick={() => chat.moveGridChannel(login, -1)}>
               <ArrowLeft /> Move earlier
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={index >= count - 1} onClick={() => chat.moveChannel(login, 1)}>
+            <DropdownMenuItem disabled={index >= count - 1} onClick={() => chat.moveGridChannel(login, 1)}>
               <ArrowRight /> Move later
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => chat.hideFromGrid(login)}>
+              <X /> Hide from grid
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
-              <X /> Leave #{login}
+              Leave #{login}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -310,9 +313,10 @@ function ChatBox({ login }: { login: string }) {
   );
 }
 
-/** Every joined channel in its own box, tiled to fill the window. */
+/** Up to four pinned channels in boxes; other follows stay in the sidebar. */
 export function GridView() {
-  const channels = useChat((s) => s.settings.channels);
+  const channels = useChat((s) => s.settings.gridChannels);
+  const following = useChat((s) => s.settings.channels.length);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 1200, height: 800 });
 
@@ -325,6 +329,22 @@ export function GridView() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  if (channels.length === 0) {
+    return (
+      <div className="zoo-texture-soft flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="max-w-sm space-y-3 text-center">
+          <Mascot anim="idle" className="mx-auto size-20" />
+          <h2 className="text-lg font-bold">Nothing on the grid</h2>
+          <p className="text-sm text-muted-foreground">
+            {following === 0
+              ? "Add a channel from the sidebar to start."
+              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (up to 4) or open one in Focused.`}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const count = channels.length;
   const maxColumns = Math.max(1, Math.floor((area.width + GRID_GAP) / (BOX_MIN_WIDTH + GRID_GAP)));

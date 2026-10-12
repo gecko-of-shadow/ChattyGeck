@@ -3,13 +3,16 @@ import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
 export type { Skin } from "@/lib/themes";
-/** `grid`: every channel in its own box. `focused`: one channel fills the window. */
+/** `grid`: up to four channels in boxes. `focused`: one channel fills the window. */
 export type ViewMode = "grid" | "focused";
 /** How many times their normal size emotes are drawn. */
 export type EmoteSize = 1 | 1.5 | 2;
 /** Moving emotes: always, only while pointed at, or shown as a still frame. */
 export type EmoteAnimation = "always" | "hover" | "never";
 export type PickerTab = "fav" | "channel" | "all";
+
+/** How many chats can sit on the grid at once; the rest stay followed in the sidebar. */
+export const MAX_GRID_SLOTS = 4;
 
 export const TEXT_SIZE_MIN = 10;
 export const TEXT_SIZE_MAX = 40;
@@ -22,7 +25,13 @@ export const TEXT_SIZE_PRESETS: { label: string; px: number }[] = [
 
 export interface Settings {
   version: 2;
+  /** Every channel you're following (IRC stays joined). */
   channels: string[];
+  /**
+   * Subset of `channels` shown as boxes in Grid view (at most {@link MAX_GRID_SLOTS}).
+   * Other followed channels stay in the sidebar until you pin them or open Focused.
+   */
+  gridChannels: string[];
   mode: ViewMode;
   focused: string | null;
   skin: Skin;
@@ -156,6 +165,7 @@ export function cleanChannelOverrides(value: unknown): Record<string, ChannelFea
 export const DEFAULT_SETTINGS: Settings = {
   version: 2,
   channels: [],
+  gridChannels: [],
   mode: "grid",
   focused: null,
   skin: DEFAULT_SKIN,
@@ -188,7 +198,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /** Settings that are the user's preferences (everything but the channel list and view). */
-export type PreferenceKey = Exclude<keyof Settings, "version" | "channels" | "focused">;
+export type PreferenceKey = Exclude<keyof Settings, "version" | "channels" | "gridChannels" | "focused">;
 
 const pick = <T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
@@ -239,6 +249,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   const focused = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
+  const gridChannels = sanitizeGridChannels(input.gridChannels, channels);
   const textSize =
     typeof input.textSize === "number"
       ? clampTextSize(input.textSize)
@@ -253,6 +264,7 @@ export function sanitizeSettings(raw: unknown): Settings {
   return {
     version: 2,
     channels,
+    gridChannels,
     mode,
     focused,
     skin: pick(input.skin, SKIN_ORDER, DEFAULT_SETTINGS.skin),
@@ -321,4 +333,22 @@ export function readBackup(text: string): Settings | null {
   return known.length >= 2 || (legacy && keys.includes("skin")) ? sanitizeSettings(obj) : null;
 }
 
-const GENERIC_KEYS = new Set(["version", "mode", "channels", "focused"]);
+const GENERIC_KEYS = new Set(["version", "mode", "channels", "gridChannels", "focused"]);
+
+/** Pins that still exist, unique, at most MAX_GRID_SLOTS. Missing list → first slots (older builds). */
+export function sanitizeGridChannels(raw: unknown, channels: string[]): string[] {
+  const allowed = new Set(channels);
+  const out: string[] = [];
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      if (typeof entry !== "string") continue;
+      const name = normalizeChannelName(entry);
+      if (!name || !allowed.has(name) || out.includes(name)) continue;
+      out.push(name);
+      if (out.length >= MAX_GRID_SLOTS) break;
+    }
+    return out;
+  }
+  // Pre-gridChannels builds: everything was on the grid — keep the first four.
+  return channels.slice(0, MAX_GRID_SLOTS);
+}

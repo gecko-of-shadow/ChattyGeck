@@ -33,6 +33,14 @@ describe("sanitizeSettings", () => {
     expect(settings.focused).toBe("xqc");
   });
 
+  it("limits the grid to four channels and migrates older all-on-grid lists", () => {
+    const many = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    expect(sanitizeSettings({ channels: many }).gridChannels).toEqual(["alpha", "bravo", "charlie", "delta"]);
+    expect(
+      sanitizeSettings({ channels: many, gridChannels: ["echo", "alpha", "nope", "echo", "foxtrot"] }).gridChannels,
+    ).toEqual(["echo", "alpha", "foxtrot"]);
+  });
+
   it("closes to the tray unless told otherwise", () => {
     expect(sanitizeSettings({}).closeToTray).toBe(true);
     expect(sanitizeSettings({ closeToTray: false }).closeToTray).toBe(false);

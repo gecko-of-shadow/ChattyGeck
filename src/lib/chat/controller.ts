@@ -29,7 +29,7 @@ import {
 } from "@/lib/twitch/messages";
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
-import { isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { isFeatureOn, MAX_GRID_SLOTS, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
 export const ALL_CHANNELS = "*";
@@ -663,7 +663,8 @@ class ChatController {
         }
         if (!state.channels[message.channel]) continue;
         add(message.channel, message);
-        const visible = mode === "grid" || focused === message.channel;
+        const onGrid = state.settings.gridChannels.includes(message.channel);
+        const visible = (mode === "grid" && onGrid) || focused === message.channel;
         const countable = message.kind === "chat" || message.kind === "action" || message.kind === "event";
         if (!visible && countable && !message.self) {
           const c = counts.get(message.channel) ?? { unread: 0, mentions: 0 };
@@ -751,13 +752,20 @@ class ChatController {
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
+    const gridFull = get().settings.gridChannels.length >= MAX_GRID_SLOTS;
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
+      gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
     if (get().settings.rememberChatHistory) void this.restoreHistory([name]);
     this.read.join(name);
     if (this.session) void this.loadProfiles([name]);
+    if (gridFull) {
+      toast(`Following #${name}`, {
+        description: `Grid is full (${MAX_GRID_SLOTS}). It's tucked in the sidebar — Show in grid or open Focused anytime.`,
+      });
+    }
     return { ok: true, channel: name };
   }
 
@@ -779,8 +787,9 @@ class ChatController {
     this.updateSettings((s) => {
       const index = s.channels.indexOf(name);
       const channels = s.channels.filter((c) => c !== name);
+      const gridChannels = s.gridChannels.filter((c) => c !== name);
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
-      return { channels, focused: s.focused === name ? fallback : s.focused };
+      return { channels, gridChannels, focused: s.focused === name ? fallback : s.focused };
     });
   }
 
@@ -794,6 +803,44 @@ class ChatController {
       channels.splice(target, 0, name);
       return { channels };
     });
+  }
+
+  /** Reorder a box on the grid (not the full follow list). */
+  moveGridChannel(name: string, offset: number): void {
+    this.updateSettings((s) => {
+      const index = s.gridChannels.indexOf(name);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= s.gridChannels.length) return {};
+      const gridChannels = s.gridChannels.slice();
+      gridChannels.splice(index, 1);
+      gridChannels.splice(target, 0, name);
+      return { gridChannels };
+    });
+  }
+
+  /** Pin a followed channel onto the grid (max {@link MAX_GRID_SLOTS}). */
+  showInGrid(name: string): ActionResult {
+    const settings = get().settings;
+    if (!settings.channels.includes(name)) return { ok: false, error: "You're not following that channel." };
+    if (settings.gridChannels.includes(name)) {
+      this.setMode("grid");
+      return { ok: true };
+    }
+    if (settings.gridChannels.length >= MAX_GRID_SLOTS) {
+      return {
+        ok: false,
+        error: `Grid is full (${MAX_GRID_SLOTS}). Hide one from the grid first, or open this channel in Focused.`,
+      };
+    }
+    this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name] }));
+    this.setMode("grid");
+    this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
+    return { ok: true };
+  }
+
+  /** Keep following, but tuck the channel off the grid. */
+  hideFromGrid(name: string): void {
+    this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name) }));
   }
 
   /** Remembers where the user stopped reading the channel they're leaving. */
@@ -814,17 +861,21 @@ class ChatController {
 
   setMode(mode: ViewMode): void {
     if (mode === "focused") {
-      const { focused, channels } = get().settings;
-      const target = focused ?? channels[0];
+      const { focused, channels, gridChannels } = get().settings;
+      const target = focused ?? gridChannels[0] ?? channels[0];
       if (target) this.focus(target);
       else this.updateSettings({ mode });
       return;
     }
     this.markRead(get().settings.focused, null);
     this.updateSettings({ mode });
+    // Only clear unread on channels that are actually on the grid.
+    const onGrid = new Set(get().settings.gridChannels);
     set((s) => ({
       channels: Object.fromEntries(
-        Object.entries(s.channels).map(([k, c]) => [k, c.unread || c.mentions ? { ...c, unread: 0, mentions: 0 } : c]),
+        Object.entries(s.channels).map(([k, c]) =>
+          onGrid.has(k) && (c.unread || c.mentions) ? [k, { ...c, unread: 0, mentions: 0 }] : [k, c],
+        ),
       ),
     }));
   }
@@ -907,6 +958,7 @@ class ChatController {
     this.updateSettings((current) => {
       const next: Partial<Settings> = { ...source };
       delete next.channels;
+      delete next.gridChannels;
       delete next.focused;
       delete next.mode;
       delete next.version;
