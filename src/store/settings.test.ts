@@ -46,6 +46,11 @@ describe("sanitizeSettings", () => {
     expect(sanitizeSettings({ closeToTray: false }).closeToTray).toBe(false);
   });
 
+  it("confirms channel switches before typing by default", () => {
+    expect(sanitizeSettings({}).confirmChannelSwitch).toBe(true);
+    expect(sanitizeSettings({ confirmChannelSwitch: false }).confirmChannelSwitch).toBe(false);
+  });
+
   it("turns the old small/medium/large text sizes into pixels and clamps new ones", () => {
     expect(sanitizeSettings({ fontSize: "sm" }).textSize).toBe(12.5);
     expect(sanitizeSettings({ fontSize: "lg" }).textSize).toBe(15.5);

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  HISTORY_HARD_CAP,
   HISTORY_TTL_MS,
   historyBoundary,
   isHistoryBoundary,
   messagesForDisk,
   sanitizeHistory,
+  trimLiveBuffer,
 } from "./history";
 import type { ChatMessage } from "@/lib/twitch/types";
 
@@ -60,5 +62,31 @@ describe("chat history (48h)", () => {
     expect(cleaned).toHaveLength(1);
     expect(cleaned[0].text).toBe("yep");
     expect(cleaned.every((m) => !isHistoryBoundary(m))).toBe(true);
+  });
+
+  it("returns the same array when every live row is still inside the cap", () => {
+    const now = 1_700_000_000_000;
+    const messages = [base({ id: "a", ts: now - 1_000 }), base({ id: "b", ts: now })];
+    expect(trimLiveBuffer(messages, now)).toBe(messages);
+  });
+
+  it("drops only the expired prefix and keeps the array tail", () => {
+    const now = 1_700_000_000_000;
+    const messages = [
+      base({ id: "old", ts: now - HISTORY_TTL_MS - 5 }),
+      base({ id: "fresh", ts: now - 1_000 }),
+    ];
+    expect(trimLiveBuffer(messages, now).map((m) => m.id)).toEqual(["fresh"]);
+  });
+
+  it("hard-caps a buffer that is still inside the time window", () => {
+    const now = 1_700_000_000_000;
+    const messages = Array.from({ length: HISTORY_HARD_CAP + 10 }, (_, i) =>
+      base({ id: String(i), ts: now - (HISTORY_HARD_CAP + 10 - i) }),
+    );
+    const kept = trimLiveBuffer(messages, now);
+    expect(kept).toHaveLength(HISTORY_HARD_CAP);
+    expect(kept[0].id).toBe("10");
+    expect(kept.at(-1)?.id).toBe(String(HISTORY_HARD_CAP + 9));
   });
 });

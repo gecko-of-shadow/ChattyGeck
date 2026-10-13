@@ -8,6 +8,7 @@ import { THEMES } from "@/lib/themes";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
+import { liveSlice } from "@/lib/chat/window";
 import { MessageRow, type RowPrefs } from "./MessageRow";
 
 interface HoverEmote {
@@ -84,20 +85,10 @@ export function ChatLog({
   const [hover, setHover] = useState<HoverEmote | null>(null);
   const anchorFromBottom = useRef<number | null>(null);
 
-  const visible = useMemo(() => {
-    if (frozen) return frozen;
-    let keep = liveRows;
-    if (readMarker) {
-      // Keep the "new since you left" divider reachable even in a fast channel.
-      for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].id === readMarker) {
-          keep = Math.max(keep, messages.length - i + 3);
-          break;
-        }
-      }
-    }
-    return messages.length > keep ? messages.slice(-keep) : messages;
-  }, [frozen, messages, readMarker, liveRows]);
+  const visible = useMemo(
+    () => (frozen ? frozen : liveSlice(messages, liveRows, readMarker)),
+    [frozen, messages, readMarker, liveRows],
+  );
   const newer = frozen ? countNewer(frozen, messages) : 0;
 
   useEffect(() => {

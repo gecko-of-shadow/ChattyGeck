@@ -522,6 +522,7 @@ function ProblemsSection() {
 function UpdateRow() {
   const version = useChat((s) => s.appInfo?.version ?? "");
   const autoCheck = useChat((s) => s.settings.autoCheckUpdates);
+  const pendingUpdateCheck = useUi((s) => s.pendingUpdateCheck);
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [latest, setLatest] = useState<UpdateInfo | null>(null);
   const [status, setStatus] = useState<string>("");
@@ -545,6 +546,12 @@ function UpdateRow() {
       setBusy(null);
     }
   };
+
+  useEffect(() => {
+    if (!pendingUpdateCheck) return;
+    useUi.setState({ pendingUpdateCheck: false });
+    void check();
+  }, [pendingUpdateCheck]);
 
   const install = async () => {
     if (!latest) return;
@@ -719,7 +726,7 @@ export function SettingsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={(next) => useUi.setState({ settingsOpen: next })}>
-      <DialogContent className="flex max-h-[min(88vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogContent className="flex h-[min(88vh,720px)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b border-border/70 px-4 pt-4 pr-12 pb-3">
           <DialogTitle className="text-lg">Settings</DialogTitle>
           <DialogDescription>Saved automatically to this ZooChattr folder.</DialogDescription>
@@ -740,7 +747,7 @@ export function SettingsDialog() {
                     skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
                   )}
                 >
-                  <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
+                  <Mascot skin={option.id} className="size-9" anim="none" />
                   <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
                   <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
                   {skin === option.id ? (
@@ -784,8 +791,14 @@ export function SettingsDialog() {
             <ToggleRow
               id="pref-tray"
               label="Close to tray"
-              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit — you'll get a confirmation first."
+              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray for Show, Settings, Check for updates, or Quit."
               setting="closeToTray"
+            />
+            <ToggleRow
+              id="pref-confirm-channel"
+              label="Confirm channel before typing"
+              hint='Each message box stays locked until you press "Switch to #channel", so you don’t send in the wrong room when several chats are open.'
+              setting="confirmChannelSwitch"
             />
             <ToggleRow
               id="pref-startup"

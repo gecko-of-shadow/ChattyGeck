@@ -52,6 +52,11 @@ export interface Settings {
   rememberChatHistory: boolean;
   /** Ask GitHub for a newer portable build when ZooChattr starts (and every few hours). */
   autoCheckUpdates: boolean;
+  /**
+   * Before typing in a channel's box, require clicking "Switch to #channel".
+   * Stops accidental sends when several chats are open.
+   */
+  confirmChannelSwitch: boolean;
   /** Overrides the Client ID baked in at build time. */
   clientId: string;
 
@@ -179,6 +184,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startOnLogin: false,
   rememberChatHistory: true,
   autoCheckUpdates: true,
+  confirmChannelSwitch: true,
   clientId: "",
   emoteProviders: { "7tv": true, bttv: true, ffz: true },
   emoteSize: 1,
@@ -278,6 +284,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
     rememberChatHistory: bool(input.rememberChatHistory, DEFAULT_SETTINGS.rememberChatHistory),
     autoCheckUpdates: bool(input.autoCheckUpdates, DEFAULT_SETTINGS.autoCheckUpdates),
+    confirmChannelSwitch: bool(input.confirmChannelSwitch, DEFAULT_SETTINGS.confirmChannelSwitch),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",
     emoteProviders: {
       "7tv": bool(providers["7tv"], true),

@@ -5,12 +5,13 @@ mod update;
 
 use std::sync::{
     Mutex,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
+use std::time::Duration;
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Emitter, Manager, State, WebviewWindow, WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
@@ -23,6 +24,9 @@ struct AppState {
     save_lock: Mutex<()>,
     /// Closing the window hides it in the tray (chats stay connected) instead of quitting.
     close_to_tray: AtomicBool,
+    /// Bumped on every move or resize. One sleeper writes window.json after the window settles.
+    window_save_gen: AtomicU64,
+    window_save_scheduled: AtomicBool,
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -154,6 +158,78 @@ fn request_quit_confirm(app: &AppHandle) {
     }
 }
 
+fn request_update_check(app: &AppHandle) {
+    show_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("update-requested", ());
+    }
+}
+
+fn persist_main_window(window: &WebviewWindow) {
+    if window.label() != "main" {
+        return;
+    }
+    let app = window.app_handle();
+    let state = app.state::<AppState>();
+    let maximized = window.is_maximized().unwrap_or(false);
+    let mut saved = storage::load_window_state(&state.data).unwrap_or(storage::WindowState {
+        x: 80,
+        y: 60,
+        width: 1180,
+        height: 760,
+        maximized: false,
+    });
+    saved.maximized = maximized;
+    if !maximized {
+        if let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) {
+            // Store logical pixels so restore matches WebviewWindowBuilder::position / inner_size.
+            let scale = window.scale_factor().unwrap_or(1.0).max(0.5);
+            saved.x = (f64::from(pos.x) / scale).round() as i32;
+            saved.y = (f64::from(pos.y) / scale).round() as i32;
+            saved.width = ((f64::from(size.width) / scale).round() as u32).max(360);
+            saved.height = ((f64::from(size.height) / scale).round() as u32).max(420);
+        }
+    }
+    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _ = storage::save_window_state(&state.data, &saved);
+}
+
+/// Coalesce drag and resize events. Writing on every pixel stalls the window and hammers the disk.
+fn schedule_window_save(window: &WebviewWindow) {
+    if window.label() != "main" {
+        return;
+    }
+    let app = window.app_handle().clone();
+    let state = app.state::<AppState>();
+    state.window_save_gen.fetch_add(1, Ordering::Relaxed);
+    if state.window_save_scheduled.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let seen = state.window_save_gen.load(Ordering::Relaxed);
+    std::thread::spawn(move || {
+        let mut seen = seen;
+        loop {
+            std::thread::sleep(Duration::from_millis(400));
+            let state = app.state::<AppState>();
+            let gen = state.window_save_gen.load(Ordering::Relaxed);
+            if gen != seen {
+                seen = gen;
+                continue;
+            }
+            state.window_save_scheduled.store(false, Ordering::Release);
+            if state.window_save_gen.load(Ordering::Relaxed) != gen {
+                state.window_save_scheduled.store(true, Ordering::Release);
+                seen = state.window_save_gen.load(Ordering::Relaxed);
+                continue;
+            }
+            if let Some(main) = app.get_webview_window("main") {
+                persist_main_window(&main);
+            }
+            return;
+        }
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -173,6 +249,8 @@ pub fn run() {
                 data,
                 save_lock: Mutex::new(()),
                 close_to_tray: AtomicBool::new(true),
+                window_save_gen: AtomicU64::new(0),
+                window_save_scheduled: AtomicBool::new(false),
             });
 
             let window_config = app
@@ -183,17 +261,29 @@ pub fn run() {
                 .find(|window| window.label == "main")
                 .cloned()
                 .ok_or("tauri.conf.json is missing the main window")?;
+            let remembered = storage::load_window_state(
+                &app.state::<AppState>().data,
+            );
             let mut builder = WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
             if let Some(dir) = webview_dir {
                 // Keeps the webview cache inside the portable folder instead of %LOCALAPPDATA%.
                 builder = builder.data_directory(dir);
             }
-            builder.build()?;
+            if let Some(ref place) = remembered {
+                builder = builder
+                    .inner_size(f64::from(place.width), f64::from(place.height))
+                    .position(f64::from(place.x), f64::from(place.y));
+            }
+            let main = builder.build()?;
+            if remembered.as_ref().is_some_and(|place| place.maximized) {
+                let _ = main.maximize();
+            }
 
             let show = MenuItem::with_id(app, "show", "Show ZooChattr", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
+            let update = MenuItem::with_id(app, "update", "Check for updates…", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit ZooChattr", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &update, &quit])?;
             let mut tray = TrayIconBuilder::with_id(TRAY_ID)
                 .tooltip("ZooChattr")
                 .menu(&menu)
@@ -206,6 +296,7 @@ pub fn run() {
                             let _ = window.emit("settings-requested", ());
                         }
                     }
+                    "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
                     _ => {}
                 })
@@ -226,12 +317,23 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let state = window.app_handle().state::<AppState>();
-                if window.label() == "main" && state.close_to_tray.load(Ordering::Relaxed) {
-                    api.prevent_close();
-                    let _ = window.hide();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    if let Some(main) = window.app_handle().get_webview_window(window.label()) {
+                        persist_main_window(&main);
+                    }
+                    let state = window.app_handle().state::<AppState>();
+                    if window.label() == "main" && state.close_to_tray.load(Ordering::Relaxed) {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
                 }
+                WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
+                    if let Some(main) = window.app_handle().get_webview_window(window.label()) {
+                        schedule_window_save(&main);
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

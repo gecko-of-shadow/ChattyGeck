@@ -30,6 +30,7 @@ import {
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { isFeatureOn, MAX_GRID_SLOTS, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { useUi } from "@/store/ui";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
 export const ALL_CHANNELS = "*";
@@ -791,6 +792,7 @@ class ChatController {
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
       return { channels, gridChannels, focused: s.focused === name ? fallback : s.focused };
     });
+    if (useUi.getState().armedComposer === name) useUi.setState({ armedComposer: null });
   }
 
   moveChannel(name: string, offset: number): void {

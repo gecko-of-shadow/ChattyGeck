@@ -124,7 +124,17 @@ export function messagesForDisk(messages: ChatMessage[], now = Date.now()): Chat
   );
 }
 
-/** Trim the in-memory buffer the same way (48h + hard cap). */
+/**
+ * Drop a leading run of expired rows, then the hard cap.
+ * Messages are newest-last. Returns the same array when nothing has to go,
+ * so a busy channel does not copy tens of thousands of rows on every flush.
+ */
 export function trimLiveBuffer(messages: ChatMessage[], now = Date.now()): ChatMessage[] {
-  return trimByAgeAndCap(messages, now);
+  const cutoff = now - HISTORY_TTL_MS;
+  let start = 0;
+  const count = messages.length;
+  while (start < count && messages[start].ts < cutoff) start++;
+  const over = count - start - HISTORY_HARD_CAP;
+  if (over > 0) start += over;
+  return start === 0 ? messages : messages.slice(start);
 }

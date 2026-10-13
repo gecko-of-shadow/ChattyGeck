@@ -37,6 +37,13 @@ const addChannel = async (name) => {
 };
 const mockPost = (p) => fetch(`${mock}${p}`, { method: "POST" });
 const rowsWith = (text) => page.locator(".chat-row", { hasText: text });
+/** Confirm-before-typing hides the box until this click. No-op when that setting is off. */
+const messageBox = async (scope, channel) => {
+  const root = scope ?? page;
+  const unlock = root.getByRole("button", { name: new RegExp(`Switch to #${channel} to type`, "i") });
+  if ((await unlock.count()) && (await unlock.first().isVisible())) await unlock.first().click();
+  return root.getByLabel(new RegExp(`^Message #${channel}$`, "i"));
+};
 
 await page.goto(url);
 await page.evaluate(() => {
@@ -99,7 +106,7 @@ await step("device-code login", async () => {
 });
 
 await step("send a message; Twitch's echo replaces the local copy (with emote)", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("hello from ZooChattr Kappa");
   await input.press("Enter");
   await rowsWith("hello from ZooChattr").locator('img[alt="Kappa"]').first().waitFor({ timeout: 8_000 });
@@ -110,14 +117,14 @@ await step("send a message; Twitch's echo replaces the local copy (with emote)",
 });
 
 await step("failed sends show Twitch's reason", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("please fail-me");
   await input.press("Enter");
   await page.getByText("Not sent: Your message was not sent because you are sending messages too quickly.").waitFor({ timeout: 8_000 });
 });
 
 await step("unsupported slash commands are explained", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("/ban someone");
   await input.press("Enter");
   await page.getByText("isn't available here").waitFor({ timeout: 3_000 });
@@ -125,7 +132,7 @@ await step("unsupported slash commands are explained", async () => {
 });
 
 await step("/me sends an action", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("/me licks its eyeball");
   await input.press("Enter");
   await rowsWith("licks its eyeball").first().waitFor({ timeout: 8_000 });
@@ -142,7 +149,7 @@ await step("7TV, BTTV and FFZ emotes render in chat", async () => {
 });
 
 await step("Tab finishes emote names and cycles the matches", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("hi geck");
   await input.press("Tab");
   if ((await input.inputValue()) !== "hi geckoPog ") throw new Error(`after Tab: "${await input.inputValue()}"`);
@@ -162,7 +169,7 @@ await step("Tab finishes emote names and cycles the matches", async () => {
 });
 
 await step("emote menu inserts emotes and remembers favourites", async () => {
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await page.getByTestId("emote-picker-button").first().click();
   const picker = page.getByTestId("emote-picker");
   await picker.waitFor({ timeout: 3_000 });
@@ -322,7 +329,7 @@ await step("scrolling up pauses the feed; the toe-pad button sticks back to live
 await step("grid boxes each have their own message input", async () => {
   await page.getByRole("radio", { name: /grid/i }).click();
   const box = page.getByRole("region", { name: "#lizardlounge chat" });
-  const input = box.getByLabel("Message #lizardlounge");
+  const input = await messageBox(box, "lizardlounge");
   await input.fill("hello from the lizardlounge box");
   await input.press("Enter");
   await box.locator(".chat-row", { hasText: "hello from the lizardlounge box" }).first().waitFor({ timeout: 8_000 });
@@ -354,7 +361,7 @@ await step("refreshes an expired token and keeps chatting", async () => {
   await mockPost("/__drop");
   await page.getByText("Reconnected.").nth(1).waitFor({ timeout: 25_000 });
   await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
-  const input = page.getByLabel("Message #geckotown");
+  const input = await messageBox(page, "geckotown");
   await input.fill("still here after refresh");
   await input.press("Enter");
   await rowsWith("still here after refresh").first().waitFor({ timeout: 8_000 });

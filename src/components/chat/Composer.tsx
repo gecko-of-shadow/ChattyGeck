@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
+import { ArrowRightLeft, CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { useUi } from "@/store/ui";
+import { armComposer, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
 
@@ -84,7 +84,14 @@ function CompletionBar({
   const still = useChat((s) => s.settings.emoteAnimation === "never");
   const activeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    // Scroll only this list. scrollIntoView would also scroll the chat log and blur the box.
+    const button = activeRef.current;
+    const list = button?.parentElement;
+    if (!button || !list) return;
+    const top = button.offsetTop;
+    const bottom = top + button.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
   }, [completion.index]);
   return (
     <div
@@ -134,9 +141,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const auth = useChat((s) => s.auth);
   const writeStatus = useChat((s) => s.write?.status);
   const theme = useChat((s) => THEMES[s.settings.skin]);
+  const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
+  const displayName = useChat((s) => (channel ? (s.channels[channel]?.displayName ?? channel) : null));
   const tabComplete = useChat((s) => isFeatureOn(s.settings, channel, "tabComplete"));
   const emotePicker = useChat((s) => isFeatureOn(s.settings, channel, "emotePicker"));
   const insert = useUi((s) => s.insert);
+  const armed = useUi((s) => s.armedComposer);
   const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -144,8 +154,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const listId = useId();
+  const needsAck = !!channel && confirmSwitch && armed !== channel;
 
   useEffect(() => {
     if (!insert || insert.channel !== channel) return;
@@ -161,6 +173,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     setCompletion(null);
   }, [channel]);
 
+  useEffect(() => {
+    if (!needsAck && channel && armed === channel) {
+      inputRef.current?.focus();
+    }
+  }, [needsAck, armed, channel]);
+
   // Programmatic edits (Tab, picker) put the caret right after what they inserted.
   useLayoutEffect(() => {
     const caret = pendingCaret.current;
@@ -175,8 +193,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   const connected = writeStatus === "connected";
   const length = Array.from(text).length;
+  const label = displayName ?? channel;
 
   const submit = () => {
+    if (needsAck) return;
     if (!text.trim()) return;
     const result = chat.send(channel, text);
     if (result.ok) {
@@ -286,8 +306,38 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     }
   };
 
+  if (needsAck) {
+    return (
+      <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
+        <Button
+          type="button"
+          variant="default"
+          size={compact ? "sm" : "default"}
+          className={cn(
+            "w-full justify-center gap-2 font-semibold",
+            compact ? "h-8 text-[13px]" : "h-10 text-sm",
+          )}
+          onClick={() => armComposer(channel)}
+          aria-label={`Switch to #${label} to type`}
+          data-testid={`switch-composer-${channel}`}
+        >
+          <ArrowRightLeft className="size-3.5 shrink-0" />
+          <span className="truncate">Switch to #{label}</span>
+        </Button>
+        {compact ? null : (
+          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+            Confirm so you don’t send in the wrong chat.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
+    <div
+      ref={rootRef}
+      className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}
+    >
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-destructive", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
@@ -323,9 +373,18 @@ export function Composer({ channel, compact = false }: { channel: string | null;
               if (error) setError(null);
             }}
             onKeyDown={onKeyDown}
-            onBlur={() => setCompletion(null)}
-            placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
-            aria-label={`Message #${channel}`}
+            onBlur={(event) => {
+              const next = event.relatedTarget;
+              if (next instanceof Node && rootRef.current?.contains(next)) return;
+              // A key press can blur the box for a moment. Close only if focus actually left.
+              window.setTimeout(() => {
+                const active = document.activeElement;
+                if (active && rootRef.current?.contains(active)) return;
+                setCompletion(null);
+              }, 0);
+            }}
+            placeholder={`${theme.sendVerb} to #${label} as ${auth.login}…`}
+            aria-label={`Message #${label}`}
             aria-autocomplete={tabComplete ? "list" : undefined}
             aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
             aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
