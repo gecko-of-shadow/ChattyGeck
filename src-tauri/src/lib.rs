@@ -2,6 +2,8 @@ mod secrets;
 mod startup;
 mod storage;
 mod update;
+#[cfg(windows)]
+mod webview_menu;
 
 use std::sync::{
     Mutex,
@@ -272,6 +274,8 @@ fn open_settings_window(app: &AppHandle) -> Result<(), String> {
             return Err(format!("Couldn't open Settings: {err}"));
         }
     };
+    #[cfg(windows)]
+    webview_menu::tame_webview_menu(&settings);
 
     let app_handle = app.clone();
     settings.on_window_event(move |event| {
@@ -424,6 +428,8 @@ pub fn run() {
                 builder = builder.data_directory(dir);
             }
             let window = builder.build()?;
+            #[cfg(windows)]
+            webview_menu::tame_webview_menu(&window);
             if let Some(geom) = &saved_geom {
                 apply_saved_geom(&window, geom);
             }
