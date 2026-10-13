@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
+  clampMentionCooldown,
   clampTextSize,
   cleanChannelOverrides,
   isFeatureOn,
@@ -49,6 +50,17 @@ describe("sanitizeSettings", () => {
   it("confirms channel switches before typing by default", () => {
     expect(sanitizeSettings({}).confirmChannelSwitch).toBe(true);
     expect(sanitizeSettings({ confirmChannelSwitch: false }).confirmChannelSwitch).toBe(false);
+  });
+
+  it("keeps mention sound off until asked, and clamps the cooldown", () => {
+    expect(sanitizeSettings({}).mentionSound).toBe(false);
+    expect(sanitizeSettings({}).mentionSoundCooldown).toBe(10);
+    const on = sanitizeSettings({ mentionSound: true, mentionSoundCooldown: 2.2 });
+    expect(on.mentionSound).toBe(true);
+    expect(on.mentionSoundCooldown).toBe(2);
+    expect(clampMentionCooldown(0)).toBe(1);
+    expect(clampMentionCooldown(500)).toBe(120);
+    expect(clampMentionCooldown("nope")).toBe(10);
   });
 
   it("turns the old small/medium/large text sizes into pixels and clamps new ones", () => {

@@ -242,7 +242,14 @@ const httpServer = http.createServer(async (req, res) => {
       const text = url.searchParams.get("text") ?? "";
       const who = chatters[Number(url.searchParams.get("who") ?? 0) % chatters.length];
       const id = `mock-say-${++msgCounter}`;
-      for (const client of clients) if (client.channels.has(channel)) client.send(privmsgLine(channel, who, text, { id }));
+      const extra = { id };
+      const reply = url.searchParams.get("reply");
+      if (reply) {
+        extra["reply-parent-user-login"] = reply;
+        extra["reply-parent-display-name"] = reply;
+        extra["reply-parent-msg-body"] = url.searchParams.get("replyText") ?? "earlier";
+      }
+      for (const client of clients) if (client.channels.has(channel)) client.send(privmsgLine(channel, who, text, extra));
       return json(res, 200, { id });
     }
     case "POST /__delete": {

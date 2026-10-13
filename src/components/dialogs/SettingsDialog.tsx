@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { chat } from "@/lib/chat/controller";
+import { playMentionChime } from "@/lib/notify";
 import { config } from "@/lib/config";
 import { problemLog, type EmoteProblem } from "@/lib/emotes/problems";
 import { emoteRegistry } from "@/lib/emotes/registry";
@@ -35,9 +36,12 @@ import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import {
   CHANNEL_FEATURES,
   DEFAULT_SETTINGS,
+  MENTION_COOLDOWN_MAX,
+  MENTION_COOLDOWN_MIN,
   TEXT_SIZE_MAX,
   TEXT_SIZE_MIN,
   TEXT_SIZE_PRESETS,
+  clampMentionCooldown,
   clampTextSize,
   makeBackup,
   parseWordList,
@@ -107,6 +111,61 @@ function Choice<T extends string | number>({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function MentionSoundRow() {
+  const enabled = useChat((s) => s.settings.mentionSound);
+  const cooldown = useChat((s) => s.settings.mentionSoundCooldown);
+  const animal = useChat((s) => THEMES[s.settings.skin].animal);
+  const [draft, setDraft] = useState(String(cooldown));
+  useEffect(() => setDraft(String(cooldown)), [cooldown]);
+  const commit = () => {
+    const next = clampMentionCooldown(draft);
+    setDraft(String(next));
+    if (next !== cooldown) chat.updateSettings({ mentionSoundCooldown: next });
+  };
+  return (
+    <div className="space-y-2">
+      <ToggleRow
+        id="pref-mention-sound"
+        label="Mention sound"
+        hint="A short chime when your name, a reply to you, or a highlight word shows up in any open chat."
+        setting="mentionSound"
+      />
+      {enabled ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="pref-mention-cooldown" className="text-sm font-normal">
+            Cooldown
+          </Label>
+          <div className="flex items-center gap-1.5">
+            <Input
+              id="pref-mention-cooldown"
+              type="number"
+              inputMode="numeric"
+              min={MENTION_COOLDOWN_MIN}
+              max={MENTION_COOLDOWN_MAX}
+              step={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onBlur={commit}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commit();
+                }
+              }}
+              aria-label="Mention sound cooldown in seconds"
+              className="h-7 w-16 text-xs tabular-nums"
+            />
+            <span className="text-xs text-muted-foreground">sec</span>
+            <Button type="button" variant="outline" size="sm" aria-label="Play mention sound" onClick={() => playMentionChime(animal)}>
+              Play
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -755,6 +814,7 @@ export function SettingsDialog() {
                 placeholder={"giveaway\nmy_nickname"}
                 setting="highlightWords"
               />
+              <MentionSoundRow />
             </div>
           </Section>
 

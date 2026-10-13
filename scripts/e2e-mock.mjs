@@ -208,6 +208,33 @@ await step("highlight words count as mentions", async () => {
   await page.locator('.chat-row[data-mention="true"]', { hasText: "GIVEAWAY tonight" }).waitFor({ timeout: 8_000 });
 });
 
+await step("mention sound chimes once per cooldown for any open chat", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.locator('label[for="pref-mention-sound"]').click();
+  const cooldown = page.getByLabel("Mention sound cooldown in seconds");
+  await cooldown.fill("1");
+  await cooldown.press("Enter");
+  await page.getByRole("button", { name: "Play mention sound" }).click();
+  await page.keyboard.press("Escape");
+  const chimes = () => page.evaluate(() => window.__zoochattrStats().mentionChimes);
+  const afterPreview = await chimes();
+  if (afterPreview < 1) throw new Error("Play did not start a chime");
+  await mockPost("/__say?channel=lizardlounge&text=" + encodeURIComponent("just chatting"));
+  await page.waitForTimeout(400);
+  if ((await chimes()) !== afterPreview) throw new Error("an ordinary line chimed");
+  // Focused on #geckotown; #lizardlounge is still an open chat in the sidebar.
+  await mockPost("/__say?channel=lizardlounge&text=" + encodeURIComponent("hey geckotester"));
+  await page.waitForFunction((n) => window.__zoochattrStats().mentionChimes > n, afterPreview, { timeout: 8_000 });
+  await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("geckotester again"));
+  await page.waitForTimeout(400);
+  const held = await chimes();
+  if (held !== afterPreview + 1) throw new Error(`cooldown did not hold: ${held} after preview ${afterPreview}`);
+  await page.waitForTimeout(1_200);
+  await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("nice take") + "&reply=geckotester");
+  await page.locator('.chat-row[data-mention="true"]', { hasText: "nice take" }).waitFor({ timeout: 8_000 });
+  await page.waitForFunction((n) => window.__zoochattrStats().mentionChimes > n, held, { timeout: 8_000 });
+});
+
 await step("text size, emote size and sources apply straight away", async () => {
   await page.getByRole("button", { name: "Settings" }).first().click();
   await page.getByRole("radio", { name: "Huge" }).click();

@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { config } from "@/lib/config";
 import { historyBoundary, messagesForDisk, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
+import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify";
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
@@ -18,7 +19,7 @@ import {
 } from "@/lib/twitch/helix";
 import {
   localId,
-  matchesHighlight,
+  flagMentions,
   noticeToChat,
   normalizeChannelName,
   parseRoomState,
@@ -30,6 +31,7 @@ import {
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { isFeatureOn, MAX_GRID_SLOTS, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { THEMES } from "@/lib/themes";
 import { useUi } from "@/store/ui";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
@@ -99,6 +101,8 @@ class ChatController {
   private dropAnnounced = false;
   private booted = false;
   private lastAttention = 0;
+  /** When the last live mention chime started. 0 means none yet. Preview does not set this. */
+  private lastMentionSoundAt = 0;
   private historyTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private historyDirty = new Set<string>();
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -437,12 +441,11 @@ class ChatController {
     }
   }
 
-  /** The user's extra highlight words count like a mention (never for their own messages). */
+  /** Replies to you and extra highlight words count like a name mention (never your own messages). */
   private withHighlight(message: ChatMessage): ChatMessage {
-    if (message.self || message.mention) return message;
     const settings = get().settings;
-    if (!isFeatureOn(settings, message.channel, "highlightWords")) return message;
-    return matchesHighlight(message.text, settings.highlightWords) ? { ...message, mention: true } : message;
+    const words = isFeatureOn(settings, message.channel, "highlightWords") ? settings.highlightWords : null;
+    return flagMentions(message, this.session?.login, words);
   }
 
   private onWriteMessage(message: IrcMessage): void {
@@ -646,6 +649,7 @@ class ChatController {
       this.lastAttention = Date.now();
       void platform.requestAttention().catch(() => undefined);
     }
+    this.maybeMentionSound(batch);
 
     set((state) => {
       const { mode, focused } = state.settings;
@@ -690,6 +694,24 @@ class ChatController {
       }
       return { channels };
     });
+  }
+
+  /**
+   * One chime per cooldown when a live mention lands in any joined chat.
+   * Saved history never comes through here, so reopening a log stays quiet.
+   */
+  private maybeMentionSound(batch: ChatMessage[]): void {
+    const settings = get().settings;
+    if (!settings.mentionSound) return;
+    const open = new Set(Object.keys(get().channels));
+    const mentioned = batch.some(
+      (m) => m.mention && !m.self && open.has(m.channel) && (m.kind === "chat" || m.kind === "action" || m.kind === "event"),
+    );
+    if (!mentioned) return;
+    const now = Date.now();
+    if (!mentionDue(now, this.lastMentionSoundAt, settings.mentionSoundCooldown * 1000)) return;
+    this.lastMentionSoundAt = now;
+    playMentionChime(THEMES[settings.skin].animal);
   }
 
   /** With history on: keep ~48h. Otherwise keep the short live buffer. */
@@ -1179,6 +1201,7 @@ if (typeof window !== "undefined") {
         emotes: emoteRegistry.channelEmotes(c.login).length,
       })),
       received: chat.received,
+      mentionChimes: mentionChimesPlayed(),
       rows: document.querySelectorAll(".chat-row").length,
       emoteImages: document.querySelectorAll("img.chat-emote").length,
     };

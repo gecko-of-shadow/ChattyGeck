@@ -63,6 +63,27 @@ export function mentionsUser(text: string, login: string | undefined): boolean {
 
 const highlightPatterns = new WeakMap<readonly string[], RegExp>();
 
+/**
+ * Name matches are already on the message. A reply to you, or a highlight word when that
+ * list is passed, counts the same way. Own messages never do. Pass null when highlight
+ * words are switched off for this channel.
+ */
+export function flagMentions(
+  message: ChatMessage,
+  selfLogin: string | undefined,
+  highlightWords: readonly string[] | null,
+): ChatMessage {
+  if (message.self || message.mention) return message;
+  const reply = message.reply?.login;
+  if (selfLogin && reply && reply.toLowerCase() === selfLogin.toLowerCase()) {
+    return { ...message, mention: true };
+  }
+  if (highlightWords && matchesHighlight(message.text, highlightWords)) {
+    return { ...message, mention: true };
+  }
+  return message;
+}
+
 /** True when any of the user's extra highlight words appears as a whole word (case-insensitive). */
 export function matchesHighlight(text: string, words: readonly string[]): boolean {
   if (!words.length) return false;

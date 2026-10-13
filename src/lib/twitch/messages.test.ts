@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseIrcLine } from "@/lib/irc/parser";
+import type { ChatMessage } from "./types";
 import {
   matchesHighlight,
+  flagMentions,
   mentionsUser,
   normalizeChannelName,
   parseBadges,
@@ -122,6 +124,31 @@ describe("mentionsUser", () => {
   it("escapes regex characters in logins", () => {
     expect(mentionsUser("hello a_b", "a_b")).toBe(true);
     expect(mentionsUser("anything", undefined)).toBe(false);
+  });
+});
+
+describe("flagMentions", () => {
+  const base = (over: Partial<ChatMessage> = {}): ChatMessage => ({
+    id: "1",
+    channel: "gecko",
+    kind: "chat",
+    ts: 1,
+    badges: [],
+    text: "hello",
+    twitchEmotes: [],
+    ...over,
+  });
+
+  it("counts a reply to you, and highlight words when that list is on", () => {
+    expect(flagMentions(base({ reply: { login: "Me", displayName: "Me", text: "yo" } }), "me", null).mention).toBe(true);
+    expect(flagMentions(base({ text: "big GIVEAWAY" }), "me", ["giveaway"]).mention).toBe(true);
+  });
+
+  it("leaves other replies, own messages, and switched-off highlight words alone", () => {
+    expect(flagMentions(base({ reply: { login: "bob", displayName: "Bob", text: "yo" } }), "me", null).mention).toBeUndefined();
+    expect(flagMentions(base({ self: true, reply: { login: "me", displayName: "Me", text: "yo" } }), "me", ["hello"]).mention).toBeUndefined();
+    expect(flagMentions(base({ text: "giveaway" }), "me", null).mention).toBeUndefined();
+    expect(flagMentions(base({ mention: true }), "me", null).mention).toBe(true);
   });
 });
 

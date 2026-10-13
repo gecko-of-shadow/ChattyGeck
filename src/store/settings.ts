@@ -16,6 +16,9 @@ export const MAX_GRID_SLOTS = 4;
 
 export const TEXT_SIZE_MIN = 10;
 export const TEXT_SIZE_MAX = 40;
+export const MENTION_COOLDOWN_MIN = 1;
+export const MENTION_COOLDOWN_MAX = 120;
+export const MENTION_COOLDOWN_DEFAULT = 10;
 export const TEXT_SIZE_PRESETS: { label: string; px: number }[] = [
   { label: "Small", px: 12.5 },
   { label: "Medium", px: 13.5 },
@@ -86,6 +89,13 @@ export interface Settings {
   // ---- reading ----
   /** Besides your own name, these words make a message stand out. */
   highlightWords: string[];
+  /**
+   * Chime when your name, a reply to you, or a highlight word shows up in any open chat.
+   * Off until you turn it on.
+   */
+  mentionSound: boolean;
+  /** Seconds to wait before another mention chime. A burst in one moment still chimes once. */
+  mentionSoundCooldown: number;
   /** Keep deleted messages readable (faded and crossed out) instead of hiding what they said. */
   showDeleted: boolean;
 
@@ -199,6 +209,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pickerFolded: [],
   pickerTab: "all",
   highlightWords: [],
+  mentionSound: false,
+  mentionSoundCooldown: MENTION_COOLDOWN_DEFAULT,
   showDeleted: true,
   channelOverrides: {},
 };
@@ -240,6 +252,13 @@ export function clampTextSize(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_SETTINGS.textSize;
   return Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, Math.round(n * 2) / 2));
+}
+
+/** Whole seconds between mention chimes. Junk falls back to the default; the rest is clamped. */
+export function clampMentionCooldown(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return MENTION_COOLDOWN_DEFAULT;
+  return Math.min(MENTION_COOLDOWN_MAX, Math.max(MENTION_COOLDOWN_MIN, Math.round(n)));
 }
 
 /** Accepts whatever was on disk (including older versions) and returns a valid Settings object. */
@@ -303,6 +322,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     pickerFolded: cleanWordList(input.pickerFolded),
     pickerTab: pick(input.pickerTab, ["fav", "channel", "all"] as const, DEFAULT_SETTINGS.pickerTab),
     highlightWords: cleanWordList(input.highlightWords),
+    mentionSound: bool(input.mentionSound, DEFAULT_SETTINGS.mentionSound),
+    mentionSoundCooldown: clampMentionCooldown(input.mentionSoundCooldown),
     showDeleted: bool(input.showDeleted, DEFAULT_SETTINGS.showDeleted),
     channelOverrides: cleanChannelOverrides(input.channelOverrides),
   };
