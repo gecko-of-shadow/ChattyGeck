@@ -6,6 +6,24 @@
   "permissions": [
     "core:default",
     "core:window:allow-request-user-attention",
-    "opener:default"
+    "opener:default",
+    "allow-app-info",
+    "allow-settings-load",
+    "allow-settings-save",
+    "allow-chat-history-load",
+    "allow-chat-history-save",
+    "allow-chat-history-clear",
+    "allow-session-load",
+    "allow-session-save",
+    "allow-session-clear",
+    "allow-auth-display",
+    "allow-set-close-to-tray",
+    "allow-set-tray-status",
+    "allow-quit-app",
+    "allow-get-launch-at-login",
+    "allow-set-launch-at-login",
+    "allow-check-for-update",
+    "allow-apply-update",
+    "allow-open-settings-window-cmd"
   ]
 }

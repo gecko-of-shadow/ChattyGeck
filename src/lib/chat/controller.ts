@@ -193,10 +193,11 @@ class ChatController {
     this.booted = true;
     this.settingsUiOnly = true;
 
-    const [rawSettings, appInfo, stored] = await Promise.all([
+    const [rawSettings, appInfo, display] = await Promise.all([
       platform.loadSettings().catch(() => null),
       platform.getAppInfo().catch(() => null),
-      platform.loadSession().catch(() => null),
+      // Login name only — never pull tokens into the Settings webview.
+      platform.loadAuthDisplay().catch(() => null),
     ]);
     const settings = sanitizeSettings(rawSettings);
     emoteRegistry.setPrefs(emotePrefsFrom(settings));
@@ -205,11 +206,11 @@ class ChatController {
       appInfo,
       channels: {},
       ready: true,
-      auth: stored?.accessToken && stored.login
-        ? { status: "logged_in", login: stored.login, userId: stored.userId, remembered: true }
+      auth: display?.login
+        ? { status: "logged_in", login: display.login, userId: display.userId, remembered: display.remembered }
         : { status: "anonymous" },
     });
-    this.session = stored?.accessToken && stored.login ? stored : null;
+    this.session = null;
   }
 
   /** Main window: reload preferences (and join any channels Settings added) after the popout saves. */
@@ -411,18 +412,18 @@ class ChatController {
 
   async logout(reason?: string): Promise<void> {
     const session = this.session;
-    if (!session) return;
-    this.setSession(null);
     if (this.settingsUiOnly) {
+      // Settings never holds tokens — clear the keyring and tell main to drop its session.
+      if (get().auth.status !== "logged_in" && !session) return;
+      this.setSession(null);
       await platform.clearSession().catch(() => undefined);
       void this.broadcastSessionChanged();
       if (reason) toast.warning(reason);
-      else {
-        void revokeToken(session.clientId, session.accessToken);
-        toast("Logged out", { description: "Still reading chat anonymously." });
-      }
+      else toast("Logged out", { description: "Still reading chat anonymously." });
       return;
     }
+    if (!session) return;
+    this.setSession(null);
     this.stopWrite();
     for (const pending of this.pendingSends) clearTimeout(pending.timer);
     this.pendingSends = [];

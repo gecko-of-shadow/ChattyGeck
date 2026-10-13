@@ -109,6 +109,42 @@ fn session_clear() -> Result<(), String> {
     secrets::clear()
 }
 
+/// Login name only — for the Settings popout. Never returns tokens.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuthDisplay {
+    login: String,
+    user_id: String,
+    remembered: bool,
+}
+
+#[tauri::command]
+fn auth_display() -> Result<Option<AuthDisplay>, String> {
+    let Some(raw) = secrets::load()? else {
+        return Ok(None);
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|err| format!("Couldn't read saved login: {err}"))?;
+    let login = value
+        .get("login")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let user_id = value
+        .get("userId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if login.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(AuthDisplay {
+        login,
+        user_id,
+        remembered: true,
+    }))
+}
+
 #[tauri::command]
 fn set_close_to_tray(state: State<'_, AppState>, enabled: bool) {
     state.close_to_tray.store(enabled, Ordering::Relaxed);
@@ -466,6 +502,7 @@ pub fn run() {
             session_load,
             session_save,
             session_clear,
+            auth_display,
             set_close_to_tray,
             set_tray_status,
             quit_app,

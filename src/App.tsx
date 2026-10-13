@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { PanelLeftOpen, X } from "lucide-react";
+import { toast } from "sonner";
 import { Composer, LoginPrompt } from "@/components/chat/Composer";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
@@ -13,6 +14,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { setTrayStatus } from "@/lib/platform";
 import { THEMES } from "@/lib/themes";
+import { applyUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
@@ -110,6 +112,18 @@ export default function App() {
       unlistens.push(
         await listen("session-changed", () => {
           void chat.pullSessionFromDisk();
+        }),
+      );
+      // Settings Install button — apply_update is main-only.
+      unlistens.push(
+        await listen<{ downloadUrl?: string }>("install-update-requested", (event) => {
+          const downloadUrl = event.payload?.downloadUrl;
+          if (!downloadUrl) return;
+          void applyUpdate(downloadUrl).catch((err) => {
+            toast.error("Couldn't install the update", {
+              description: err instanceof Error ? err.message : String(err),
+            });
+          });
         }),
       );
       // Tray "Check for updates…" — toast only; never opens Settings.

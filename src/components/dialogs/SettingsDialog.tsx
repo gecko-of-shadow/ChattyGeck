@@ -598,6 +598,16 @@ function UpdateRow() {
     setBusy("install");
     setStatus("Downloading update… ZooChattr will restart. Your channels stay in ZooChattr-data.");
     try {
+      // Settings webview cannot call apply_update — ask main to install.
+      if (isTauri) {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        if (getCurrentWindow().label === "settings") {
+          const { emit } = await import("@tauri-apps/api/event");
+          await emit("install-update-requested", { downloadUrl: latest.downloadUrl });
+          setStatus("Handing install to the main window… ZooChattr will restart.");
+          return;
+        }
+      }
       await applyUpdate(latest.downloadUrl);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Couldn't install the update.");

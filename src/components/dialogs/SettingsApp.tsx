@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
@@ -44,23 +42,10 @@ export function SettingsApp() {
   return (
     <>
       <div className="flex h-full flex-col bg-background" data-testid="settings-window">
-        <header className="sticky top-0 z-20 flex shrink-0 flex-col gap-3 border-b border-border/70 bg-background/95 px-4 pt-4 pr-3 pb-3 backdrop-blur">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold">Settings</h1>
-              <p className="text-sm text-muted-foreground">Saved automatically to this ZooChattr folder.</p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="sticky top-3 shrink-0"
-              aria-label="Close settings"
-              data-testid="settings-window-close"
-              onClick={() => void closeSettingsWindow()}
-            >
-              <X className="size-4" />
-            </Button>
+        <header className="sticky top-0 z-20 flex shrink-0 flex-col gap-3 border-b border-border/70 bg-background/95 px-4 pt-4 pb-3 backdrop-blur">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold">Settings</h1>
+            <p className="text-sm text-muted-foreground">Saved automatically to this ZooChattr folder.</p>
           </div>
           <Input
             value={searchQuery}
