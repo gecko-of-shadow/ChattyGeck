@@ -25,6 +25,14 @@ describe("sanitizeSettings", () => {
       expect(sanitizeSettings({ skin }).skin).toBe("crested");
     }
     expect(sanitizeSettings({ skin: "penguin" }).skin).toBe("penguin");
+    expect(sanitizeSettings({ skin: "light" }).skin).toBe("light");
+    expect(sanitizeSettings({ skin: "deuteranopia" }).skin).toBe("deuteranopia");
+    expect(sanitizeSettings({ skin: "eyecomfort" }).skin).toBe("eyecomfort");
+  });
+
+  it("defaults readOnly off and accepts an explicit on", () => {
+    expect(sanitizeSettings({}).readOnly).toBe(false);
+    expect(sanitizeSettings({ readOnly: true }).readOnly).toBe(true);
   });
 
   it("cleans the channel list and keeps the focused channel valid", () => {

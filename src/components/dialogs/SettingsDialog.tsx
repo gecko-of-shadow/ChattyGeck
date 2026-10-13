@@ -800,10 +800,10 @@ export function SettingsBody({
           </p>
         ) : null}
 
-        <Section icon={Palette} title="Animal theme">
+        <Section icon={Palette} title="Theme">
           <div className="grid grid-cols-2 gap-2">
             {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
-              <Searchable key={option.id} section="Animal theme" id={option.id}>
+              <Searchable key={option.id} section="Theme" id={option.id}>
                 <button
                   type="button"
                   data-skin={option.id}
@@ -814,7 +814,19 @@ export function SettingsBody({
                     skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
                   )}
                 >
-                  <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
+                  {option.kind === "animal" ? (
+                    <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
+                  ) : (
+                    <span
+                      className="grid size-9 grid-cols-2 grid-rows-2 overflow-hidden rounded-lg border border-border/70"
+                      aria-hidden
+                    >
+                      <span className="bg-background" />
+                      <span className="bg-primary" />
+                      <span className="bg-mention" />
+                      <span className="bg-card" />
+                    </span>
+                  )}
                   <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
                   <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
                   {skin === option.id ? (
@@ -898,6 +910,14 @@ export function SettingsBody({
                 <PanelLeftClose className="mt-0.5 size-3.5 shrink-0" />
                 <p>In Grid view you can also hide chrome with the button in the top bar — same as this switch.</p>
               </div>
+            </Searchable>
+            <Searchable section="Window" id="read-only">
+              <ToggleRow
+                id="pref-read-only"
+                label="Read only"
+                hint="Hide the message box on every pane so you can watch without accidentally chatting. Toggle from the top bar too."
+                setting="readOnly"
+              />
             </Searchable>
             <Searchable section="Window" id="history">
               <ToggleRow

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
+import { BookOpen, LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
@@ -55,8 +55,8 @@ function ConnectionPill() {
     <div
       className={cn(
         "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-medium whitespace-nowrap",
-        tone === "ok" && "border-primary/25 bg-primary/10 text-primary",
-        tone === "wait" && "border-[rgb(var(--mention-rgb)/0.3)] bg-[rgb(var(--mention-rgb)/0.1)] text-mention",
+        tone === "ok" && "border-[rgb(var(--live-rgb)/0.35)] bg-[rgb(var(--live-rgb)/0.12)] text-live",
+        tone === "wait" && "border-[rgb(var(--live-rgb)/0.3)] bg-[rgb(var(--live-rgb)/0.1)] text-live",
         tone === "bad" && "border-destructive/30 bg-destructive/10 text-destructive",
       )}
       role="status"
@@ -108,6 +108,7 @@ export function ChatHeader() {
   const focused = useChat((s) => s.settings.focused);
   const gridCount = useChat((s) => s.settings.gridChannels.length);
   const followCount = useChat((s) => s.settings.channels.length);
+  const readOnly = useChat((s) => s.settings.readOnly);
   const view = useChat((s) => (focused ? s.channels[focused] : undefined));
   const unreadElsewhere = useChat((s) =>
     Object.values(s.channels).reduce((sum, c) => sum + (c.login === s.settings.focused ? 0 : c.mentions), 0),
@@ -163,6 +164,17 @@ export function ChatHeader() {
       </div>
       <ModeToggle />
       <Button
+        variant={readOnly ? "secondary" : "ghost"}
+        size="icon-sm"
+        onClick={() => chat.updateSettings({ readOnly: !readOnly })}
+        aria-label={readOnly ? "Turn off read only" : "Read only"}
+        aria-pressed={readOnly}
+        title={readOnly ? "Read only on — click to show the message box again" : "Read only — hide the message box on every pane"}
+        data-testid="read-only-toggle"
+      >
+        <BookOpen className="size-4" />
+      </Button>
+      <Button
         variant="ghost"
         size="icon-sm"
         onClick={() => chat.updateSettings({ chromeHidden: true })}
@@ -196,15 +208,15 @@ export function ConnectionBanner() {
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[rgb(var(--mention-rgb)/0.25)] bg-[rgb(var(--mention-rgb)/0.08)] px-3 py-2 text-xs"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[rgb(var(--live-rgb)/0.3)] bg-[rgb(var(--live-rgb)/0.1)] px-3 py-2 text-xs"
     >
-      {theme.animal === "gecko" ? (
-        <GeckoTailIcon className="size-4 shrink-0 text-mention" />
+      {theme.kind === "animal" && theme.animal === "gecko" ? (
+        <GeckoTailIcon className="size-4 shrink-0 text-live" />
       ) : (
-        <WifiOff className="size-4 shrink-0 text-mention" />
+        <WifiOff className="size-4 shrink-0 text-live" />
       )}
       <div className="min-w-0 flex-1">
-        <span className="font-semibold text-mention">
+        <span className="font-semibold text-live">
           {read.status === "auth_failed" ? "Twitch rejected the login." : theme.dropped}
         </span>{" "}
         <span className="text-muted-foreground">

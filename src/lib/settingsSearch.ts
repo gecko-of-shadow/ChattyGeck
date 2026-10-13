@@ -73,12 +73,34 @@ export function anySectionMatches(sections: SettingsSearchSection[], query: stri
  */
 export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
   {
-    title: "Animal theme",
+    title: "Theme",
     rows: [
       { id: "crested", label: "Crested gecko", hint: "Warm tangerine with cream crests." },
       { id: "penguin", label: "Penguin", hint: "Arctic blues with a bright orange beak." },
       { id: "turtle", label: "Sea turtle", hint: "Deep-sea teal with a sandy shell." },
       { id: "elephant", label: "Elephant", hint: "Savanna grey with soft lilac." },
+      { id: "dark", label: "Dark", hint: "Neutral dark surfaces with a cool accent." },
+      { id: "light", label: "Light", hint: "Light background with dark text." },
+      {
+        id: "deuteranopia",
+        label: "Deuteranopia",
+        hint: "Blue and orange cues — not red versus green alone.",
+      },
+      {
+        id: "protanopia",
+        label: "Protanopia",
+        hint: "Sky blue and amber, with weight on mentions.",
+      },
+      {
+        id: "tritanopia",
+        label: "Tritanopia",
+        hint: "Magenta and teal — not blue versus yellow alone.",
+      },
+      {
+        id: "eyecomfort",
+        label: "Eye comfort",
+        hint: "Warm, softer contrast with less blue light.",
+      },
     ],
   },
   {
@@ -187,6 +209,11 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         id: "chrome",
         label: "Hide sidebar & top bar",
         hint: "Gives the chat grid more room. Use the floating button (or Settings) to bring the chrome back.",
+      },
+      {
+        id: "read-only",
+        label: "Read only",
+        hint: "Hide the message box on every pane so you can watch without accidentally chatting. Toggle from the top bar too.",
       },
       {
         id: "history",
