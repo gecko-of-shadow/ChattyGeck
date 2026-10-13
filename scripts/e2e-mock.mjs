@@ -79,7 +79,18 @@ await step("grid shows each channel in its own box", async () => {
   await page.getByRole("radio", { name: /grid/i }).click();
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
   await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
+  // Log panes must have real height — zero-height absolute ChatLog looks like "composer only".
+  const logH = await page.getByTestId("grid-log-geckotown").evaluate((el) => el.clientHeight);
+  if (logH < 80) throw new Error(`grid log collapsed to ${logH}px`);
   await shot("02-grid");
+});
+
+await step("grid still shows messages after visiting focused view", async () => {
+  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await page.getByLabel("Chat messages").locator(".chat-row").first().waitFor({ timeout: 10_000 });
+  await page.getByRole("radio", { name: /grid/i }).click();
+  await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
+  await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
 });
 
 await step("focused view counts unread on other channels", async () => {
@@ -108,7 +119,7 @@ await step("device-code login", async () => {
 await step("channel switch blocks send until unlock", async () => {
   await page.getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
   const unlock = page.getByTestId("channel-switch-unlock");
-  if ((await unlock.innerText()).trim() !== "Send to #geckotown") {
+  if ((await unlock.innerText()).trim() !== "chat in #geckotown") {
     throw new Error(`unlock button text: "${await unlock.innerText()}"`);
   }
   await shot("04b-channel-ack");
@@ -375,7 +386,15 @@ await step("scrolling up pauses the feed; the toe-pad button sticks back to live
 await step("grid boxes each have their own message input", async () => {
   await page.getByRole("radio", { name: /grid/i }).click();
   const box = page.getByRole("region", { name: "#lizardlounge chat" });
-  const input = await messageBox(box, "lizardlounge");
+  // Multi view uses the same channel-switch confirm as focused — unlock this pane first.
+  const unlock = box.getByTestId("channel-switch-unlock");
+  await unlock.waitFor({ timeout: 5_000 });
+  if ((await unlock.innerText()).trim() !== "chat in #lizardlounge") {
+    throw new Error(`grid unlock text: "${await unlock.innerText()}"`);
+  }
+  await shot("05b-grid-channel-ack");
+  await unlock.click();
+  const input = box.getByLabel("Message #lizardlounge");
   await input.fill("hello from the lizardlounge box");
   await input.press("Enter");
   await box.locator(".chat-row", { hasText: "hello from the lizardlounge box" }).first().waitFor({ timeout: 8_000 });
@@ -384,11 +403,14 @@ await step("grid boxes each have their own message input", async () => {
     .locator(".chat-row", { hasText: "hello from the lizardlounge box" })
     .count();
   if (elsewhere) throw new Error("message showed up in the wrong box");
+  // The other pane stays locked until confirmed.
+  await page.getByRole("region", { name: "#geckotown chat" }).getByTestId("channel-switch-ack").waitFor({ timeout: 3_000 });
   await shot("05b-grid-send");
 });
 
 await step("grid Tab-complete list stays visible (not clipped by the box)", async () => {
   const box = page.getByRole("region", { name: "#geckotown chat" });
+  await box.getByTestId("channel-switch-unlock").click();
   const input = box.getByLabel("Message #geckotown");
   await input.fill("geck");
   await input.press("Tab");
@@ -421,7 +443,10 @@ await step("refreshes an expired token and keeps chatting", async () => {
   await mockPost("/__drop");
   await page.getByText("Reconnected.").nth(1).waitFor({ timeout: 25_000 });
   await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
-  const input = await messageBox(page, "geckotown");
+  // Reload cleared the in-memory send ack — confirm the target again before typing.
+  const unlock = page.getByTestId("channel-switch-unlock");
+  if (await unlock.count()) await unlock.click();
+  const input = page.getByLabel("Message #geckotown");
   await input.fill("still here after refresh");
   await input.press("Enter");
   await rowsWith("still here after refresh").first().waitFor({ timeout: 8_000 });

@@ -161,7 +161,7 @@ export function ChatLog({
   };
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative h-full min-h-0 w-full flex-1">
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -174,6 +174,7 @@ export function ChatLog({
         tabIndex={0}
         aria-label={label}
         className="zoo-scroll absolute inset-0 overflow-y-auto overscroll-contain outline-none"
+        data-testid="chat-log-scroll"
       >
         <div
           ref={contentRef}

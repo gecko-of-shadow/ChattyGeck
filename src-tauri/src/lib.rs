@@ -11,10 +11,11 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Position, Size, State, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, Position, Size, State, Theme, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    window::Color,
 };
 
 const TRAY_ID: &str = "main";
@@ -108,6 +109,42 @@ fn session_clear() -> Result<(), String> {
     secrets::clear()
 }
 
+/// Login name only — for the Settings popout. Never returns tokens.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AuthDisplay {
+    login: String,
+    user_id: String,
+    remembered: bool,
+}
+
+#[tauri::command]
+fn auth_display() -> Result<Option<AuthDisplay>, String> {
+    let Some(raw) = secrets::load()? else {
+        return Ok(None);
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|err| format!("Couldn't read saved login: {err}"))?;
+    let login = value
+        .get("login")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let user_id = value
+        .get("userId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    if login.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(AuthDisplay {
+        login,
+        user_id,
+        remembered: true,
+    }))
+}
+
 #[tauri::command]
 fn set_close_to_tray(state: State<'_, AppState>, enabled: bool) {
     state.close_to_tray.store(enabled, Ordering::Relaxed);
@@ -127,6 +164,8 @@ fn set_tray_status(app: AppHandle, mentions: u32) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    // Tear down Settings first so a dead/disabled popout can't keep the process alive.
+    force_close_settings(&app);
     app.exit(0);
 }
 
@@ -155,13 +194,20 @@ fn apply_update(app: AppHandle, download_url: String) -> Result<(), String> {
 }
 
 fn request_quit_confirm(app: &AppHandle) {
+    // Settings disables main; a dead white Settings webview would swallow Quit forever.
+    force_close_settings(app);
     show_main_window(app);
     if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_enabled(true);
         let _ = window.emit("quit-requested", ());
     }
 }
 
 fn release_main_after_settings(app: &AppHandle) {
+    // Skip while a Settings window still exists (destroy-and-recreate race).
+    if app.get_webview_window(SETTINGS_LABEL).is_some() {
+        return;
+    }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.set_enabled(true);
         let _ = main.unminimize();
@@ -170,19 +216,20 @@ fn release_main_after_settings(app: &AppHandle) {
     }
 }
 
+/// Destroy Settings (even if its webview is dead) and re-enable main when it's gone.
+fn force_close_settings(app: &AppHandle) {
+    if let Some(settings) = app.get_webview_window(SETTINGS_LABEL) {
+        let _ = settings.destroy();
+    }
+    release_main_after_settings(app);
+}
+
 /// Opens Settings as its own window and disables the main window until it closes.
-fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), String> {
+/// Always creates a fresh webview — re-showing a stuck overnight page stays blank.
+fn open_settings_window(app: &AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(SETTINGS_LABEL) {
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = main.set_enabled(false);
-        }
-        let _ = existing.unminimize();
-        let _ = existing.show();
-        let _ = existing.set_focus();
-        if check_updates {
-            let _ = existing.emit("update-requested", ());
-        }
-        return Ok(());
+        // Don't release main here — a replacement window is about to take over.
+        let _ = existing.destroy();
     }
 
     let main = app
@@ -190,21 +237,25 @@ fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), Stri
         .ok_or_else(|| "Main window isn't open.".to_string())?;
 
     let state = app.state::<AppState>();
+    // Plain index.html + hash: query strings have blanked WebView2 asset loads on Windows.
+    // The UI also detects the `settings` window label.
     let mut builder = WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
-        WebviewUrl::App("index.html?window=settings".into()),
+        WebviewUrl::App("index.html#settings".into()),
     )
         .title("ZooChattr Settings")
         .inner_size(520.0, 740.0)
         .min_inner_size(400.0, 480.0)
         .resizable(true)
         .maximizable(false)
+        .theme(Some(Theme::Dark))
+        .background_color(Color(0x09, 0x0d, 0x0a, 0xff))
         .center();
     if state.data.portable {
         builder = builder.data_directory(state.data.path.join("webview-settings"));
     }
-    let builder = builder.parent(&main).map_err(|err| err.to_string())?;
+    // No .parent(): owned child webviews have shown up blank/frozen on Windows.
 
     let _ = main.set_enabled(false);
     let settings = match builder.build() {
@@ -217,32 +268,29 @@ fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), Stri
 
     let app_handle = app.clone();
     settings.on_window_event(move |event| {
-        if matches!(event, WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }) {
-            // Destroyed is the reliable "gone" signal; also catch close for quicker re-enable.
-            if matches!(event, WindowEvent::Destroyed) {
-                release_main_after_settings(&app_handle);
-            }
+        if matches!(
+            event,
+            WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }
+        ) {
+            release_main_after_settings(&app_handle);
         }
     });
 
-    if check_updates {
-        // Let the settings UI finish booting before asking it to check.
-        let window = settings.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(400));
-            let _ = window.emit("update-requested", ());
-        });
-    }
     Ok(())
 }
 
+/// Tray "Check for updates…" — toast-only path on the main webview. Does not open
+/// Settings, show/focus/disable the main window, or start a download.
 fn request_update_check(app: &AppHandle) {
-    let _ = open_settings_window(app, true);
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.emit("tray-update-check", ());
+    }
 }
 
+/// Async so Windows doesn't deadlock creating a WebviewWindow from a sync command.
 #[tauri::command]
-fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
-    open_settings_window(&app, false)
+async fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
+    open_settings_window(&app)
 }
 
 fn apply_saved_geom(window: &WebviewWindow, geom: &storage::WindowGeom) {
@@ -390,7 +438,7 @@ pub fn run() {
                         }
                     }
                     "settings" => {
-                        let _ = open_settings_window(app, false);
+                        let _ = open_settings_window(app);
                     }
                     "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
@@ -454,6 +502,7 @@ pub fn run() {
             session_load,
             session_save,
             session_clear,
+            auth_display,
             set_close_to_tray,
             set_tray_status,
             quit_app,

@@ -11,9 +11,11 @@ interface UiState {
   /** Bumped when Settings should run Check for updates (tray or popout). */
   updateCheckNonce: number;
   /**
-   * Channel whose message box is armed for typing/sending.
-   * Other composers show a "Switch to #channel" button first so messages don't land in the wrong room.
+   * Channel the user confirmed for sending. Shared so grid panes lock when you
+   * move to another pane. `null` means nothing confirmed yet.
    */
+  sendAckChannel: string | null;
+  /** Channel whose message box was armed by an insert. */
   armedComposer: string | null;
   /** Text a channel's composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
   insert: { text: string; channel: string; nonce: number } | null;
@@ -25,9 +27,15 @@ export const useUi = create<UiState>(() => ({
   navOpen: false,
   quitConfirmOpen: false,
   updateCheckNonce: 0,
+  sendAckChannel: null,
   armedComposer: null,
   insert: null,
 }));
+
+/** Confirm this channel as the send target (unlocks its composer; locks the others). */
+export function ackSendChannel(channel: string): void {
+  useUi.setState({ sendAckChannel: channel });
+}
 
 export function insertIntoComposer(text: string, channel: string): void {
   useUi.setState((s) => ({

@@ -11,7 +11,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { useUi } from "@/store/ui";
+import { ackSendChannel, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
 
@@ -200,12 +200,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const emotePicker = useChat((s) => isFeatureOn(s.settings, channel, "emotePicker"));
   const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
   const insert = useUi((s) => s.insert);
+  const sendAckChannel = useUi((s) => s.sendAckChannel);
   const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
-  /** After a channel switch, send is blocked until the user confirms the target name. */
-  const [unlockedFor, setUnlockedFor] = useState<string | null>(channel);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -225,7 +224,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   useEffect(() => {
     if (prevChannel.current !== channel) {
       prevChannel.current = channel;
-      setUnlockedFor(null);
+      // Focused view: switching the single composer to another channel clears ack.
+      if (useUi.getState().sendAckChannel !== channel) {
+        useUi.setState({ sendAckChannel: null });
+      }
     }
     setError(null);
     setCompletion(null);
@@ -244,7 +246,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
 
   const connected = writeStatus === "connected";
-  const locked = confirmSwitch && unlockedFor !== channel;
+  const locked = confirmSwitch && sendAckChannel !== channel;
   const length = Array.from(text).length;
 
   const submit = () => {
@@ -367,23 +369,24 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       ) : null}
       {locked ? (
         <div
-          className={cn("flex flex-col gap-1.5", compact ? "gap-1" : "")}
+          className={cn("flex flex-col", compact ? "gap-0" : "gap-1.5")}
           data-testid="channel-switch-ack"
         >
-          <p className={cn("text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>
-            You switched channels. Confirm before sending.
-          </p>
+          {compact ? null : (
+            <p className="text-xs text-muted-foreground">You switched channels. Confirm before sending.</p>
+          )}
           <Button
             type="button"
             size={compact ? "sm" : "default"}
-            className={cn("w-full", compact ? "h-8 text-[13px]" : "h-9")}
+            className={cn("w-full shrink-0", compact ? "h-8 text-[13px]" : "h-9")}
             data-testid="channel-switch-unlock"
+            title={compact ? "You switched channels. Confirm before sending." : undefined}
             onClick={() => {
-              setUnlockedFor(channel);
+              ackSendChannel(channel);
               setTimeout(() => inputRef.current?.focus(), 0);
             }}
           >
-            Send to #{channel}
+            chat in #{channel}
           </Button>
         </div>
       ) : (

@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "Capability for the Settings popout — emit to main, no session_load or apply_update",
+  "windows": ["settings"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "opener:default",
+    "allow-app-info",
+    "allow-settings-load",
+    "allow-settings-save",
+    "allow-chat-history-clear",
+    "allow-session-clear",
+    "allow-auth-display",
+    "allow-set-close-to-tray",
+    "allow-set-launch-at-login",
+    "allow-check-for-update"
+  ]
+}

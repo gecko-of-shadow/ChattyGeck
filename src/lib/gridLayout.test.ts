@@ -9,12 +9,26 @@ describe("layoutChatGrid", () => {
     expect(layout.cellHeight).toBeLessThanOrEqual(layout.cellWidth + 1);
   });
 
-  it("picks three square cells in a row when that fits better than a 2×2", () => {
+  it("uses 2×2 for three chats when a single row would leave empty height", () => {
     const layout = layoutChatGrid(3, 1000, 700);
-    expect(layout.columns).toBe(3);
-    expect(layout.rows).toBe(1);
+    expect(layout.columns).toBe(2);
+    expect(layout.rows).toBe(2);
     expect(layout.cellHeight).toBeLessThanOrEqual(layout.cellWidth + 1);
-    expect(layout.cellHeight / layout.cellWidth).toBeGreaterThan(0.9);
+  });
+
+  it("uses a filled 2×2 for four chats even in a wide window (not 3+1 with a hole)", () => {
+    const layout = layoutChatGrid(4, 1100, 700);
+    expect(layout.columns).toBe(2);
+    expect(layout.rows).toBe(2);
+    expect(layout.cellHeight).toBeLessThanOrEqual(layout.cellWidth + 1);
+  });
+
+  it("uses 2×2 for four chats in a very wide window (not a short 1×4 strip)", () => {
+    const layout = layoutChatGrid(4, 1600, 700);
+    expect(layout.columns).toBe(2);
+    expect(layout.rows).toBe(2);
+    // Must use most of the window height, not leave a huge empty band underneath.
+    expect(layout.cellHeight * 2 + 6).toBeGreaterThan(700 * 0.85);
   });
 
   it("uses 2×2 for three chats when a single row would be too wide/short", () => {

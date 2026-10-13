@@ -56,6 +56,16 @@ export async function loadSession(): Promise<Session | null> {
   }
 }
 
+/** Login name only — Settings popout. Never returns tokens. */
+export async function loadAuthDisplay(): Promise<{ login: string; userId: string; remembered: boolean } | null> {
+  if (isTauri) {
+    return invoke<{ login: string; userId: string; remembered: boolean } | null>("auth_display");
+  }
+  const session = await loadSession();
+  if (!session) return null;
+  return { login: session.login, userId: session.userId, remembered: true };
+}
+
 export async function saveSession(session: Session): Promise<void> {
   const payload = JSON.stringify(session);
   if (isTauri) return invoke("session_save", { payload });

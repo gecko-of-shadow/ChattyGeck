@@ -5,8 +5,11 @@ import { SettingsApp } from "./components/dialogs/SettingsApp";
 import { isTauri } from "./lib/platform";
 import "./index.css";
 
+/** Sync hints from the URL. Label detection (below) is the reliable desktop signal. */
 function isSettingsHost(): boolean {
-  return new URLSearchParams(window.location.search).get("window") === "settings";
+  if (new URLSearchParams(window.location.search).get("window") === "settings") return true;
+  const hash = window.location.hash.replace(/^#/, "");
+  return hash === "settings";
 }
 
 function Root() {
@@ -25,7 +28,8 @@ function Root() {
         if (!cancelled) setRole("main");
         return;
       }
-      // Fallback when the query string isn't present (label still identifies the popout).
+      // Window label identifies the Settings popout even when the URL has no query/hash
+      // (plain index.html — query strings have blanked the WebView2 asset load on Windows).
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       if (cancelled) return;
       setRole(getCurrentWindow().label === "settings" ? "settings" : "main");
