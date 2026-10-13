@@ -347,7 +347,7 @@ export function GridView() {
     );
   }
 
-  const { columns, cellWidth, cellHeight } = layoutChatGrid(channels.length, area.width, area.height);
+  const { columns, cellHeight } = layoutChatGrid(channels.length, area.width, area.height);
 
   return (
     <div
@@ -356,12 +356,14 @@ export function GridView() {
       style={{ padding: GRID_EDGE }}
     >
       <div
-        className="grid justify-items-stretch"
+        className="grid w-full justify-items-stretch"
         style={{
           gap: GRID_GAP,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, ${cellWidth}px))`,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridAutoRows: `${cellHeight}px`,
         }}
+        data-testid="chat-grid"
+        data-grid-cols={columns}
       >
         {channels.map((login) => (
           <ChatBox key={login} login={login} />

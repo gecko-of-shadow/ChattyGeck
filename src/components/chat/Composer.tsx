@@ -362,23 +362,24 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       ) : null}
       {locked ? (
         <div
-          className={cn("flex flex-col gap-1.5", compact ? "gap-1" : "")}
+          className={cn("flex flex-col", compact ? "gap-0" : "gap-1.5")}
           data-testid="channel-switch-ack"
         >
-          <p className={cn("text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>
-            You switched channels. Confirm before sending.
-          </p>
+          {compact ? null : (
+            <p className="text-xs text-muted-foreground">You switched channels. Confirm before sending.</p>
+          )}
           <Button
             type="button"
             size={compact ? "sm" : "default"}
-            className={cn("w-full", compact ? "h-8 text-[13px]" : "h-9")}
+            className={cn("w-full shrink-0", compact ? "h-8 text-[13px]" : "h-9")}
             data-testid="channel-switch-unlock"
+            title={compact ? "You switched channels. Confirm before sending." : undefined}
             onClick={() => {
               ackSendChannel(channel);
               setTimeout(() => inputRef.current?.focus(), 0);
             }}
           >
-            Send to #{channel}
+            chat in #{channel}
           </Button>
         </div>
       ) : (

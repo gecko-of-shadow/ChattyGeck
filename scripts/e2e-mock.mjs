@@ -112,7 +112,7 @@ await step("device-code login", async () => {
 await step("channel switch blocks send until unlock", async () => {
   await page.getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
   const unlock = page.getByTestId("channel-switch-unlock");
-  if ((await unlock.innerText()).trim() !== "Send to #geckotown") {
+  if ((await unlock.innerText()).trim() !== "chat in #geckotown") {
     throw new Error(`unlock button text: "${await unlock.innerText()}"`);
   }
   await shot("04b-channel-ack");
@@ -355,7 +355,7 @@ await step("grid boxes each have their own message input", async () => {
   // Multi view uses the same channel-switch confirm as focused — unlock this pane first.
   const unlock = box.getByTestId("channel-switch-unlock");
   await unlock.waitFor({ timeout: 5_000 });
-  if ((await unlock.innerText()).trim() !== "Send to #lizardlounge") {
+  if ((await unlock.innerText()).trim() !== "chat in #lizardlounge") {
     throw new Error(`grid unlock text: "${await unlock.innerText()}"`);
   }
   await shot("05b-grid-channel-ack");
