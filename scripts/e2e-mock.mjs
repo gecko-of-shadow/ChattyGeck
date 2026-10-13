@@ -93,6 +93,20 @@ await step("grid still shows messages after visiting focused view", async () => 
   await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
 });
 
+await step("off-grid channel counts unread while the grid is showing", async () => {
+  await page.getByRole("radio", { name: /grid/i }).click();
+  const box = page.getByRole("region", { name: "#geckotown chat" });
+  await box.getByRole("button", { name: "Options for #geckotown" }).click();
+  await page.getByRole("menuitem", { name: "Hide from grid" }).click();
+  await mockPost("/__burst?channel=geckotown&n=2");
+  const nav = page.getByRole("navigation", { name: "Channels" });
+  const item = nav.locator(".group", { has: page.getByRole("button", { name: "Open #geckotown" }) });
+  await item.locator('[title$="unread"]').waitFor({ timeout: 5_000 });
+  await nav.getByRole("button", { name: "Options for #geckotown" }).click();
+  await page.getByRole("menuitem", { name: "Show in grid" }).click();
+  await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
+});
+
 await step("focused view counts unread on other channels", async () => {
   await page.getByRole("button", { name: "Open #geckotown" }).click();
   await mockPost("/__burst?channel=lizardlounge&n=3");

@@ -210,20 +210,39 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const prevChannel = useRef(channel);
+  const textRef = useRef("");
+  const appliedInsert = useRef<number | null>(null);
+  const drafts = useRef(new Map<string, string>());
+  const histories = useRef(new Map<string, string[]>());
   const listId = useId();
+  textRef.current = text;
 
   useEffect(() => {
-    if (!insert || insert.channel !== channel) return;
+    if (!insert || !channel || insert.channel !== channel) return;
+    if (appliedInsert.current === insert.nonce) return;
+    appliedInsert.current = insert.nonce;
     setText((current) => {
       const spacer = current && !current.endsWith(" ") ? " " : "";
-      return `${current}${spacer}${insert.text}`;
+      const next = `${current}${spacer}${insert.text}`;
+      pendingCaret.current = next.length;
+      return next;
     });
+    // Clicking a name chooses this channel, same as confirming the switch.
+    ackSendChannel(channel);
     inputRef.current?.focus();
   }, [insert, channel]);
 
   useEffect(() => {
-    if (prevChannel.current !== channel) {
+    const previous = prevChannel.current;
+    if (previous !== channel) {
+      if (previous) {
+        drafts.current.set(previous, textRef.current);
+        histories.current.set(previous, history.current.slice());
+      }
       prevChannel.current = channel;
+      history.current = channel ? (histories.current.get(channel) ?? []).slice() : [];
+      historyIndex.current = -1;
+      setText(channel ? (drafts.current.get(channel) ?? "") : "");
       // Focused view: switching the single composer to another channel clears ack.
       if (useUi.getState().sendAckChannel !== channel) {
         useUi.setState({ sendAckChannel: null });

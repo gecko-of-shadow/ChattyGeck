@@ -177,6 +177,8 @@ export class EmoteRegistry {
         } catch (err) {
           if (err instanceof NotFoundError) {
             status = { state: "none" };
+            // Remember the empty result. A stale cache would flash the removed set on every reload.
+            if (this.prefs.remember) this.cache.put(key, "channel", []);
           } else {
             const message = describeError(err);
             problemLog.record(provider, "channel", message, channel);
@@ -256,7 +258,8 @@ export class EmoteRegistry {
   /** True when a previous download failed for this channel (worth asking again on the next join). */
   channelNeedsRetry(channel: string): boolean {
     const entry = this.channels.get(channel);
-    if (!entry) return true;
+    // No entry yet is not a failed download. Forcing the load would skip the saved emote lists.
+    if (!entry) return false;
     return THIRD_PARTY_PROVIDERS.some((p) => entry.status[p].state === "error");
   }
 

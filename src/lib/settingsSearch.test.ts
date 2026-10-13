@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  SETTINGS_SEARCH_CATALOG,
   anySectionMatches,
   filterSection,
   matchesTerms,
@@ -100,6 +101,21 @@ describe("filterSection", () => {
 
   it("hides the section when nothing matches", () => {
     expect(filterSection(sample[0], "penguin")).toBeNull();
+  });
+});
+
+describe("settings catalog", () => {
+  it("lists the live rows and not the ones that were removed", () => {
+    const rows = SETTINGS_SEARCH_CATALOG.flatMap((section) => section.rows);
+    const ids = rows.map((row) => row.id);
+    expect(ids).toContain("mention-sound");
+    expect(ids).toContain("confirm-channel");
+    expect(ids).not.toContain("chrome");
+    expect(rows.find((row) => row.id === "backup")?.hint ?? "").not.toMatch(/clipboard/i);
+    const chat = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Chat display");
+    expect(filterSection(chat!, "mention sound")).toEqual({ kind: "rows", ids: new Set(["mention-sound"]) });
+    const window = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Window");
+    expect(filterSection(window!, "hide sidebar")).toBeNull();
   });
 });
 

@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { config } from "@/lib/config";
 import { historyBoundary, messagesForDisk, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
+import { channelOnScreen, readMarkerAfterFocus } from "@/lib/chat/visibility";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify";
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
@@ -688,10 +689,30 @@ class ChatController {
   private resolvePending(echo: ChatMessage): boolean {
     let index = this.pendingSends.findIndex((p) => p.channel === echo.channel && p.text === echo.text);
     if (index < 0) index = this.pendingSends.findIndex((p) => p.channel === echo.channel);
-    if (index < 0) return false;
-    const [pending] = this.pendingSends.splice(index, 1);
-    clearTimeout(pending.timer);
-    this.replaceMessage(pending.channel, pending.id, () => echo);
+    if (index >= 0) {
+      const [pending] = this.pendingSends.splice(index, 1);
+      clearTimeout(pending.timer);
+      this.replaceMessage(pending.channel, pending.id, () => echo);
+      return true;
+    }
+    // The 10s tracker is gone (failed or dropped). A late echo must replace the
+    // local row, not sit beside it.
+    return this.replaceLateOwnEcho(echo);
+  }
+
+  /** Oldest matching local send within two minutes. Newest-last, so scan from the end and keep the oldest hit. */
+  private replaceLateOwnEcho(echo: ChatMessage): boolean {
+    const list = get().channels[echo.channel]?.messages;
+    if (!list) return false;
+    const cutoff = Date.now() - 120_000;
+    let matchId: string | undefined;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const message = list[i];
+      if (message.ts < cutoff) break;
+      if (message.id.startsWith("send-") && message.text === echo.text) matchId = message.id;
+    }
+    if (!matchId) return false;
+    this.replaceMessage(echo.channel, matchId, () => echo);
     return true;
   }
 
@@ -765,8 +786,7 @@ class ChatController {
         }
         if (!state.channels[message.channel]) continue;
         add(message.channel, message);
-        const onGrid = state.settings.gridChannels.includes(message.channel);
-        const visible = (mode === "grid" && onGrid) || focused === message.channel;
+        const visible = channelOnScreen(mode, focused, state.settings.gridChannels, message.channel);
         const countable = message.kind === "chat" || message.kind === "action" || message.kind === "event";
         if (!visible && countable && !message.self) {
           const c = counts.get(message.channel) ?? { unread: 0, mentions: 0 };
@@ -819,6 +839,7 @@ class ChatController {
 
   private replaceMessage(channel: string, id: string, update: (message: ChatMessage) => ChatMessage): void {
     this.flush();
+    let changed = false;
     set((state) => {
       const view = state.channels[channel];
       if (!view) return {};
@@ -831,10 +852,14 @@ class ChatController {
         }
       }
       if (index < 0) return {};
+      changed = true;
       const next = list.slice();
       next[index] = update(list[index]);
       return { channels: { ...state.channels, [channel]: { ...view, messages: next } } };
     });
+    // The 2s history timer may already have saved and stripped this pending row.
+    // The echo (or a cleared pending flag) has to be written too.
+    if (changed) this.scheduleHistorySave(channel);
   }
 
   private markDeleted(channel: string, match: (message: ChatMessage) => boolean, newestOnly = false): void {
@@ -983,6 +1008,12 @@ class ChatController {
 
   /** Keep following, but tuck the channel off the grid. */
   hideFromGrid(name: string): void {
+    const { mode, gridChannels } = get().settings;
+    if (mode === "grid" && gridChannels.includes(name)) {
+      this.flush();
+      const last = get().channels[name]?.messages.at(-1)?.id;
+      if (last) this.patchChannel(name, (c) => ({ ...c, readMarker: last }));
+    }
     this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name) }));
   }
 
@@ -995,11 +1026,17 @@ class ChatController {
   }
 
   focus(name: string): void {
-    const fromGrid = get().settings.mode === "grid";
-    this.markRead(get().settings.focused, name);
+    const settings = get().settings;
+    const fromGrid = settings.mode === "grid";
+    const wasOnGrid = fromGrid && settings.gridChannels.includes(name);
+    this.markRead(settings.focused, name);
     this.updateSettings({ mode: "focused", focused: name });
-    // Coming from the grid, everything in this channel was already on screen.
-    this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0, readMarker: fromGrid ? undefined : c.readMarker }));
+    this.patchChannel(name, (c) => ({
+      ...c,
+      unread: 0,
+      mentions: 0,
+      readMarker: readMarkerAfterFocus(fromGrid, wasOnGrid, c.readMarker),
+    }));
   }
 
   setMode(mode: ViewMode): void {
@@ -1010,10 +1047,17 @@ class ChatController {
       else this.updateSettings({ mode });
       return;
     }
-    this.markRead(get().settings.focused, null);
+    const { focused, gridChannels } = get().settings;
+    const onGrid = new Set(gridChannels);
+    if (focused && onGrid.has(focused)) {
+      // Still on screen in a grid box. A divider here would say you left a chat you can see.
+      const view = get().channels[focused];
+      if (view?.readMarker) this.patchChannel(focused, (c) => ({ ...c, readMarker: undefined }));
+    } else {
+      this.markRead(focused, null);
+    }
     this.updateSettings({ mode });
     // Only clear unread on channels that are actually on the grid.
-    const onGrid = new Set(get().settings.gridChannels);
     set((s) => ({
       channels: Object.fromEntries(
         Object.entries(s.channels).map(([k, c]) =>

@@ -27,6 +27,21 @@ export function liveSlice(messages: ChatMessage[], liveRows: number, readMarker?
   return messages.length > keep ? messages.slice(-keep) : messages;
 }
 
+/**
+ * How many live rows arrived after the user paused.
+ * If the paused tail was replaced (a pending send swapped for Twitch's echo),
+ * count rows whose ids were not in the snapshot instead of the whole buffer.
+ */
+export function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
+  const lastId = snapshot[snapshot.length - 1]?.id;
+  if (!lastId) return live.length;
+  for (let i = live.length - 1; i >= 0; i--) if (live[i].id === lastId) return live.length - 1 - i;
+  const seen = new Set(snapshot.map((message) => message.id));
+  let newer = 0;
+  for (const message of live) if (!seen.has(message.id)) newer++;
+  return newer;
+}
+
 /** Rows of a paused snapshot in `[start, end)`. Same array when that is the whole snapshot. */
 export function pausedSlice(messages: ChatMessage[], start: number, end: number): ChatMessage[] {
   const stop = Math.max(0, Math.min(messages.length, end));

@@ -34,6 +34,13 @@ struct AppState {
 }
 
 fn show_main_window(app: &AppHandle) {
+    // Settings disables the main window. Focusing main anyway paints a window that ignores clicks.
+    if let Some(settings) = app.get_webview_window(SETTINGS_LABEL) {
+        let _ = settings.unminimize();
+        let _ = settings.show();
+        let _ = settings.set_focus();
+        return;
+    }
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -432,11 +439,7 @@ pub fn run() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        if app.get_webview_window(SETTINGS_LABEL).is_none() {
-                            show_main_window(app);
-                        }
-                    }
+                    "show" => show_main_window(app),
                     "settings" => {
                         let _ = open_settings_window(app);
                     }

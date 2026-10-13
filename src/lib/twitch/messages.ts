@@ -142,6 +142,7 @@ export function usernoticeToChat(message: IrcMessage, selfLogin?: string): ChatM
   const tags = message.tags;
   const login = (tags.login ?? "").toLowerCase();
   const text = message.params[1] ?? "";
+  const self = !!selfLogin && login === selfLogin;
   return {
     id: tags.id || localId("event"),
     channel: channelFromParam(message.params[0]),
@@ -155,8 +156,8 @@ export function usernoticeToChat(message: IrcMessage, selfLogin?: string): ChatM
     text,
     twitchEmotes: parseEmotesTag(tags.emotes),
     systemText: tags["system-msg"] || describeUsernotice(tags["msg-id"]),
-    self: !!selfLogin && login === selfLogin,
-    mention: mentionsUser(text, selfLogin),
+    self,
+    mention: !self && mentionsUser(text, selfLogin),
   };
 }
 
@@ -237,6 +238,8 @@ const NOT_CHANNELS =
 export function normalizeChannelName(input: string): string | null {
   let value = input.trim();
   if (!value) return null;
+  // clips.twitch.tv/<slug> is a clip, not a channel. The slug must not be joined.
+  if (/clips\.twitch\.tv\//i.test(value)) return null;
   const urlMatch = value.match(/twitch\.tv\/(?:popout\/|moderator\/)?([A-Za-z0-9_]+)/i);
   if (urlMatch) value = urlMatch[1];
   value = value.replace(/^[#@]/, "").toLowerCase();

@@ -87,6 +87,17 @@ describe("usernoticeToChat", () => {
     expect(msg.systemText).toBe("15 raiders from Raider have joined!");
     expect(msg.text).toBe("");
   });
+
+  it("does not mark your own announcement as a mention", () => {
+    const msg = usernoticeToChat(
+      parseIrcLine(
+        "@display-name=Me;login=me;msg-id=announcement;id=u2 :me!me@me.tmi.twitch.tv USERNOTICE #gecko :hello me",
+      )!,
+      "me",
+    );
+    expect(msg.self).toBe(true);
+    expect(msg.mention).toBe(false);
+  });
 });
 
 describe("parseRoomState", () => {
@@ -117,6 +128,7 @@ describe("normalizeChannelName", () => {
     expect(normalizeChannelName("twitch.tv/directory/game/Just%20Chatting")).toBeNull();
     expect(normalizeChannelName("https://www.twitch.tv/settings")).toBeNull();
     expect(normalizeChannelName("videos")).toBeNull();
+    expect(normalizeChannelName("https://clips.twitch.tv/KindlySplendidClip")).toBeNull();
   });
 });
 

@@ -8,7 +8,7 @@ import { THEMES } from "@/lib/themes";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { HISTORY_PAGE, liveSlice, MAX_PAUSED_ROWS, pausedSlice } from "@/lib/chat/window";
+import { HISTORY_PAGE, countNewer, liveSlice, MAX_PAUSED_ROWS, pausedSlice } from "@/lib/chat/window";
 import { MessageRow, type RowPrefs } from "./MessageRow";
 
 interface HoverEmote {
@@ -29,13 +29,6 @@ interface Pause {
   start: number;
   /** Exclusive index into the snapshot, fixed when live chat was left. */
   end: number;
-}
-
-function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
-  const lastId = snapshot[snapshot.length - 1]?.id;
-  if (!lastId) return live.length;
-  for (let i = live.length - 1; i >= 0; i--) if (live[i].id === lastId) return live.length - 1 - i;
-  return live.length;
 }
 
 interface ChatLogProps {
@@ -183,18 +176,30 @@ export function ChatLog({
     if (!(target instanceof HTMLImageElement) || !target.dataset.emoteName) return;
     const name = target.dataset.emoteName;
     const src = target.dataset.emoteSrc ?? target.src;
+    const rect = target.getBoundingClientRect();
     const current = hoverRef.current;
-    if (current && current.name === name && current.src === src) return;
+    if (
+      current &&
+      current.name === name &&
+      current.src === src &&
+      current.rect.left === rect.left &&
+      current.rect.top === rect.top &&
+      current.rect.width === rect.width
+    ) {
+      return;
+    }
     setHover({
       name,
       provider: target.dataset.emoteProvider as EmoteProvider,
       scope: target.dataset.emoteScope ?? "global",
       src,
-      rect: target.getBoundingClientRect(),
+      rect,
     });
   };
 
   const onMouseOut = (event: React.MouseEvent) => {
+    const next = event.relatedTarget;
+    if (next instanceof Element && next.closest("[data-emote-name]")) return;
     if ((event.target as HTMLElement).dataset?.emoteName) setHover(null);
   };
 
@@ -264,8 +269,8 @@ export function ChatLog({
               className="pointer-events-none fixed z-50 flex w-max max-w-56 flex-col items-center gap-1.5 rounded-xl border bg-popover/95 p-2.5 text-center shadow-xl backdrop-blur"
               style={{
                 left: Math.min(Math.max(hover.rect.left + hover.rect.width / 2, 120), window.innerWidth - 120),
-                top: hover.rect.top - 8,
-                transform: "translate(-50%, -100%)",
+                top: hover.rect.top < 168 ? hover.rect.bottom + 8 : hover.rect.top - 8,
+                transform: hover.rect.top < 168 ? "translate(-50%, 0)" : "translate(-50%, -100%)",
               }}
             >
               <img src={hover.src} alt="" className="max-h-24 max-w-48 object-contain" />

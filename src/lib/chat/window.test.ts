@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveSlice, MAX_LIVE_WINDOW, pausedSlice } from "./window";
+import { countNewer, liveSlice, MAX_LIVE_WINDOW, pausedSlice } from "./window";
 import type { ChatMessage } from "@/lib/twitch/types";
 
 const row = (id: string): ChatMessage => ({
@@ -39,5 +39,13 @@ describe("live chat window", () => {
     expect(visible.map((m) => m.id)).toEqual(messages.slice(700, 900).map((m) => m.id));
     expect(visible).toHaveLength(200);
     expect(pausedSlice(messages, 0, messages.length)).toBe(messages);
+  });
+
+  it("counts lines after the paused tail, and does not treat an echo swap as the whole log", () => {
+    const snapshot = [row("a"), row("send-1")];
+    expect(countNewer(snapshot, [row("a"), row("send-1"), row("b")])).toBe(1);
+    const echoed = [row("a"), row("twitch-1"), row("b")];
+    expect(countNewer(snapshot, echoed)).toBe(2);
+    expect(countNewer([], echoed)).toBe(echoed.length);
   });
 });

@@ -111,6 +111,17 @@ pub fn apply_update(download_url: &str) -> Result<(), String> {
     apply_update_to(&current, download_url)
 }
 
+/// Cmd expands `%VAR%` inside double quotes. In a batch file, `%%` is one `%`.
+#[cfg(windows)]
+fn batch_escape(path: &Path) -> String {
+    path.display().to_string().replace('%', "%%")
+}
+
+/// Single-quote a path for `sh`. An embedded `'` becomes `'\''`.
+fn shell_single_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
 fn apply_update_to(current_exe: &Path, download_url: &str) -> Result<(), String> {
     let dir = current_exe
         .parent()
@@ -139,14 +150,13 @@ fn apply_update_to(current_exe: &Path, download_url: &str) -> Result<(), String>
     if cfg!(windows) {
         write_and_spawn_windows_helper(current_exe, &dest_new)?;
     } else {
-        // Unix: replace in place after a short delay via a shell script.
-        let helper = staging.join("apply.sh");
+        // The script must not live in `staging`: that folder is deleted as soon as `sh` starts.
+        let helper = std::env::temp_dir().join(format!("zoochattr-apply-{stamp}.sh"));
         let script = format!(
-            "#!/bin/sh\nsleep 1\nmv -f '{}' '{}'\nchmod +x '{}'\nexec '{}' &\n",
-            dest_new.display(),
-            current_exe.display(),
-            current_exe.display(),
-            current_exe.display()
+            "#!/bin/sh\nsleep 1\nmv -f {new} {current}\nchmod +x {current}\nexec {current} &\nrm -f {helper}\n",
+            new = shell_single_quote(&dest_new.display().to_string()),
+            current = shell_single_quote(&current_exe.display().to_string()),
+            helper = shell_single_quote(&helper.display().to_string()),
         );
         fs::write(&helper, script).map_err(|err| err.to_string())?;
         Command::new("sh")
@@ -165,6 +175,7 @@ fn write_and_spawn_windows_helper(current_exe: &Path, new_exe: &Path) -> Result<
     let helper = dir.join("zoochattr-update.cmd");
     let bak = current_exe.with_extension("exe.bak");
     // Wait for this process to exit, swap the exe, restart, clean up. ZooChattr-data is never touched.
+    // Cmd expands %VAR% even inside quotes. A folder named "100%" would miss the real exe.
     let script = format!(
         "@echo off\r\n\
          setlocal\r\n\
@@ -176,9 +187,9 @@ fn write_and_spawn_windows_helper(current_exe: &Path, new_exe: &Path) -> Result<
          move /y \"{new}\" \"{current}\"\r\n\
          start \"\" \"{current}\"\r\n\
          del /f /q \"%~f0\"\r\n",
-        current = current_exe.display(),
-        bak = bak.display(),
-        new = new_exe.display(),
+        current = batch_escape(current_exe),
+        bak = batch_escape(&bak),
+        new = batch_escape(new_exe),
     );
     {
         let mut file = fs::File::create(&helper).map_err(|err| format!("Couldn't write the update helper: {err}"))?;

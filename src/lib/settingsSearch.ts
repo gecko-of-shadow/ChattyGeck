@@ -104,6 +104,11 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         label: "Highlight words",
         hint: "Besides your own name, messages with these words light up and count as mentions.",
       },
+      {
+        id: "mention-sound",
+        label: "Mention sound",
+        hint: "A short chime when your name, a reply to you, or a highlight word shows up in any open chat. Cooldown.",
+      },
     ],
   },
   {
@@ -184,9 +189,9 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         hint: "Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder.",
       },
       {
-        id: "chrome",
-        label: "Hide sidebar & top bar",
-        hint: "Gives the chat grid more room. Use the floating button (or Settings) to bring the chrome back.",
+        id: "confirm-channel",
+        label: "Confirm channel before typing",
+        hint: "Each message box stays locked until you confirm the channel, so you don't send in the wrong room when several chats are open.",
       },
       {
         id: "history",
@@ -232,7 +237,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "backup",
         label: "Back up",
-        hint: "Copy Restore from file Restore from clipboard Reset. Backups hold your preferences, favourites and channel list as plain JSON.",
+        hint: "Back up, Restore from file, and Reset. Backups hold your preferences, favourites and channel list as plain JSON.",
       },
     ],
   },

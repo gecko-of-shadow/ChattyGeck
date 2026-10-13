@@ -180,13 +180,15 @@ pub struct WindowGeom {
 
 impl WindowGeom {
     /// Reject tiny or far off-screen placements so a dead monitor can't hide the window.
+    /// A few monitors to the left or above the primary are normal (negative x/y).
+    /// Requiring the window to overlap the primary's origin dropped those.
     pub fn looks_usable(&self) -> bool {
         self.width >= 200
             && self.height >= 200
             && self.width <= 10_000
             && self.height <= 10_000
-            && self.x > -((self.width as i32).saturating_sub(80))
-            && self.y > -80
+            && self.x > -16_000
+            && self.y > -16_000
             && self.x < 16_000
             && self.y < 16_000
     }
@@ -283,5 +285,42 @@ mod tests {
         assert!(!bad.looks_usable());
         save_window_geom(&data, &bad).unwrap();
         assert!(load_window_geom(&data).is_none());
+    }
+
+    #[test]
+    fn window_on_a_monitor_left_or_above_the_primary_is_kept() {
+        let left = WindowGeom {
+            x: -1920,
+            y: 0,
+            width: 1920,
+            height: 1080,
+            maximized: false,
+        };
+        let above = WindowGeom {
+            x: 0,
+            y: -1080,
+            width: 1920,
+            height: 1080,
+            maximized: true,
+        };
+        // Maximized windows sit a few pixels outside the monitor for the border.
+        let nudged = WindowGeom {
+            x: -1928,
+            y: -8,
+            width: 1920,
+            height: 1080,
+            maximized: true,
+        };
+        assert!(left.looks_usable());
+        assert!(above.looks_usable());
+        assert!(nudged.looks_usable());
+        let far = WindowGeom {
+            x: 0,
+            y: -20_000,
+            width: 800,
+            height: 600,
+            maximized: false,
+        };
+        assert!(!far.looks_usable());
     }
 }

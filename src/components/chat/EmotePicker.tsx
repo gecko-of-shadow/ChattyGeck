@@ -227,9 +227,10 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && shown.length) {
+              const first = rows.find((row) => row.emote);
+              if (event.key === "Enter" && first?.emote) {
                 event.preventDefault();
-                pick(shown[0]);
+                pick(first.emote);
               }
             }}
             placeholder="Search…"
