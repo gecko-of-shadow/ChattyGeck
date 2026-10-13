@@ -1,5 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { ArrowRightLeft, CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +11,36 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { armComposer, useUi } from "@/store/ui";
+import { useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
+
+function srcSet(urls: { url1x: string; url2x?: string; url4x?: string }): string | undefined {
+  const parts = [`${urls.url1x} 1x`];
+  if (urls.url2x) parts.push(`${urls.url2x} 2x`);
+  if (urls.url4x) parts.push(`${urls.url4x} 4x`);
+  return parts.length > 1 ? parts.join(", ") : undefined;
+}
+
+function CompletionEmoteThumb({ emote, still }: { emote: Emote; still: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const urls = emoteUrls(emote, still);
+  if (failed) {
+    return <span className="text-[10px] font-medium text-muted-foreground">?</span>;
+  }
+  return (
+    <img
+      src={urls.url1x}
+      srcSet={srcSet(urls)}
+      alt=""
+      loading="eager"
+      decoding="async"
+      draggable={false}
+      className="max-h-7 max-w-9 object-contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 function RoomChips({ channel }: { channel: string }) {
   const room = useChat((s) => s.channels[channel]?.roomState);
@@ -75,35 +103,66 @@ function CompletionBar({
   completion,
   onChoose,
   compact,
+  anchorRef,
 }: {
   id: string;
   completion: Completion;
   onChoose: (index: number) => void;
   compact: boolean;
+  /** Position the list above this input (portaled so grid overflow can't clip it). */
+  anchorRef: RefObject<HTMLElement | null>;
 }) {
   const still = useChat((s) => s.settings.emoteAnimation === "never");
   const activeRef = useRef<HTMLButtonElement>(null);
+  const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    const place = () => {
+      const rect = el.getBoundingClientRect();
+      setBox({
+        left: rect.left,
+        width: rect.width,
+        bottom: Math.max(8, window.innerHeight - rect.top + 6),
+      });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(el);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchorRef, completion.matches.length, completion.index]);
+
   useEffect(() => {
-    // Scroll only this list. scrollIntoView would also scroll the chat log and blur the box.
-    const button = activeRef.current;
-    const list = button?.parentElement;
-    if (!button || !list) return;
-    const top = button.offsetTop;
-    const bottom = top + button.offsetHeight;
+    const active = activeRef.current;
+    const list = active?.parentElement;
+    if (!active || !list) return;
+    // Scroll only this list. scrollIntoView also scrolls the page and blurs the message box.
+    const top = active.offsetTop;
+    const bottom = top + active.offsetHeight;
     if (top < list.scrollTop) list.scrollTop = top;
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
   }, [completion.index]);
-  return (
+
+  if (!box || typeof document === "undefined") return null;
+
+  return createPortal(
     <div
       id={id}
       data-testid="tab-complete"
       role="listbox"
       aria-label="Emote suggestions"
-      className="zoo-scroll absolute right-0 bottom-full left-0 z-20 mb-1.5 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      className="zoo-scroll fixed z-50 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      style={{ left: box.left, width: box.width, bottom: box.bottom }}
     >
       {completion.matches.map((emote, i) => {
         const active = i === completion.index;
-        const urls = emoteUrls(emote, still);
         return (
           <button
             key={emoteKey(emote)}
@@ -121,18 +180,14 @@ function CompletionBar({
             )}
           >
             <span className="grid size-7 shrink-0 place-items-center">
-              <img
-                src={urls.url2x ?? urls.url1x}
-                alt=""
-                className="max-h-7 max-w-9 object-contain"
-                draggable={false}
-              />
+              <CompletionEmoteThumb emote={emote} still={still} />
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">{emote.name}</span>
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -141,23 +196,22 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const auth = useChat((s) => s.auth);
   const writeStatus = useChat((s) => s.write?.status);
   const theme = useChat((s) => THEMES[s.settings.skin]);
-  const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
-  const displayName = useChat((s) => (channel ? (s.channels[channel]?.displayName ?? channel) : null));
   const tabComplete = useChat((s) => isFeatureOn(s.settings, channel, "tabComplete"));
   const emotePicker = useChat((s) => isFeatureOn(s.settings, channel, "emotePicker"));
+  const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
   const insert = useUi((s) => s.insert);
-  const armed = useUi((s) => s.armedComposer);
   const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
+  /** After a channel switch, send is blocked until the user confirms the target name. */
+  const [unlockedFor, setUnlockedFor] = useState<string | null>(channel);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<number | null>(null);
+  const prevChannel = useRef(channel);
   const listId = useId();
-  const needsAck = !!channel && confirmSwitch && armed !== channel;
 
   useEffect(() => {
     if (!insert || insert.channel !== channel) return;
@@ -169,15 +223,13 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   }, [insert, channel]);
 
   useEffect(() => {
+    if (prevChannel.current !== channel) {
+      prevChannel.current = channel;
+      setUnlockedFor(null);
+    }
     setError(null);
     setCompletion(null);
   }, [channel]);
-
-  useEffect(() => {
-    if (!needsAck && channel && armed === channel) {
-      inputRef.current?.focus();
-    }
-  }, [needsAck, armed, channel]);
 
   // Programmatic edits (Tab, picker) put the caret right after what they inserted.
   useLayoutEffect(() => {
@@ -192,12 +244,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
 
   const connected = writeStatus === "connected";
+  const locked = confirmSwitch && unlockedFor !== channel;
   const length = Array.from(text).length;
-  const label = displayName ?? channel;
 
   const submit = () => {
-    if (needsAck) return;
-    if (!text.trim()) return;
+    if (locked || !text.trim()) return;
     const result = chat.send(channel, text);
     if (result.ok) {
       history.current = [text, ...history.current.filter((h) => h !== text)].slice(0, 50);
@@ -306,118 +357,112 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     }
   };
 
-  if (needsAck) {
-    return (
-      <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
-        <Button
-          type="button"
-          variant="default"
-          size={compact ? "sm" : "default"}
-          className={cn(
-            "w-full justify-center gap-2 font-semibold",
-            compact ? "h-8 text-[13px]" : "h-10 text-sm",
-          )}
-          onClick={() => armComposer(channel)}
-          aria-label={`Switch to #${label} to type`}
-          data-testid={`switch-composer-${channel}`}
-        >
-          <ArrowRightLeft className="size-3.5 shrink-0" />
-          <span className="truncate">Switch to #{label}</span>
-        </Button>
-        {compact ? null : (
-          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
-            Confirm so you don’t send in the wrong chat.
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div
-      ref={rootRef}
-      className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}
-    >
+    <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-destructive", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
           {error}
         </div>
       ) : null}
-      <form
-        className="flex items-center gap-1.5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <div className="relative min-w-0 flex-1">
-          {completion && completion.matches.length > 1 ? (
-            <CompletionBar
-              id={listId}
-              completion={completion}
-              compact={compact}
-              onChoose={(i) => {
-                applyMatch(completion, i);
-                inputRef.current?.focus();
-              }}
-            />
-          ) : null}
-          <Input
-            ref={inputRef}
-            value={text}
-            onChange={(event) => {
-              setText(event.target.value);
-              historyIndex.current = -1;
-              setCompletion(null);
-              if (error) setError(null);
-            }}
-            onKeyDown={onKeyDown}
-            onBlur={(event) => {
-              const next = event.relatedTarget;
-              if (next instanceof Node && rootRef.current?.contains(next)) return;
-              // A key press can blur the box for a moment. Close only if focus actually left.
-              window.setTimeout(() => {
-                const active = document.activeElement;
-                if (active && rootRef.current?.contains(active)) return;
-                setCompletion(null);
-              }, 0);
-            }}
-            placeholder={`${theme.sendVerb} to #${label} as ${auth.login}…`}
-            aria-label={`Message #${label}`}
-            aria-autocomplete={tabComplete ? "list" : undefined}
-            aria-controls={completion && completion.matches.length > 1 ? listId : undefined}
-            aria-expanded={tabComplete ? !!completion && completion.matches.length > 1 : undefined}
-            aria-activedescendant={completion && completion.matches.length > 1 ? `${listId}-${completion.index}` : undefined}
-            className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
-            autoComplete="off"
-            spellCheck
-          />
-          {length > 400 ? (
-            <span
-              className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
-            >
-              {500 - length}
-            </span>
-          ) : null}
-        </div>
-        {emotePicker ? (
-          <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} returnFocus={inputRef} compact={compact} />
-        ) : null}
-        <Button
-          type="submit"
-          size={compact ? "icon-sm" : "default"}
-          className={cn(!compact && "h-9 gap-1.5 px-3.5")}
-          disabled={!text.trim() || !connected}
-          aria-label={theme.sendVerb}
-          title={theme.sendVerb}
+      {locked ? (
+        <div
+          className={cn("flex flex-col gap-1.5", compact ? "gap-1" : "")}
+          data-testid="channel-switch-ack"
         >
-          {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
-          <SendHorizontal className="size-4" />
-        </Button>
-      </form>
+          <p className={cn("text-muted-foreground", compact ? "text-[11px]" : "text-xs")}>
+            You switched channels. Confirm before sending.
+          </p>
+          <Button
+            type="button"
+            size={compact ? "sm" : "default"}
+            className={cn("w-full", compact ? "h-8 text-[13px]" : "h-9")}
+            data-testid="channel-switch-unlock"
+            onClick={() => {
+              setUnlockedFor(channel);
+              setTimeout(() => inputRef.current?.focus(), 0);
+            }}
+          >
+            Send to #{channel}
+          </Button>
+        </div>
+      ) : (
+        <form
+          className="flex items-center gap-1.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submit();
+          }}
+        >
+          <div className="relative min-w-0 flex-1">
+            {completion && completion.matches.length > 0 ? (
+              <CompletionBar
+                id={listId}
+                completion={completion}
+                compact={compact}
+                anchorRef={inputRef}
+                onChoose={(i) => {
+                  applyMatch(completion, i);
+                  inputRef.current?.focus();
+                }}
+              />
+            ) : null}
+            <Input
+              ref={inputRef}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                historyIndex.current = -1;
+                setCompletion(null);
+                if (error) setError(null);
+              }}
+              onKeyDown={onKeyDown}
+              onBlur={(event) => {
+                const next = event.relatedTarget;
+                if (next instanceof Element && next.closest("[data-testid='tab-complete']")) return;
+                window.setTimeout(() => {
+                  const active = document.activeElement;
+                  if (active === inputRef.current) return;
+                  if (active instanceof Element && active.closest("[data-testid='tab-complete']")) return;
+                  setCompletion(null);
+                }, 0);
+              }}
+              placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
+              aria-label={`Message #${channel}`}
+              aria-autocomplete={tabComplete ? "list" : undefined}
+              aria-controls={completion ? listId : undefined}
+              aria-expanded={tabComplete ? !!completion : undefined}
+              aria-activedescendant={completion ? `${listId}-${completion.index}` : undefined}
+              className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
+              autoComplete="off"
+              spellCheck
+            />
+            {length > 400 ? (
+              <span
+                className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
+              >
+                {500 - length}
+              </span>
+            ) : null}
+          </div>
+          {emotePicker ? (
+            <EmotePicker channel={channel} emotes={emotes} index={index} onPick={insertEmote} returnFocus={inputRef} compact={compact} />
+          ) : null}
+          <Button
+            type="submit"
+            size={compact ? "icon-sm" : "default"}
+            className={cn(!compact && "h-9 gap-1.5 px-3.5")}
+            disabled={!text.trim() || !connected}
+            aria-label={theme.sendVerb}
+            title={theme.sendVerb}
+          >
+            {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
+            <SendHorizontal className="size-4" />
+          </Button>
+        </form>
+      )}
       {compact ? null : <RoomChips channel={channel} />}
-      {!compact && !connected ? (
+      {!compact && !connected && !locked ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">Connecting your account to Twitch chat…</p>
       ) : null}
     </div>

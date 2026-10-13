@@ -4,38 +4,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 const PORTABLE_DIR: &str = "ZooChattr-data";
 const SETTINGS_FILE: &str = "settings.json";
-const WINDOW_STATE_FILE: &str = "window.json";
-
-/// Last known main-window placement (portable-friendly; lives next to settings).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowState {
-    pub x: i32,
-    pub y: i32,
-    pub width: u32,
-    pub height: u32,
-    #[serde(default)]
-    pub maximized: bool,
-}
-
-impl WindowState {
-    pub fn looks_usable(&self) -> bool {
-        self.width >= 360
-            && self.height >= 420
-            && self.width <= 10_000
-            && self.height <= 10_000
-            // Keep a sliver of the window on a typical desktop so a dead monitor can't hide it.
-            && self.x > -((self.width as i32).saturating_sub(80))
-            && self.y > -80
-            && self.x < 16_000
-            && self.y < 16_000
-    }
-}
 
 pub struct DataDir {
     pub path: PathBuf,
@@ -127,24 +99,6 @@ pub fn save_settings(data: &DataDir, value: &serde_json::Value) -> Result<(), St
     fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save {}: {err}", display_path(&file)))
 }
 
-pub fn load_window_state(data: &DataDir) -> Option<WindowState> {
-    let file = data.path.join(WINDOW_STATE_FILE);
-    let text = fs::read_to_string(&file).ok()?;
-    let state: WindowState = serde_json::from_str(&text).ok()?;
-    state.looks_usable().then_some(state)
-}
-
-pub fn save_window_state(data: &DataDir, state: &WindowState) -> Result<(), String> {
-    if !state.looks_usable() {
-        return Ok(());
-    }
-    let file = data.path.join(WINDOW_STATE_FILE);
-    let tmp = data.path.join(format!("{WINDOW_STATE_FILE}.tmp"));
-    let text = serde_json::to_string_pretty(state).map_err(|err| err.to_string())?;
-    fs::write(&tmp, text).map_err(|err| format!("Couldn't write {}: {err}", display_path(&tmp)))?;
-    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save {}: {err}", display_path(&file)))
-}
-
 const CHAT_DIR: &str = "chat";
 
 fn chat_dir(data: &DataDir) -> PathBuf {
@@ -211,6 +165,47 @@ pub fn clear_chat_history(data: &DataDir, channel: Option<&str>) -> Result<(), S
     }
 }
 
+const WINDOW_FILE: &str = "window.json";
+
+/// Last known main-window placement (physical pixels).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowGeom {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub maximized: bool,
+}
+
+impl WindowGeom {
+    /// Reject tiny or far off-screen placements so a dead monitor can't hide the window.
+    pub fn looks_usable(&self) -> bool {
+        self.width >= 200
+            && self.height >= 200
+            && self.width <= 10_000
+            && self.height <= 10_000
+            && self.x > -((self.width as i32).saturating_sub(80))
+            && self.y > -80
+            && self.x < 16_000
+            && self.y < 16_000
+    }
+}
+
+pub fn load_window_geom(data: &DataDir) -> Option<WindowGeom> {
+    let text = fs::read_to_string(data.path.join(WINDOW_FILE)).ok()?;
+    let geom: WindowGeom = serde_json::from_str(&text).ok()?;
+    geom.looks_usable().then_some(geom)
+}
+
+pub fn save_window_geom(data: &DataDir, geom: &WindowGeom) -> Result<(), String> {
+    let file = data.path.join(WINDOW_FILE);
+    let tmp = data.path.join(format!("{WINDOW_FILE}.tmp"));
+    let text = serde_json::to_string_pretty(geom).map_err(|err| err.to_string())?;
+    fs::write(&tmp, text).map_err(|err| format!("Couldn't write window layout: {err}"))?;
+    fs::rename(&tmp, &file).map_err(|err| format!("Couldn't save window layout: {err}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,24 +251,29 @@ mod tests {
     }
 
     #[test]
-    fn window_state_round_trip() {
+    fn window_geom_round_trip() {
         let data = temp_data_dir("window");
-        assert!(load_window_state(&data).is_none());
-        let state = WindowState {
-            x: 120,
+        assert!(load_window_geom(&data).is_none());
+        let geom = WindowGeom {
+            x: 40,
             y: 80,
-            width: 1180,
-            height: 760,
-            maximized: false,
+            width: 1280,
+            height: 800,
+            maximized: true,
         };
-        save_window_state(&data, &state).unwrap();
-        assert_eq!(load_window_state(&data), Some(state));
+        save_window_geom(&data, &geom).unwrap();
+        let loaded = load_window_geom(&data).expect("window.json");
+        assert_eq!(loaded.x, 40);
+        assert_eq!(loaded.y, 80);
+        assert_eq!(loaded.width, 1280);
+        assert_eq!(loaded.height, 800);
+        assert!(loaded.maximized);
     }
 
     #[test]
-    fn junk_window_state_is_ignored() {
+    fn offscreen_window_geom_is_ignored() {
         let data = temp_data_dir("window-junk");
-        let bad = WindowState {
+        let bad = WindowGeom {
             x: -50_000,
             y: 0,
             width: 10,
@@ -281,7 +281,7 @@ mod tests {
             maximized: false,
         };
         assert!(!bad.looks_usable());
-        save_window_state(&data, &bad).unwrap();
-        assert!(load_window_state(&data).is_none());
+        save_window_geom(&data, &bad).unwrap();
+        assert!(load_window_geom(&data).is_none());
     }
 }

@@ -5,18 +5,20 @@ mod update;
 
 use std::sync::{
     Mutex,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, Ordering},
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewWindow, WebviewWindowBuilder, WindowEvent,
-    menu::{Menu, MenuItem},
+    AppHandle, Emitter, Manager, Position, Size, State, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, WindowEvent,
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
 const TRAY_ID: &str = "main";
+const SETTINGS_LABEL: &str = "settings";
 
 struct AppState {
     data: storage::DataDir,
@@ -24,9 +26,10 @@ struct AppState {
     save_lock: Mutex<()>,
     /// Closing the window hides it in the tray (chats stay connected) instead of quitting.
     close_to_tray: AtomicBool,
-    /// Bumped on every move or resize. One sleeper writes window.json after the window settles.
-    window_save_gen: AtomicU64,
-    window_save_scheduled: AtomicBool,
+    /// Last non-maximized outer bounds (so maximize doesn't overwrite them).
+    normal_geom: Mutex<Option<storage::WindowGeom>>,
+    /// Debounce window-layout writes while the user drags/resizes.
+    geom_save_after: Mutex<Option<Instant>>,
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -158,74 +161,169 @@ fn request_quit_confirm(app: &AppHandle) {
     }
 }
 
-fn request_update_check(app: &AppHandle) {
-    show_main_window(app);
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit("update-requested", ());
+fn release_main_after_settings(app: &AppHandle) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_enabled(true);
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
     }
 }
 
-fn persist_main_window(window: &WebviewWindow) {
-    if window.label() != "main" {
-        return;
-    }
-    let app = window.app_handle();
-    let state = app.state::<AppState>();
-    let maximized = window.is_maximized().unwrap_or(false);
-    let mut saved = storage::load_window_state(&state.data).unwrap_or(storage::WindowState {
-        x: 80,
-        y: 60,
-        width: 1180,
-        height: 760,
-        maximized: false,
-    });
-    saved.maximized = maximized;
-    if !maximized {
-        if let (Ok(pos), Ok(size)) = (window.outer_position(), window.inner_size()) {
-            // Store logical pixels so restore matches WebviewWindowBuilder::position / inner_size.
-            let scale = window.scale_factor().unwrap_or(1.0).max(0.5);
-            saved.x = (f64::from(pos.x) / scale).round() as i32;
-            saved.y = (f64::from(pos.y) / scale).round() as i32;
-            saved.width = ((f64::from(size.width) / scale).round() as u32).max(360);
-            saved.height = ((f64::from(size.height) / scale).round() as u32).max(420);
+/// Opens Settings as its own window and disables the main window until it closes.
+fn open_settings_window(app: &AppHandle, check_updates: bool) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(SETTINGS_LABEL) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.set_enabled(false);
         }
+        let _ = existing.unminimize();
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        if check_updates {
+            let _ = existing.emit("update-requested", ());
+        }
+        return Ok(());
     }
-    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let _ = storage::save_window_state(&state.data, &saved);
+
+    let main = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window isn't open.".to_string())?;
+
+    let state = app.state::<AppState>();
+    let mut builder = WebviewWindowBuilder::new(
+        app,
+        SETTINGS_LABEL,
+        WebviewUrl::App("index.html?window=settings".into()),
+    )
+        .title("ZooChattr Settings")
+        .inner_size(520.0, 740.0)
+        .min_inner_size(400.0, 480.0)
+        .resizable(true)
+        .maximizable(false)
+        .center();
+    if state.data.portable {
+        builder = builder.data_directory(state.data.path.join("webview-settings"));
+    }
+    let builder = builder.parent(&main).map_err(|err| err.to_string())?;
+
+    let _ = main.set_enabled(false);
+    let settings = match builder.build() {
+        Ok(window) => window,
+        Err(err) => {
+            let _ = main.set_enabled(true);
+            return Err(format!("Couldn't open Settings: {err}"));
+        }
+    };
+
+    let app_handle = app.clone();
+    settings.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }) {
+            // Destroyed is the reliable "gone" signal; also catch close for quicker re-enable.
+            if matches!(event, WindowEvent::Destroyed) {
+                release_main_after_settings(&app_handle);
+            }
+        }
+    });
+
+    if check_updates {
+        // Let the settings UI finish booting before asking it to check.
+        let window = settings.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            let _ = window.emit("update-requested", ());
+        });
+    }
+    Ok(())
 }
 
-/// Coalesce drag and resize events. Writing on every pixel stalls the window and hammers the disk.
-fn schedule_window_save(window: &WebviewWindow) {
-    if window.label() != "main" {
-        return;
+fn request_update_check(app: &AppHandle) {
+    let _ = open_settings_window(app, true);
+}
+
+#[tauri::command]
+fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
+    open_settings_window(&app, false)
+}
+
+fn apply_saved_geom(window: &WebviewWindow, geom: &storage::WindowGeom) {
+    if geom.maximized {
+        let _ = window.set_position(Position::Physical(tauri::PhysicalPosition { x: geom.x, y: geom.y }));
+        let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+            width: geom.width.max(360),
+            height: geom.height.max(420),
+        }));
+        let _ = window.maximize();
+    } else {
+        let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+            width: geom.width.max(360),
+            height: geom.height.max(420),
+        }));
+        let _ = window.set_position(Position::Physical(tauri::PhysicalPosition { x: geom.x, y: geom.y }));
     }
+}
+
+fn capture_window_geom(window: &WebviewWindow, state: &AppState) -> Option<storage::WindowGeom> {
+    let maximized = window.is_maximized().ok()?;
+    if maximized {
+        let mut normal = state.normal_geom.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(prev) = normal.as_mut() {
+            prev.maximized = true;
+            return Some(prev.clone());
+        }
+        let pos = window.outer_position().ok()?;
+        let size = window.outer_size().ok()?;
+        return Some(storage::WindowGeom {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+            maximized: true,
+        });
+    }
+    let pos = window.outer_position().ok()?;
+    let size = window.outer_size().ok()?;
+    let geom = storage::WindowGeom {
+        x: pos.x,
+        y: pos.y,
+        width: size.width,
+        height: size.height,
+        maximized: false,
+    };
+    *state.normal_geom.lock().unwrap_or_else(|p| p.into_inner()) = Some(geom.clone());
+    Some(geom)
+}
+
+fn persist_window_geom(window: &WebviewWindow, state: &AppState) {
+    let Some(geom) = capture_window_geom(window, state) else {
+        return;
+    };
+    let _guard = state.save_lock.lock().unwrap_or_else(|p| p.into_inner());
+    let _ = storage::save_window_geom(&state.data, &geom);
+}
+
+fn schedule_window_geom_save(window: &WebviewWindow) {
     let app = window.app_handle().clone();
-    let state = app.state::<AppState>();
-    state.window_save_gen.fetch_add(1, Ordering::Relaxed);
-    if state.window_save_scheduled.swap(true, Ordering::AcqRel) {
-        return;
+    let label = window.label().to_string();
+    {
+        let state = app.state::<AppState>();
+        *state.geom_save_after.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(Instant::now() + Duration::from_millis(400));
     }
-    let seen = state.window_save_gen.load(Ordering::Relaxed);
     std::thread::spawn(move || {
-        let mut seen = seen;
-        loop {
-            std::thread::sleep(Duration::from_millis(400));
-            let state = app.state::<AppState>();
-            let gen = state.window_save_gen.load(Ordering::Relaxed);
-            if gen != seen {
-                seen = gen;
-                continue;
+        std::thread::sleep(Duration::from_millis(450));
+        let state = app.state::<AppState>();
+        let due = {
+            let guard = state.geom_save_after.lock().unwrap_or_else(|p| p.into_inner());
+            match *guard {
+                Some(at) if Instant::now() >= at => true,
+                _ => false,
             }
-            state.window_save_scheduled.store(false, Ordering::Release);
-            if state.window_save_gen.load(Ordering::Relaxed) != gen {
-                state.window_save_scheduled.store(true, Ordering::Release);
-                seen = state.window_save_gen.load(Ordering::Relaxed);
-                continue;
-            }
-            if let Some(main) = app.get_webview_window("main") {
-                persist_main_window(&main);
-            }
+        };
+        if !due {
             return;
+        }
+        if let Some(window) = app.get_webview_window(&label) {
+            persist_window_geom(&window, &state);
         }
     });
 }
@@ -244,13 +342,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let data = storage::resolve_data_dir(app.handle());
+            let saved_geom = storage::load_window_geom(&data);
             let webview_dir = data.portable.then(|| data.path.join("webview"));
             app.manage(AppState {
                 data,
                 save_lock: Mutex::new(()),
                 close_to_tray: AtomicBool::new(true),
-                window_save_gen: AtomicU64::new(0),
-                window_save_scheduled: AtomicBool::new(false),
+                normal_geom: Mutex::new(saved_geom.clone().map(|mut g| {
+                    g.maximized = false;
+                    g
+                })),
+                geom_save_after: Mutex::new(None),
             });
 
             let window_config = app
@@ -261,40 +363,34 @@ pub fn run() {
                 .find(|window| window.label == "main")
                 .cloned()
                 .ok_or("tauri.conf.json is missing the main window")?;
-            let remembered = storage::load_window_state(
-                &app.state::<AppState>().data,
-            );
             let mut builder = WebviewWindowBuilder::from_config(app.handle(), &window_config)?;
             if let Some(dir) = webview_dir {
                 // Keeps the webview cache inside the portable folder instead of %LOCALAPPDATA%.
                 builder = builder.data_directory(dir);
             }
-            if let Some(ref place) = remembered {
-                builder = builder
-                    .inner_size(f64::from(place.width), f64::from(place.height))
-                    .position(f64::from(place.x), f64::from(place.y));
-            }
-            let main = builder.build()?;
-            if remembered.as_ref().is_some_and(|place| place.maximized) {
-                let _ = main.maximize();
+            let window = builder.build()?;
+            if let Some(geom) = &saved_geom {
+                apply_saved_geom(&window, geom);
             }
 
             let show = MenuItem::with_id(app, "show", "Show ZooChattr", true, None::<&str>)?;
             let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
             let update = MenuItem::with_id(app, "update", "Check for updates…", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit ZooChattr", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &settings, &update, &quit])?;
+            let menu = Menu::with_items(app, &[&show, &settings, &update, &sep, &quit])?;
             let mut tray = TrayIconBuilder::with_id(TRAY_ID)
                 .tooltip("ZooChattr")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => show_main_window(app),
-                    "settings" => {
-                        show_main_window(app);
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.emit("settings-requested", ());
+                    "show" => {
+                        if app.get_webview_window(SETTINGS_LABEL).is_none() {
+                            show_main_window(app);
                         }
+                    }
+                    "settings" => {
+                        let _ = open_settings_window(app, false);
                     }
                     "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
@@ -317,21 +413,33 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == SETTINGS_LABEL {
+                if matches!(event, WindowEvent::Destroyed) {
+                    release_main_after_settings(window.app_handle());
+                }
+                return;
+            }
+            if window.label() != "main" {
+                return;
+            }
+            let Some(webview) = window.app_handle().get_webview_window(window.label()) else {
+                return;
+            };
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
-                    if let Some(main) = window.app_handle().get_webview_window(window.label()) {
-                        persist_main_window(&main);
-                    }
                     let state = window.app_handle().state::<AppState>();
-                    if window.label() == "main" && state.close_to_tray.load(Ordering::Relaxed) {
+                    persist_window_geom(&webview, &state);
+                    if state.close_to_tray.load(Ordering::Relaxed) {
                         api.prevent_close();
-                        let _ = window.hide();
+                        let _ = webview.hide();
                     }
                 }
                 WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-                    if let Some(main) = window.app_handle().get_webview_window(window.label()) {
-                        schedule_window_save(&main);
-                    }
+                    schedule_window_geom_save(&webview);
+                }
+                WindowEvent::Destroyed => {
+                    let state = window.app_handle().state::<AppState>();
+                    persist_window_geom(&webview, &state);
                 }
                 _ => {}
             }
@@ -352,7 +460,8 @@ pub fn run() {
             get_launch_at_login,
             set_launch_at_login,
             check_for_update,
-            apply_update
+            apply_update,
+            open_settings_window_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running ZooChattr");

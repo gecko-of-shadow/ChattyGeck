@@ -92,25 +92,31 @@ export default function App() {
 
   useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
-    const stops: Array<() => void> = [];
+    const unlistens: Array<() => void> = [];
     let cancelled = false;
     void (async () => {
       const { listen } = await import("@tauri-apps/api/event");
       if (cancelled) return;
-      stops.push(
-        await listen("settings-requested", () => {
-          useUi.setState({ settingsOpen: true, navOpen: false });
+      // Settings / update checks open the dedicated Settings window (Rust).
+      unlistens.push(
+        await listen("login-requested", () => {
+          useUi.setState({ loginOpen: true, navOpen: false });
         }),
       );
-      stops.push(
-        await listen("update-requested", () => {
-          useUi.setState({ settingsOpen: true, navOpen: false, pendingUpdateCheck: true });
+      unlistens.push(
+        await listen("settings-changed", () => {
+          void chat.pullSettingsFromDisk();
+        }),
+      );
+      unlistens.push(
+        await listen("session-changed", () => {
+          void chat.pullSessionFromDisk();
         }),
       );
     })();
     return () => {
       cancelled = true;
-      for (const stop of stops) stop();
+      for (const off of unlistens) off();
     };
   }, []);
 

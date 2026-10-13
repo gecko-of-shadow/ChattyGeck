@@ -31,18 +31,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { chat } from "@/lib/chat/controller";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/lib/emotes/types";
+import { GRID_EDGE, GRID_GAP, layoutChatGrid } from "@/lib/gridLayout";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer } from "@/store/ui";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
-
-/** Narrowest a grid box gets before the grid wraps to fewer columns. */
-const BOX_MIN_WIDTH = 300;
-/** Shortest a grid box gets before the grid scrolls instead of squeezing. */
-const BOX_MIN_HEIGHT = 260;
-const GRID_GAP = 8;
 
 export function EmptyState() {
   return (
@@ -242,9 +237,9 @@ function ChatBox({ login }: { login: string }) {
   return (
     <section
       aria-label={`#${login} chat`}
-      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-card/50 shadow-sm"
+      className="flex min-h-0 min-w-0 flex-col rounded-xl border border-border/80 bg-card/50 shadow-sm"
     >
-      <header className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/70 bg-card/80 pr-1 pl-2">
+      <header className="flex h-9 shrink-0 items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2">
         <span className="relative shrink-0">
           <ChannelAvatar login={login} className="size-5 text-[10px]" />
           <span
@@ -299,16 +294,21 @@ function ChatBox({ login }: { login: string }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <ChatLog
-        messages={view.messages}
-        channel={login}
-        viewKey={`box:${login}`}
-        label={`#${login} messages`}
-        liveRows={120}
-        empty={<ChannelPlaceholder login={login} compact />}
-        onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
-      />
-      <Composer channel={login} compact />
+      {/* Clip only the log so Tab-complete / picker popovers above the composer aren't cut off. */}
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <ChatLog
+          messages={view.messages}
+          channel={login}
+          viewKey={`box:${login}`}
+          label={`#${login} messages`}
+          liveRows={120}
+          empty={<ChannelPlaceholder login={login} compact />}
+          onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
+        />
+      </div>
+      <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
+        <Composer channel={login} compact />
+      </div>
     </section>
   );
 }
@@ -323,7 +323,8 @@ export function GridView() {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => setArea({ width: el.clientWidth - 2 * GRID_GAP, height: el.clientHeight - 2 * GRID_GAP });
+    const measure = () =>
+      setArea({ width: el.clientWidth - 2 * GRID_EDGE, height: el.clientHeight - 2 * GRID_EDGE });
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -346,20 +347,20 @@ export function GridView() {
     );
   }
 
-  const count = channels.length;
-  const maxColumns = Math.max(1, Math.floor((area.width + GRID_GAP) / (BOX_MIN_WIDTH + GRID_GAP)));
-  const rows = Math.ceil(count / Math.min(count, maxColumns));
-  const columns = Math.ceil(count / rows);
-  const rowHeight = Math.max(BOX_MIN_HEIGHT, Math.floor((area.height - GRID_GAP * (rows - 1)) / rows));
+  const { columns, cellWidth, cellHeight } = layoutChatGrid(channels.length, area.width, area.height);
 
   return (
-    <div ref={scrollRef} className="zoo-scroll min-h-0 flex-1 overflow-y-auto" style={{ padding: GRID_GAP }}>
+    <div
+      ref={scrollRef}
+      className="zoo-scroll zoo-texture-soft min-h-0 flex-1 overflow-y-auto"
+      style={{ padding: GRID_EDGE }}
+    >
       <div
-        className="grid"
+        className="grid justify-items-stretch"
         style={{
           gap: GRID_GAP,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          gridAutoRows: `${rowHeight}px`,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, ${cellWidth}px))`,
+          gridAutoRows: `${cellHeight}px`,
         }}
       >
         {channels.map((login) => (

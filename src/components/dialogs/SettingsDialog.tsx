@@ -579,10 +579,11 @@ function ProblemsSection() {
 function UpdateRow() {
   const version = useChat((s) => s.appInfo?.version ?? "");
   const autoCheck = useChat((s) => s.settings.autoCheckUpdates);
-  const pendingUpdateCheck = useUi((s) => s.pendingUpdateCheck);
+  const updateCheckNonce = useUi((s) => s.updateCheckNonce);
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [latest, setLatest] = useState<UpdateInfo | null>(null);
   const [status, setStatus] = useState<string>("");
+  const lastTrayCheck = useRef(0);
 
   const check = async () => {
     setBusy("check");
@@ -604,11 +605,13 @@ function UpdateRow() {
     }
   };
 
+  // Tray "Check for updates…" opens Settings and bumps this nonce.
   useEffect(() => {
-    if (!pendingUpdateCheck) return;
-    useUi.setState({ pendingUpdateCheck: false });
+    if (updateCheckNonce <= 0 || updateCheckNonce === lastTrayCheck.current) return;
+    lastTrayCheck.current = updateCheckNonce;
     void check();
-  }, [pendingUpdateCheck]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on tray nonce
+  }, [updateCheckNonce]);
 
   const install = async () => {
     if (!latest) return;
@@ -752,11 +755,148 @@ function BackupRow() {
   );
 }
 
-export function SettingsDialog() {
-  const open = useUi((s) => s.settingsOpen);
+/** Shared settings sections (dialog in the browser, full window on desktop). */
+export function SettingsBody({ onRequestLogin }: { onRequestLogin: () => void }) {
   const skin = useChat((s) => s.settings.skin);
   const appInfo = useChat((s) => s.appInfo);
   const auth = useChat((s) => s.auth);
+
+  return (
+    <div className="space-y-6">
+      <Section icon={Palette} title="Animal theme">
+        <div className="grid grid-cols-2 gap-2">
+          {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              data-skin={option.id}
+              onClick={() => chat.updateSettings({ skin: option.id })}
+              aria-pressed={skin === option.id}
+              className={cn(
+                "zoo-texture relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+                skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
+              )}
+            >
+              <Mascot skin={option.id} className="size-9" anim="none" />
+              <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
+              <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
+              {skin === option.id ? (
+                <span className="absolute top-2 right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
+                  <Check className="size-3" />
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      </Section>
+
+      <Section icon={Type} title="Chat display">
+        <div className="space-y-3">
+          <TextSizeRow />
+          <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
+          <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
+          <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
+          <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
+          <ToggleRow
+            id="pref-deleted"
+            label="Show deleted messages"
+            hint="Keep what a mod removed readable, faded and crossed out, instead of hiding it"
+            setting="showDeleted"
+          />
+          <WordListField
+            id="pref-highlight"
+            label="Highlight words"
+            hint="Besides your own name, messages with these words light up and count as mentions."
+            placeholder={"giveaway\nmy_nickname"}
+            setting="highlightWords"
+          />
+          <MentionSoundRow />
+        </div>
+      </Section>
+
+      <EmotesSection />
+
+      <ChannelOverridesSection />
+
+      <Section icon={AppWindow} title="Window">
+        <ToggleRow
+          id="pref-tray"
+          label="Close to tray"
+          hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit — you'll get a confirmation first."
+          setting="closeToTray"
+        />
+        <ToggleRow
+          id="pref-startup"
+          label="Start with Windows"
+          hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
+          setting="startOnLogin"
+        />
+        <ToggleRow
+          id="pref-confirm-channel"
+          label="Confirm channel before typing"
+          hint='Each message box stays locked until you confirm the channel, so you don’t send in the wrong room when several chats are open.'
+          setting="confirmChannelSwitch"
+        />
+        <ToggleRow
+          id="pref-chat-history"
+          label="Remember chat history"
+          hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
+          setting="rememberChatHistory"
+        />
+      </Section>
+
+      <Section icon={KeyRound} title="Twitch account">
+        <p className="text-sm text-muted-foreground">
+          {auth.status === "logged_in" ? (
+            <>
+              Logged in as <b className="text-foreground">{auth.login}</b>
+              {auth.remembered ? "" : " (this login won't be remembered after you quit)"}.
+            </>
+          ) : (
+            "Not logged in. You can read any channel anonymously."
+          )}
+        </p>
+        <ClientIdField />
+        {auth.status === "logged_in" ? (
+          <Button variant="outline" size="sm" onClick={() => void chat.logout()}>
+            Log out
+          </Button>
+        ) : (
+          <Button size="sm" onClick={onRequestLogin}>
+            Log in with Twitch
+          </Button>
+        )}
+      </Section>
+
+      <Section icon={FolderOpen} title="Storage">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
+          <dt className="text-muted-foreground">Mode</dt>
+          <dd>
+            {appInfo?.portable
+              ? "Portable (data lives next to ZooChattr)"
+              : appInfo?.platform === "browser"
+                ? "Browser dev mode"
+                : "Per-user app data folder"}
+          </dd>
+          <dt className="text-muted-foreground">Settings</dt>
+          <dd className="font-mono break-all">{appInfo?.dataDir ?? "…"}</dd>
+          <dt className="text-muted-foreground">Login</dt>
+          <dd>{appInfo?.tokenStore ?? "…"}</dd>
+          <dt className="text-muted-foreground">Version</dt>
+          <dd>ZooChattr {appInfo?.version ?? ""}</dd>
+        </dl>
+        <UpdateRow />
+        <BackupRow />
+      </Section>
+
+      <ProblemsSection />
+    </div>
+  );
+}
+
+/** Browser / e2e: modal dialog. Desktop uses the Settings popout window instead. */
+export function SettingsDialog() {
+  const open = useUi((s) => s.settingsOpen);
 
   return (
     <Dialog open={open} onOpenChange={(next) => useUi.setState({ settingsOpen: next })}>
@@ -767,127 +907,9 @@ export function SettingsDialog() {
         </DialogHeader>
 
         <div className="zoo-scroll min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain px-4 py-4">
-          <Section icon={Palette} title="Animal theme">
-            <div className="grid grid-cols-2 gap-2">
-              {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  data-skin={option.id}
-                  onClick={() => chat.updateSettings({ skin: option.id })}
-                  aria-pressed={skin === option.id}
-                  className={cn(
-                    "zoo-texture relative flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-                    skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
-                  )}
-                >
-                  <Mascot skin={option.id} className="size-9" anim="none" />
-                  <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
-                  <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
-                  {skin === option.id ? (
-                    <span className="absolute top-2 right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
-                      <Check className="size-3" />
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          </Section>
-
-          <Section icon={Type} title="Chat display">
-            <div className="space-y-3">
-              <TextSizeRow />
-              <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
-              <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
-              <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
-              <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
-              <ToggleRow
-                id="pref-deleted"
-                label="Show deleted messages"
-                hint="Keep what a mod removed readable, faded and crossed out, instead of hiding it"
-                setting="showDeleted"
-              />
-              <WordListField
-                id="pref-highlight"
-                label="Highlight words"
-                hint="Besides your own name, messages with these words light up and count as mentions."
-                placeholder={"giveaway\nmy_nickname"}
-                setting="highlightWords"
-              />
-              <MentionSoundRow />
-            </div>
-          </Section>
-
-          <EmotesSection />
-
-          <ChannelOverridesSection />
-
-          <Section icon={AppWindow} title="Window">
-            <ToggleRow
-              id="pref-tray"
-              label="Close to tray"
-              hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray for Show, Settings, Check for updates, or Quit."
-              setting="closeToTray"
-            />
-            <ToggleRow
-              id="pref-confirm-channel"
-              label="Confirm channel before typing"
-              hint='Each message box stays locked until you press "Switch to #channel", so you don’t send in the wrong room when several chats are open.'
-              setting="confirmChannelSwitch"
-            />
-            <ToggleRow
-              id="pref-startup"
-              label="Start with Windows"
-              hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
-              setting="startOnLogin"
-            />
-            <ToggleRow
-              id="pref-chat-history"
-              label="Remember chat history"
-              hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
-              setting="rememberChatHistory"
-            />
-          </Section>
-
-          <Section icon={KeyRound} title="Twitch account">
-            <p className="text-sm text-muted-foreground">
-              {auth.status === "logged_in" ? (
-                <>
-                  Logged in as <b className="text-foreground">{auth.login}</b>
-                  {auth.remembered ? "" : " (this login won't be remembered after you quit)"}.
-                </>
-              ) : (
-                "Not logged in. You can read any channel anonymously."
-              )}
-            </p>
-            <ClientIdField />
-            {auth.status === "logged_in" ? (
-              <Button variant="outline" size="sm" onClick={() => void chat.logout()}>
-                Log out
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => useUi.setState({ settingsOpen: false, loginOpen: true })}>
-                Log in with Twitch
-              </Button>
-            )}
-          </Section>
-
-          <Section icon={FolderOpen} title="Storage">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-              <dt className="text-muted-foreground">Mode</dt>
-              <dd>{appInfo?.portable ? "Portable (data lives next to ZooChattr)" : appInfo?.platform === "browser" ? "Browser dev mode" : "Per-user app data folder"}</dd>
-              <dt className="text-muted-foreground">Settings</dt>
-              <dd className="font-mono break-all">{appInfo?.dataDir ?? "…"}</dd>
-              <dt className="text-muted-foreground">Login</dt>
-              <dd>{appInfo?.tokenStore ?? "…"}</dd>
-              <dt className="text-muted-foreground">Version</dt>
-              <dd>ZooChattr {appInfo?.version ?? ""}</dd>
-            </dl>
-            <UpdateRow />
-            <BackupRow />
-          </Section>
-
-          <ProblemsSection />
+          <SettingsBody
+            onRequestLogin={() => useUi.setState({ settingsOpen: false, loginOpen: true })}
+          />
         </div>
       </DialogContent>
     </Dialog>

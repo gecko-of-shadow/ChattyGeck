@@ -100,6 +100,8 @@ class ChatController {
   private everConnected = false;
   private dropAnnounced = false;
   private booted = false;
+  /** Settings popout window: preferences UI only — no IRC / chat joins. */
+  private settingsUiOnly = false;
   private lastAttention = 0;
   /** When the last live mention chime started. 0 means none yet. Preview does not set this. */
   private lastMentionSoundAt = 0;
@@ -188,6 +190,89 @@ class ChatController {
     setInterval(() => this.tick(), 5_000);
     setInterval(() => void this.validateHourly(), 60 * 60_000);
     this.armUpdateChecks(settings.autoCheckUpdates);
+  }
+
+  /** Preferences-only boot for the Settings popout (no second IRC connection). */
+  async bootSettingsUi(): Promise<void> {
+    if (this.booted) return;
+    this.booted = true;
+    this.settingsUiOnly = true;
+
+    const [rawSettings, appInfo, stored] = await Promise.all([
+      platform.loadSettings().catch(() => null),
+      platform.getAppInfo().catch(() => null),
+      platform.loadSession().catch(() => null),
+    ]);
+    const settings = sanitizeSettings(rawSettings);
+    emoteRegistry.setPrefs(emotePrefsFrom(settings));
+    set({
+      settings,
+      appInfo,
+      channels: {},
+      ready: true,
+      auth: stored?.accessToken && stored.login
+        ? { status: "logged_in", login: stored.login, userId: stored.userId, remembered: true }
+        : { status: "anonymous" },
+    });
+    this.session = stored?.accessToken && stored.login ? stored : null;
+  }
+
+  /** Main window: reload preferences (and join any channels Settings added) after the popout saves. */
+  async pullSettingsFromDisk(): Promise<void> {
+    if (this.settingsUiOnly) return;
+    const raw = await platform.loadSettings().catch(() => null);
+    if (!raw) return;
+    const next = sanitizeSettings(raw);
+    const before = get().settings;
+    set({ settings: next });
+    emoteRegistry.setPrefs(emotePrefsFrom(next));
+    if (next.closeToTray !== before.closeToTray) void platform.setCloseToTray(next.closeToTray).catch(() => undefined);
+    if (next.startOnLogin !== before.startOnLogin) void platform.setLaunchAtLogin(next.startOnLogin).catch(() => undefined);
+    if (next.autoCheckUpdates !== before.autoCheckUpdates) this.armUpdateChecks(next.autoCheckUpdates);
+    for (const name of next.channels) {
+      if (get().channels[name]) continue;
+      set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
+      if (next.rememberChatHistory) void this.restoreHistory([name]);
+      this.read.join(name);
+      if (this.session) void this.loadProfiles([name]);
+    }
+  }
+
+  /** Main window: refresh login state after Settings logs out. */
+  async pullSessionFromDisk(): Promise<void> {
+    if (this.settingsUiOnly) return;
+    const stored = await platform.loadSession().catch(() => null);
+    if (!stored) {
+      if (this.session) await this.logout("Logged out from Settings.");
+      return;
+    }
+    if (!this.session || this.session.accessToken !== stored.accessToken) {
+      const session = await this.revalidate(stored);
+      if (session) {
+        this.setSession(session, true);
+        this.startWrite();
+      }
+    }
+  }
+
+  private async broadcastSettingsChanged(): Promise<void> {
+    if (!platform.isTauri) return;
+    try {
+      const { emit } = await import("@tauri-apps/api/event");
+      await emit("settings-changed");
+    } catch {
+      // Ignore — main window will pick up on next open.
+    }
+  }
+
+  private async broadcastSessionChanged(): Promise<void> {
+    if (!platform.isTauri) return;
+    try {
+      const { emit } = await import("@tauri-apps/api/event");
+      await emit("session-changed");
+    } catch {
+      // Ignore.
+    }
   }
 
   // ---------------------------------------------------------------- auth
@@ -333,6 +418,16 @@ class ChatController {
     const session = this.session;
     if (!session) return;
     this.setSession(null);
+    if (this.settingsUiOnly) {
+      await platform.clearSession().catch(() => undefined);
+      void this.broadcastSessionChanged();
+      if (reason) toast.warning(reason);
+      else {
+        void revokeToken(session.clientId, session.accessToken);
+        toast("Logged out", { description: "Still reading chat anonymously." });
+      }
+      return;
+    }
     this.stopWrite();
     for (const pending of this.pendingSends) clearTimeout(pending.timer);
     this.pendingSends = [];
@@ -344,6 +439,7 @@ class ChatController {
     }));
     this.read.restart("Switching to anonymous reading");
     await platform.clearSession().catch(() => undefined);
+    void this.broadcastSessionChanged();
     if (reason) toast.warning(reason);
     else {
       void revokeToken(session.clientId, session.accessToken);
@@ -770,6 +866,16 @@ class ChatController {
   addChannel(input: string): ActionResult & { channel?: string } {
     const name = normalizeChannelName(input);
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
+    if (this.settingsUiOnly) {
+      if (get().settings.channels.includes(name)) return { ok: true, channel: name };
+      const gridFull = get().settings.gridChannels.length >= MAX_GRID_SLOTS;
+      this.updateSettings((s) => ({
+        channels: [...s.channels, name],
+        gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+        focused: s.mode === "focused" || !s.focused ? name : s.focused,
+      }));
+      return { ok: true, channel: name };
+    }
     if (get().channels[name]) {
       if (get().settings.mode === "focused") this.focus(name);
       return { ok: true, channel: name };
@@ -1001,6 +1107,7 @@ class ChatController {
         try {
           await platform.saveSettings(get().settings);
           this.saveErrorShown = false;
+          if (this.settingsUiOnly) void this.broadcastSettingsChanged();
         } catch (err) {
           if (!this.saveErrorShown) {
             this.saveErrorShown = true;
