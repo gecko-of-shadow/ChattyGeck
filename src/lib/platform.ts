@@ -84,11 +84,24 @@ export async function requestAttention(): Promise<void> {
   await getCurrentWindow().requestUserAttention(UserAttentionType.Informational);
 }
 
+/** Chat links and the Twitch login page. Anything other than http(s) stays closed. */
+export function allowedExternalUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 export async function openExternal(url: string): Promise<void> {
+  const href = allowedExternalUrl(url);
+  if (!href) return;
   if (isTauri) {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
+    await openUrl(href);
     return;
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(href, "_blank", "noopener,noreferrer");
 }
