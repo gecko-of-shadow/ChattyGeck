@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveSlice, MAX_LIVE_WINDOW } from "./window";
+import { liveSlice, MAX_LIVE_WINDOW, pausedSlice } from "./window";
 import type { ChatMessage } from "@/lib/twitch/types";
 
 const row = (id: string): ChatMessage => ({
@@ -31,5 +31,13 @@ describe("live chat window", () => {
     const visible = liveSlice(messages, 150, "0");
     expect(visible).toHaveLength(MAX_LIVE_WINDOW);
     expect(visible[0].id).toBe(String(5_000 - MAX_LIVE_WINDOW));
+  });
+
+  it("paints a paused window without copying the whole snapshot", () => {
+    const messages = Array.from({ length: 1_000 }, (_, i) => row(String(i)));
+    const visible = pausedSlice(messages, 700, 900);
+    expect(visible.map((m) => m.id)).toEqual(messages.slice(700, 900).map((m) => m.id));
+    expect(visible).toHaveLength(200);
+    expect(pausedSlice(messages, 0, messages.length)).toBe(messages);
   });
 });

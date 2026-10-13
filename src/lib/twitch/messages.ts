@@ -56,9 +56,16 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+let mentionLogin = "";
+let mentionPattern: RegExp | null = null;
+
 export function mentionsUser(text: string, login: string | undefined): boolean {
   if (!login) return false;
-  return new RegExp(`(^|[^\\w])@?${escapeRegExp(login)}(?![\\w])`, "i").test(text);
+  if (login !== mentionLogin || !mentionPattern) {
+    mentionLogin = login;
+    mentionPattern = new RegExp(`(^|[^\\w])@?${escapeRegExp(login)}(?![\\w])`, "i");
+  }
+  return mentionPattern.test(text);
 }
 
 const highlightPatterns = new WeakMap<readonly string[], RegExp>();

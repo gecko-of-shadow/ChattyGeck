@@ -116,12 +116,18 @@ export function sanitizeHistory(raw: unknown, now = Date.now()): ChatMessage[] {
   return trimByAgeAndCap(out, now);
 }
 
-/** Strip UI-only rows, drop anything older than 48h, then hard-cap. */
+/** Strip UI-only rows, drop anything older than 48h, then hard-cap. Same array when nothing changes. */
 export function messagesForDisk(messages: ChatMessage[], now = Date.now()): ChatMessage[] {
-  return trimByAgeAndCap(
-    messages.filter((m) => !isHistoryBoundary(m) && !m.pending),
-    now,
-  );
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    if (message.pending || isHistoryBoundary(message)) {
+      return trimByAgeAndCap(
+        messages.filter((row) => !isHistoryBoundary(row) && !row.pending),
+        now,
+      );
+    }
+  }
+  return trimLiveBuffer(messages, now);
 }
 
 /**

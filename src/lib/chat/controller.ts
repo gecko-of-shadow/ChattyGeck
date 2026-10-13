@@ -616,7 +616,7 @@ class ChatController {
   private onClearMsg(message: IrcMessage): void {
     const channel = channelFromParam(message.params[0]);
     const targetId = message.tags["target-msg-id"];
-    if (targetId) this.markDeleted(channel, (m) => m.id === targetId);
+    if (targetId) this.markDeleted(channel, (m) => m.id === targetId, true);
   }
 
   // ---------------------------------------------------------------- sending
@@ -691,7 +691,7 @@ class ChatController {
     if (index < 0) return false;
     const [pending] = this.pendingSends.splice(index, 1);
     clearTimeout(pending.timer);
-    this.replaceMessage(pending.id, () => echo);
+    this.replaceMessage(pending.channel, pending.id, () => echo);
     return true;
   }
 
@@ -699,7 +699,7 @@ class ChatController {
     const pending = this.pendingSends.find((p) => p.channel === channel && p.state === "sending");
     if (!pending) return;
     pending.state = "sent";
-    this.replaceMessage(pending.id, (m) => ({ ...m, pending: undefined }));
+    this.replaceMessage(channel, pending.id, (m) => ({ ...m, pending: undefined }));
   }
 
   private failPending(channel: string, reason: string): boolean {
@@ -707,7 +707,7 @@ class ChatController {
     if (index < 0) return false;
     const [pending] = this.pendingSends.splice(index, 1);
     clearTimeout(pending.timer);
-    this.replaceMessage(pending.id, (m) => ({ ...m, pending: "failed", failReason: reason }));
+    this.replaceMessage(channel, pending.id, (m) => ({ ...m, pending: "failed", failReason: reason }));
     return true;
   }
 
@@ -716,7 +716,7 @@ class ChatController {
     if (index < 0) return;
     const [pending] = this.pendingSends.splice(index, 1);
     if (pending.state === "sending") {
-      this.replaceMessage(id, (m) => ({
+      this.replaceMessage(pending.channel, id, (m) => ({
         ...m,
         pending: "failed",
         failReason: "Twitch never confirmed this message, so it probably wasn't sent.",
@@ -817,39 +817,51 @@ class ChatController {
     return messages.length > config.messageCapPerChannel ? messages.slice(-config.messageCapPerChannel) : messages;
   }
 
-  private replaceMessage(id: string, update: (message: ChatMessage) => ChatMessage): void {
+  private replaceMessage(channel: string, id: string, update: (message: ChatMessage) => ChatMessage): void {
     this.flush();
     set((state) => {
-      let changed = false;
-      const swap = (list: ChatMessage[]) => {
-        const index = list.findIndex((m) => m.id === id);
-        if (index < 0) return list;
-        changed = true;
-        const next = list.slice();
-        next[index] = update(list[index]);
-        return next;
-      };
-      const channels = { ...state.channels };
-      for (const [key, view] of Object.entries(channels)) {
-        const messages = swap(view.messages);
-        if (messages !== view.messages) channels[key] = { ...view, messages };
+      const view = state.channels[channel];
+      if (!view) return {};
+      const list = view.messages;
+      let index = -1;
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i].id === id) {
+          index = i;
+          break;
+        }
       }
-      return changed ? { channels } : {};
+      if (index < 0) return {};
+      const next = list.slice();
+      next[index] = update(list[index]);
+      return { channels: { ...state.channels, [channel]: { ...view, messages: next } } };
     });
   }
 
-  private markDeleted(channel: string, match: (message: ChatMessage) => boolean): void {
+  private markDeleted(channel: string, match: (message: ChatMessage) => boolean, newestOnly = false): void {
     this.flush();
     let changed = false;
     set((state) => {
       const view = state.channels[channel];
       if (!view) return {};
+      const list = view.messages;
       const hit = (m: ChatMessage) => m.channel === channel && !m.deleted && match(m);
-      if (!view.messages.some(hit)) return {};
+      if (newestOnly) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (!hit(list[i])) continue;
+          changed = true;
+          const next = list.slice();
+          next[i] = { ...list[i], deleted: true };
+          return { channels: { ...state.channels, [channel]: { ...view, messages: next } } };
+        }
+        return {};
+      }
+      if (!list.some(hit)) return {};
       changed = true;
-      const mark = (m: ChatMessage) => (hit(m) ? { ...m, deleted: true } : m);
       return {
-        channels: { ...state.channels, [channel]: { ...view, messages: view.messages.map(mark) } },
+        channels: {
+          ...state.channels,
+          [channel]: { ...view, messages: list.map((m) => (hit(m) ? { ...m, deleted: true } : m)) },
+        },
       };
     });
     if (changed) this.scheduleHistorySave(channel);

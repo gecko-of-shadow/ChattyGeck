@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
@@ -108,7 +109,13 @@ export function ChatHeader() {
   const focused = useChat((s) => s.settings.focused);
   const gridCount = useChat((s) => s.settings.gridChannels.length);
   const followCount = useChat((s) => s.settings.channels.length);
-  const view = useChat((s) => (focused ? s.channels[focused] : undefined));
+  const view = useChat(
+    useShallow((s) => {
+      const channel = focused ? s.channels[focused] : undefined;
+      if (!channel) return null;
+      return { login: channel.login, displayName: channel.displayName, status: channel.status };
+    }),
+  );
   const unreadElsewhere = useChat((s) =>
     Object.values(s.channels).reduce((sum, c) => sum + (c.login === s.settings.focused ? 0 : c.mentions), 0),
   );

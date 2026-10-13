@@ -64,6 +64,12 @@ describe("chat history (48h)", () => {
     expect(cleaned.every((m) => !isHistoryBoundary(m))).toBe(true);
   });
 
+  it("returns the same array when disk does not need to strip or trim", () => {
+    const now = 1_700_000_000_000;
+    const messages = [base({ id: "a", ts: now - 1_000 }), base({ id: "b", ts: now })];
+    expect(messagesForDisk(messages, now)).toBe(messages);
+  });
+
   it("returns the same array when every live row is still inside the cap", () => {
     const now = 1_700_000_000_000;
     const messages = [base({ id: "a", ts: now - 1_000 }), base({ id: "b", ts: now })];

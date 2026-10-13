@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -34,6 +34,7 @@ import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/l
 import { GRID_EDGE, GRID_GAP, layoutChatGrid } from "@/lib/gridLayout";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { useShallow } from "zustand/react/shallow";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer } from "@/store/ui";
@@ -154,8 +155,14 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
 }
 
 /** What a channel's log shows before its first message arrives. */
-function ChannelPlaceholder({ login, compact = false }: { login: string; compact?: boolean }) {
-  const view = useChat((s) => s.channels[login]);
+const ChannelPlaceholder = memo(function ChannelPlaceholder({ login, compact = false }: { login: string; compact?: boolean }) {
+  const view = useChat(
+    useShallow((s) => {
+      const channel = s.channels[login];
+      if (!channel) return null;
+      return { status: channel.status, error: channel.error };
+    }),
+  );
   if (!view) return null;
   const size = compact ? "size-10" : "size-16";
   if (view.status === "error") {
@@ -186,21 +193,43 @@ function ChannelPlaceholder({ login, compact = false }: { login: string; compact
       </p>
     </div>
   );
-}
+});
 
-export function FocusedView({ login }: { login: string }) {
-  const view = useChat((s) => s.channels[login]);
-  if (!view) return null;
+/** Subscribes to the message list only, so headers and composers stay put while chat arrives. */
+function ChannelLog({
+  login,
+  viewKey,
+  label,
+  liveRows,
+  compactEmpty = false,
+}: {
+  login: string;
+  viewKey: string;
+  label: string;
+  liveRows?: number;
+  compactEmpty?: boolean;
+}) {
+  const messages = useChat((s) => s.channels[login]?.messages);
+  const readMarker = useChat((s) => s.channels[login]?.readMarker);
+  if (!messages) return null;
   return (
     <ChatLog
-      messages={view.messages}
+      messages={messages}
       channel={login}
-      viewKey={`focused:${login}`}
-      empty={<ChannelPlaceholder login={login} />}
-      readMarker={view.readMarker}
+      viewKey={viewKey}
+      label={label}
+      liveRows={liveRows}
+      readMarker={readMarker}
+      empty={<ChannelPlaceholder login={login} compact={compactEmpty} />}
       onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
     />
   );
+}
+
+export function FocusedView({ login }: { login: string }) {
+  const exists = useChat((s) => s.channels[login] != null);
+  if (!exists) return null;
+  return <ChannelLog login={login} viewKey={`focused:${login}`} label="Chat messages" />;
 }
 
 function RoomIcons({ login }: { login: string }) {
@@ -226,7 +255,13 @@ function RoomIcons({ login }: { login: string }) {
 
 /** One channel's chat inside the grid: header, its own log, its own message box. */
 function ChatBox({ login }: { login: string }) {
-  const view = useChat((s) => s.channels[login]);
+  const view = useChat(
+    useShallow((s) => {
+      const channel = s.channels[login];
+      if (!channel) return null;
+      return { status: channel.status, error: channel.error, displayName: channel.displayName };
+    }),
+  );
   const index = useChat((s) => s.settings.gridChannels.indexOf(login));
   const count = useChat((s) => s.settings.gridChannels.length);
   if (!view) return null;
@@ -296,14 +331,12 @@ function ChatBox({ login }: { login: string }) {
       </header>
       {/* h-full chain matters: without a definite height the absolute ChatLog collapses to 0 (composer-only pane). */}
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden" data-testid={`grid-log-${login}`}>
-        <ChatLog
-          messages={view.messages}
-          channel={login}
+        <ChannelLog
+          login={login}
           viewKey={`box:${login}`}
           label={`#${login} messages`}
           liveRows={120}
-          empty={<ChannelPlaceholder login={login} compact />}
-          onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
+          compactEmpty
         />
       </div>
       <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
@@ -323,12 +356,22 @@ export function GridView() {
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () =>
-      setArea({ width: el.clientWidth - 2 * GRID_EDGE, height: el.clientHeight - 2 * GRID_EDGE });
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const width = el.clientWidth - 2 * GRID_EDGE;
+        const height = el.clientHeight - 2 * GRID_EDGE;
+        setArea((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+      });
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   if (channels.length === 0) {

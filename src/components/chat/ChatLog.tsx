@@ -8,7 +8,7 @@ import { THEMES } from "@/lib/themes";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { liveSlice } from "@/lib/chat/window";
+import { HISTORY_PAGE, liveSlice, MAX_PAUSED_ROWS, pausedSlice } from "@/lib/chat/window";
 import { MessageRow, type RowPrefs } from "./MessageRow";
 
 interface HoverEmote {
@@ -19,8 +19,17 @@ interface HoverEmote {
   rect: DOMRect;
 }
 
-/** Rows kept in the DOM while following live chat; scrolling up reveals the whole buffer. */
+/** Rows kept in the DOM while following live chat. Scrolling up pages older rows in. */
 const DEFAULT_LIVE_ROWS = 150;
+
+interface Pause {
+  /** Buffer at the moment live chat was left. Newer lines stay out of this snapshot. */
+  snapshot: ChatMessage[];
+  /** Inclusive index into the snapshot. */
+  start: number;
+  /** Exclusive index into the snapshot, fixed when live chat was left. */
+  end: number;
+}
 
 function countNewer(snapshot: ChatMessage[], live: ChatMessage[]): number {
   const lastId = snapshot[snapshot.length - 1]?.id;
@@ -77,22 +86,27 @@ export function ChatLog({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastInteraction = useRef(0);
-  const [frozen, setFrozen] = useState<ChatMessage[] | null>(null);
-  const frozenRef = useRef(frozen);
-  frozenRef.current = frozen;
+  const [pause, setPause] = useState<Pause | null>(null);
+  const pauseRef = useRef(pause);
+  pauseRef.current = pause;
   const liveRef = useRef(messages);
   liveRef.current = messages;
+  const visibleCount = useRef(0);
   const [hover, setHover] = useState<HoverEmote | null>(null);
+  const hoverRef = useRef(hover);
+  hoverRef.current = hover;
   const anchorFromBottom = useRef<number | null>(null);
+  const paging = useRef(false);
 
   const visible = useMemo(
-    () => (frozen ? frozen : liveSlice(messages, liveRows, readMarker)),
-    [frozen, messages, readMarker, liveRows],
+    () => (pause ? pausedSlice(pause.snapshot, pause.start, pause.end) : liveSlice(messages, liveRows, readMarker)),
+    [pause, messages, readMarker, liveRows],
   );
-  const newer = frozen ? countNewer(frozen, messages) : 0;
+  visibleCount.current = visible.length;
+  const newer = pause ? countNewer(pause.snapshot, messages) : 0;
 
   useEffect(() => {
-    setFrozen(null);
+    setPause(null);
   }, [viewKey]);
 
   const scrollToBottom = useCallback(() => {
@@ -103,24 +117,32 @@ export function ChatLog({
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    if (!frozen) {
+    if (!pause) {
       el.scrollTop = el.scrollHeight;
     } else if (anchorFromBottom.current !== null) {
       // Older history was just rendered above the viewport; keep the same lines in view.
       el.scrollTop = el.scrollHeight - anchorFromBottom.current;
       anchorFromBottom.current = null;
     }
-  }, [visible, frozen, prefs.textSize, prefs.emoteSize]);
+  }, [visible, pause, prefs.textSize, prefs.emoteSize]);
 
   // Emotes load after the row renders and grow it; keep pinned to the bottom while live.
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
+    let frame = 0;
     const observer = new ResizeObserver(() => {
-      if (!frozenRef.current) scrollToBottom();
+      if (pauseRef.current) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!pauseRef.current) scrollToBottom();
+      });
     });
     observer.observe(content);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [scrollToBottom]);
 
   const onScroll = () => {
@@ -128,13 +150,26 @@ export function ChatLog({
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distance < 40) {
-      if (frozenRef.current) setFrozen(null);
+      if (pauseRef.current) setPause(null);
       return;
     }
+    const held = pauseRef.current;
     // Only a person scrolling up pauses the feed; layout shifts from images don't.
-    if (!frozenRef.current && Date.now() - lastInteraction.current < 600) {
+    if (!held && Date.now() - lastInteraction.current < 600) {
+      const snapshot = liveRef.current;
+      const shown = Math.min(snapshot.length, visibleCount.current);
+      setPause({ snapshot, start: snapshot.length - shown, end: snapshot.length });
+      return;
+    }
+    if (held && el.scrollTop < 48 && held.start > 0 && held.end - held.start < MAX_PAUSED_ROWS && !paging.current) {
+      paging.current = true;
+      requestAnimationFrame(() => {
+        paging.current = false;
+      });
       anchorFromBottom.current = el.scrollHeight - el.scrollTop;
-      setFrozen(liveRef.current);
+      const room = MAX_PAUSED_ROWS - (held.end - held.start);
+      const start = Math.max(0, held.start - Math.min(HISTORY_PAGE, room));
+      setPause({ snapshot: held.snapshot, start, end: held.end });
     }
   };
 
@@ -144,16 +179,19 @@ export function ChatLog({
 
   const onMouseOver = (event: React.MouseEvent) => {
     if (!prefs.emotePreview) return;
-    const target = event.target as HTMLElement;
-    if (target instanceof HTMLImageElement && target.dataset.emoteName) {
-      setHover({
-        name: target.dataset.emoteName,
-        provider: target.dataset.emoteProvider as EmoteProvider,
-        scope: target.dataset.emoteScope ?? "global",
-        src: target.dataset.emoteSrc ?? target.src,
-        rect: target.getBoundingClientRect(),
-      });
-    }
+    const target = event.target;
+    if (!(target instanceof HTMLImageElement) || !target.dataset.emoteName) return;
+    const name = target.dataset.emoteName;
+    const src = target.dataset.emoteSrc ?? target.src;
+    const current = hoverRef.current;
+    if (current && current.name === name && current.src === src) return;
+    setHover({
+      name,
+      provider: target.dataset.emoteProvider as EmoteProvider,
+      scope: target.dataset.emoteScope ?? "global",
+      src,
+      rect: target.getBoundingClientRect(),
+    });
   };
 
   const onMouseOut = (event: React.MouseEvent) => {
@@ -208,10 +246,10 @@ export function ChatLog({
         </div>
       </div>
 
-      {frozen ? (
+      {pause ? (
         <button
           type="button"
-          onClick={() => setFrozen(null)}
+          onClick={() => setPause(null)}
           className="zoo-glow absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-lg transition hover:brightness-110"
         >
           {isGecko ? <GeckoFootIcon className="size-4" /> : <PawPrint className="size-4" />}

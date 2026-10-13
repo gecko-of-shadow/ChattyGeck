@@ -235,8 +235,13 @@ export class EmoteRegistry {
 
   /** Every emote usable in `channel` (the lookup's values): channel emotes first, then global. */
   allEmotes(channel: string): Emote[] {
-    const out = Array.from(this.lookup(channel).values());
-    return out.sort((a, b) => (a.scope === b.scope ? 0 : a.scope === "channel" ? -1 : 1));
+    const channelEmotes: Emote[] = [];
+    const globalEmotes: Emote[] = [];
+    for (const emote of this.lookup(channel).values()) {
+      if (emote.scope === "channel") channelEmotes.push(emote);
+      else globalEmotes.push(emote);
+    }
+    return channelEmotes.concat(globalEmotes);
   }
 
   getGlobalStatus(): ProviderRecord<ProviderStatus> {

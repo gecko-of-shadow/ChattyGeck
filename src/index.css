@@ -558,6 +558,10 @@
   font-size: var(--chat-font);
   overflow-anchor: none;
 }
+.chat-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.75em;
+}
 .chat-row.chat-row-deleted .chat-text {
   text-decoration: line-through;
   text-decoration-color: rgb(var(--texture-rgb) / 0.6);

@@ -31,19 +31,37 @@ export function findEmotes(index: NameIndex, typed: string, limit = MAX_MATCHES)
   }
   const starts: Emote[] = [];
   for (let i = lo; i < entries.length && entries[i].lower.startsWith(prefix); i++) starts.push(entries[i].emote);
-  const contains: Emote[] = [];
-  if (starts.length < limit) {
-    for (const entry of entries) {
-      if (!entry.lower.startsWith(prefix) && entry.lower.includes(prefix)) contains.push(entry.emote);
-    }
-  }
   const byName = (a: Emote, b: Emote) => (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
   starts.sort(
     (a, b) =>
       Number(!a.name.startsWith(typed)) - Number(!b.name.startsWith(typed)) || a.name.length - b.name.length || byName(a, b),
   );
-  contains.sort((a, b) => a.name.length - b.name.length || byName(a, b));
-  return starts.concat(contains).slice(0, limit);
+  if (starts.length >= limit) return starts.slice(0, limit);
+  const contains = shortestContaining(entries, prefix, limit - starts.length);
+  return starts.concat(contains);
+}
+
+/** The `limit` shortest names that contain `prefix` but do not start with it. */
+function shortestContaining(entries: NameIndex["entries"], prefix: string, limit: number): Emote[] {
+  const best: Emote[] = [];
+  const worse = (a: Emote, b: Emote) =>
+    a.name.length - b.name.length || (a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1);
+  for (const entry of entries) {
+    if (entry.lower.startsWith(prefix) || !entry.lower.includes(prefix)) continue;
+    const emote = entry.emote;
+    if (best.length < limit) {
+      best.push(emote);
+      if (best.length === limit) best.sort(worse);
+      continue;
+    }
+    if (worse(emote, best[best.length - 1]) >= 0) continue;
+    best.pop();
+    let at = best.length;
+    while (at > 0 && worse(best[at - 1], emote) > 0) at--;
+    best.splice(at, 0, emote);
+  }
+  if (best.length < limit) best.sort(worse);
+  return best;
 }
 
 /** The word around `caret` in `text` (whitespace-delimited), or null when the caret sits on a space. */

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import {
   ArrowDown,
   ArrowUp,
@@ -93,7 +94,19 @@ export function AddChannelForm({ autoFocus, onAdded }: { autoFocus?: boolean; on
 }
 
 function ChannelItem({ login, active, onSelect }: { login: string; active: boolean; onSelect: () => void }) {
-  const view = useChat((s) => s.channels[login]);
+  const view = useChat(
+    useShallow((s) => {
+      const channel = s.channels[login];
+      if (!channel) return null;
+      return {
+        status: channel.status,
+        error: channel.error,
+        displayName: channel.displayName,
+        unread: channel.unread,
+        mentions: channel.mentions,
+      };
+    }),
+  );
   const index = useChat((s) => s.settings.channels.indexOf(login));
   const count = useChat((s) => s.settings.channels.length);
   const onGrid = useChat((s) => s.settings.gridChannels.includes(login));

@@ -12,6 +12,8 @@ const URL_RE =
   /^(?:https?:\/\/\S+|www\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\S*|[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|tv|gg|io|co|me|dev|app|be|ly|xyz|live|tw|uk|de|fr|jp|ca)(?:\/\S*)?)$/i;
 const TRAILING_PUNCT = /[.,!?;:)\]}'"]+$/;
 const MENTION_RE = /^@([a-z0-9_]{2,25})([.,!?;:]*)$/i;
+const SPLIT_WS = /(\s+)/;
+const ONLY_WS = /^\s+$/;
 
 function pushText(out: Fragment[], text: string): void {
   if (!text) return;
@@ -39,9 +41,9 @@ function pushEmote(out: Fragment[], emote: Emote): void {
 }
 
 function tokenizeWords(out: Fragment[], text: string, lookup: (word: string) => Emote | undefined): void {
-  for (const part of text.split(/(\s+)/)) {
+  for (const part of text.split(SPLIT_WS)) {
     if (!part) continue;
-    if (/^\s+$/.test(part)) {
+    if (ONLY_WS.test(part)) {
       pushText(out, part);
       continue;
     }
@@ -85,16 +87,27 @@ export function tokenize(
     return out;
   }
 
-  const chars = Array.from(text);
+  // Twitch offsets are code points. BMP text (no emoji) can be sliced directly.
+  const chars = hasSurrogate(text) ? Array.from(text) : null;
+  const length = chars ? chars.length : text.length;
+  const slice = (start: number, end?: number) => (chars ? chars.slice(start, end).join("") : text.slice(start, end));
   let cursor = 0;
   for (const range of twitchEmotes) {
-    if (range.start < cursor || range.end >= chars.length) continue;
-    const name = chars.slice(range.start, range.end + 1).join("");
+    if (range.start < cursor || range.end >= length) continue;
+    const name = slice(range.start, range.end + 1);
     if (isBlocked(name)) continue;
-    tokenizeWords(out, chars.slice(cursor, range.start).join(""), lookup);
+    tokenizeWords(out, slice(cursor, range.start), lookup);
     out.push({ type: "emote", emote: twitchEmote(range.id, name), overlays: [] });
     cursor = range.end + 1;
   }
-  tokenizeWords(out, chars.slice(cursor).join(""), lookup);
+  tokenizeWords(out, slice(cursor), lookup);
   return out;
+}
+
+function hasSurrogate(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdfff) return true;
+  }
+  return false;
 }
