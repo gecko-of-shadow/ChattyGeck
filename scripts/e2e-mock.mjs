@@ -460,22 +460,32 @@ await step("appearance themes", async () => {
 });
 
 await step("read only hides composers", async () => {
-  await page.getByTestId("read-only-toggle").click();
+  const headerToggle = page.getByTestId("read-only-toggle").first();
+  await headerToggle.click();
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "true",
+    null,
+    { timeout: 3_000 },
+  );
   if (await page.getByTestId("channel-switch-ack").count()) {
     throw new Error("channel confirm still visible in read only");
   }
-  if (await page.getByPlaceholder(/Chirp to|Send to|Squawk to|Bloop to|Trumpet to/).count()) {
+  if (await page.locator('input[placeholder*=" to #"]').count()) {
     throw new Error("composer still visible in read only");
   }
   await page.getByRole("button", { name: "Settings" }).first().click();
-  const search = page.getByTestId("settings-search");
-  await search.fill("Read only");
-  const toggle = page.getByLabel("Read only");
-  await toggle.waitFor({ timeout: 3_000 });
-  if (!(await toggle.isChecked())) throw new Error("Settings Read only should be on");
-  await toggle.click();
+  await page.getByTestId("settings-search").fill("Read only");
+  await page.locator("#pref-read-only").waitFor({ timeout: 3_000 });
+  await page.locator('label[for="pref-read-only"]').click();
   await page.keyboard.press("Escape");
-  await page.getByTestId("channel-switch-unlock").or(page.getByPlaceholder(/Chirp to #/)).first().waitFor({ timeout: 5_000 });
+  await page.locator('input[placeholder*=" to #"]').or(page.getByTestId("channel-switch-unlock")).first().waitFor({
+    timeout: 5_000,
+  });
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "false",
+    null,
+    { timeout: 3_000 },
+  );
   await shot("07-read-only-off");
 });
 
