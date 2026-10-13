@@ -1,28 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <!-- Chat-first ZooChattr mark: reads as "chat" at tray size; Z + toe-pad tip the brand. -->
-  <rect width="64" height="64" rx="14" fill="#0c1210"/>
-  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#3d6b35" stroke-width="1.5"/>
-
-  <!-- Main speech bubble (dominant silhouette) -->
-  <path
-    fill="#8fe05a"
-    d="M12 14.5c0-3.6 2.9-6.5 6.5-6.5h27c3.6 0 6.5 2.9 6.5 6.5v18c0 3.6-2.9 6.5-6.5 6.5H28.8L18 48.2V39H18.5c-3.6 0-6.5-2.9-6.5-6.5v-18z"
-  />
-
-  <!-- Bold Z so the mark is still ZooChattr when the gecko detail vanishes -->
-  <path
-    fill="#0c1210"
-    fill-rule="evenodd"
-    d="M24 20h16.5v3.4L31.2 32.8H40.5V36H24v-3.4l9.3-9.4H24V20z"
-  />
-
-  <!-- Tiny second bubble = multi-chat grid, not a single DM -->
-  <path
-    fill="#f0c14b"
-    d="M40 42.5c0-1.9 1.6-3.5 3.5-3.5h7c1.9 0 3.5 1.6 3.5 3.5v5c0 1.9-1.6 3.5-3.5 3.5h-2.2L44.5 54v-3h-1c-1.9 0-3.5-1.6-3.5-3.5v-5z"
-  />
-  <!-- Toe-pad dots on the accent bubble (gecko cue, still readable tiny) -->
-  <circle cx="44.2" cy="45.2" r="1.15" fill="#0c1210"/>
-  <circle cx="47" cy="45.2" r="1.15" fill="#0c1210"/>
-  <circle cx="49.8" cy="45.2" r="1.15" fill="#0c1210"/>
+  <!-- One cream bubble and a gecko pupil. Warm browns from the eye-comfort theme, readable at tray size. -->
+  <rect width="64" height="64" rx="14" fill="#3a3026"/>
+  <rect x="14" y="12" width="36" height="28" rx="10" fill="#f3eadc"/>
+  <polygon points="22,33 18,46 34,40" fill="#f3eadc" stroke="#f3eadc" stroke-width="2.2" stroke-linejoin="round"/>
+  <circle cx="33.5" cy="25" r="7.4" fill="#4a382c"/>
+  <ellipse cx="33.5" cy="25" rx="2.55" ry="4.7" fill="#f3eadc"/>
 </svg>

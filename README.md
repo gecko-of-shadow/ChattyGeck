@@ -1,5 +1,7 @@
 # ZooChattr
 
+<img src="src-tauri/icons/128x128.png" width="72" height="72" alt="ZooChattr icon">
+
 A portable Windows 11 desktop app for reading several Twitch chats at once, old-school multi-channel IRC style, with a gecko soul. Log in with Twitch to chat back. Twitch, 7TV, BetterTTV and FrankerFaceZ emotes render inline.
 
 Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it talks to Twitch chat over the official IRC WebSocket and pulls emotes from the public emote APIs.
