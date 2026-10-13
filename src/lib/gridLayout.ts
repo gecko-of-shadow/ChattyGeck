@@ -49,8 +49,9 @@ export function layoutChatGrid(
     const usedW = columns * cellWidth + gap * (columns - 1);
     const usedH = rows * cellHeight + gap * (rows - 1);
     const fill = (usedW * usedH) / Math.max(1, areaWidth * areaHeight);
-    // Prefer squareness over packing every last pixel of a tall window.
-    const score = fill - aspectPenalty * 2.5 - (rows * columns - n) * 0.02;
+    // Empty cells (e.g. 3×2 for 4 chats) leave a big hole — prefer a filled 2×2.
+    const emptySlots = rows * columns - n;
+    const score = fill - aspectPenalty * 2.5 - emptySlots * 0.85;
 
     if (!best || score > best.score) {
       best = {

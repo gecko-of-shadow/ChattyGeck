@@ -72,7 +72,18 @@ await step("grid shows each channel in its own box", async () => {
   await page.getByRole("radio", { name: /grid/i }).click();
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
   await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
+  // Log panes must have real height — zero-height absolute ChatLog looks like "composer only".
+  const logH = await page.getByTestId("grid-log-geckotown").evaluate((el) => el.clientHeight);
+  if (logH < 80) throw new Error(`grid log collapsed to ${logH}px`);
   await shot("02-grid");
+});
+
+await step("grid still shows messages after visiting focused view", async () => {
+  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await page.getByLabel("Chat messages").locator(".chat-row").first().waitFor({ timeout: 10_000 });
+  await page.getByRole("radio", { name: /grid/i }).click();
+  await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
+  await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
 });
 
 await step("focused view counts unread on other channels", async () => {

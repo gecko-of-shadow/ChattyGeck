@@ -237,7 +237,7 @@ function ChatBox({ login }: { login: string }) {
   return (
     <section
       aria-label={`#${login} chat`}
-      className="flex min-h-0 min-w-0 flex-col rounded-xl border border-border/80 bg-card/50 shadow-sm"
+      className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-xl border border-border/80 bg-card/50 shadow-sm"
     >
       <header className="flex h-9 shrink-0 items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2">
         <span className="relative shrink-0">
@@ -294,8 +294,8 @@ function ChatBox({ login }: { login: string }) {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      {/* Clip only the log so Tab-complete / picker popovers above the composer aren't cut off. */}
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+      {/* h-full chain matters: without a definite height the absolute ChatLog collapses to 0 (composer-only pane). */}
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden" data-testid={`grid-log-${login}`}>
         <ChatLog
           messages={view.messages}
           channel={login}

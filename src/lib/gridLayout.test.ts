@@ -17,6 +17,13 @@ describe("layoutChatGrid", () => {
     expect(layout.cellHeight / layout.cellWidth).toBeGreaterThan(0.9);
   });
 
+  it("uses a filled 2×2 for four chats even in a wide window (not 3+1 with a hole)", () => {
+    const layout = layoutChatGrid(4, 1100, 700);
+    expect(layout.columns).toBe(2);
+    expect(layout.rows).toBe(2);
+    expect(layout.cellHeight).toBeLessThanOrEqual(layout.cellWidth + 1);
+  });
+
   it("uses 2×2 for three chats when a single row would be too wide/short", () => {
     // Only ~2 min-width columns fit; a 3-wide row is impossible.
     const layout = layoutChatGrid(3, 680, 720);

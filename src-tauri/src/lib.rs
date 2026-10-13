@@ -11,10 +11,11 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Position, Size, State, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, Position, Size, State, Theme, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    window::Color,
 };
 
 const TRAY_ID: &str = "main";
@@ -127,6 +128,8 @@ fn set_tray_status(app: AppHandle, mentions: u32) {
 
 #[tauri::command]
 fn quit_app(app: AppHandle) {
+    // Tear down Settings first so a dead/disabled popout can't keep the process alive.
+    force_close_settings(&app);
     app.exit(0);
 }
 
@@ -155,13 +158,20 @@ fn apply_update(app: AppHandle, download_url: String) -> Result<(), String> {
 }
 
 fn request_quit_confirm(app: &AppHandle) {
+    // Settings disables main; a dead white Settings webview would swallow Quit forever.
+    force_close_settings(app);
     show_main_window(app);
     if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_enabled(true);
         let _ = window.emit("quit-requested", ());
     }
 }
 
 fn release_main_after_settings(app: &AppHandle) {
+    // Skip while a Settings window still exists (destroy-and-recreate race).
+    if app.get_webview_window(SETTINGS_LABEL).is_some() {
+        return;
+    }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.set_enabled(true);
         let _ = main.unminimize();
@@ -170,16 +180,20 @@ fn release_main_after_settings(app: &AppHandle) {
     }
 }
 
+/// Destroy Settings (even if its webview is dead) and re-enable main when it's gone.
+fn force_close_settings(app: &AppHandle) {
+    if let Some(settings) = app.get_webview_window(SETTINGS_LABEL) {
+        let _ = settings.destroy();
+    }
+    release_main_after_settings(app);
+}
+
 /// Opens Settings as its own window and disables the main window until it closes.
+/// Always creates a fresh webview — re-showing a stuck overnight page stays blank.
 fn open_settings_window(app: &AppHandle) -> Result<(), String> {
     if let Some(existing) = app.get_webview_window(SETTINGS_LABEL) {
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = main.set_enabled(false);
-        }
-        let _ = existing.unminimize();
-        let _ = existing.show();
-        let _ = existing.set_focus();
-        return Ok(());
+        // Don't release main here — a replacement window is about to take over.
+        let _ = existing.destroy();
     }
 
     let main = app
@@ -187,21 +201,25 @@ fn open_settings_window(app: &AppHandle) -> Result<(), String> {
         .ok_or_else(|| "Main window isn't open.".to_string())?;
 
     let state = app.state::<AppState>();
+    // Plain index.html + hash: query strings have blanked WebView2 asset loads on Windows.
+    // The UI also detects the `settings` window label.
     let mut builder = WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
-        WebviewUrl::App("index.html?window=settings".into()),
+        WebviewUrl::App("index.html#settings".into()),
     )
         .title("ZooChattr Settings")
         .inner_size(520.0, 740.0)
         .min_inner_size(400.0, 480.0)
         .resizable(true)
         .maximizable(false)
+        .theme(Some(Theme::Dark))
+        .background_color(Color(0x09, 0x0d, 0x0a, 0xff))
         .center();
     if state.data.portable {
         builder = builder.data_directory(state.data.path.join("webview-settings"));
     }
-    let builder = builder.parent(&main).map_err(|err| err.to_string())?;
+    // No .parent(): owned child webviews have shown up blank/frozen on Windows.
 
     let _ = main.set_enabled(false);
     let settings = match builder.build() {
@@ -214,11 +232,11 @@ fn open_settings_window(app: &AppHandle) -> Result<(), String> {
 
     let app_handle = app.clone();
     settings.on_window_event(move |event| {
-        if matches!(event, WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }) {
-            // Destroyed is the reliable "gone" signal; also catch close for quicker re-enable.
-            if matches!(event, WindowEvent::Destroyed) {
-                release_main_after_settings(&app_handle);
-            }
+        if matches!(
+            event,
+            WindowEvent::Destroyed | WindowEvent::CloseRequested { .. }
+        ) {
+            release_main_after_settings(&app_handle);
         }
     });
 
@@ -233,8 +251,9 @@ fn request_update_check(app: &AppHandle) {
     }
 }
 
+/// Async so Windows doesn't deadlock creating a WebviewWindow from a sync command.
 #[tauri::command]
-fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
+async fn open_settings_window_cmd(app: AppHandle) -> Result<(), String> {
     open_settings_window(&app)
 }
 
