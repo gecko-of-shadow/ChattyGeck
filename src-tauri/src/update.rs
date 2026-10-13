@@ -111,7 +111,21 @@ pub fn apply_update(download_url: &str) -> Result<(), String> {
     apply_update_to(&current, download_url)
 }
 
+/// Portable zips come from this repo's GitHub release. Anything else is refused.
+fn allowed_download_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = host.split('@').next_back().unwrap_or(host);
+    let host = host.split(':').next().unwrap_or(host);
+    host == "github.com" || host.ends_with(".githubusercontent.com")
+}
+
 fn apply_update_to(current_exe: &Path, download_url: &str) -> Result<(), String> {
+    if !allowed_download_url(download_url) {
+        return Err("Refusing an update that is not hosted on GitHub.".to_string());
+    }
     let dir = current_exe
         .parent()
         .ok_or_else(|| "Couldn't find this program's folder.".to_string())?;
@@ -195,4 +209,27 @@ fn write_and_spawn_windows_helper(current_exe: &Path, new_exe: &Path) -> Result<
 #[cfg(not(windows))]
 fn write_and_spawn_windows_helper(_current_exe: &Path, _new_exe: &Path) -> Result<(), String> {
     Err("Windows-only helper".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::allowed_download_url;
+
+    #[test]
+    fn accepts_github_release_hosts() {
+        assert!(allowed_download_url(
+            "https://github.com/gecko-of-shadow/ZooChattr/releases/download/v0.4.15/ZooChattr-portable-0.4.15.zip"
+        ));
+        assert!(allowed_download_url(
+            "https://release-assets.githubusercontent.com/github-production-release-asset/abc"
+        ));
+    }
+
+    #[test]
+    fn rejects_other_download_urls() {
+        assert!(!allowed_download_url("http://github.com/gecko-of-shadow/ZooChattr/releases/download/v0.4.15/x.zip"));
+        assert!(!allowed_download_url("https://evil.example/ZooChattr.exe"));
+        assert!(!allowed_download_url("https://github.com.evil.example/x.zip"));
+        assert!(!allowed_download_url("not a url"));
+    }
 }
