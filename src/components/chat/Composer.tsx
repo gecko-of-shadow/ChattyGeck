@@ -11,7 +11,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { useUi } from "@/store/ui";
+import { ackSendChannel, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
 
@@ -192,12 +192,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const tabComplete = useChat((s) => isFeatureOn(s.settings, channel, "tabComplete"));
   const emotePicker = useChat((s) => isFeatureOn(s.settings, channel, "emotePicker"));
   const insert = useUi((s) => s.insert);
+  const sendAckChannel = useUi((s) => s.sendAckChannel);
   const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
-  /** After a channel switch, send is blocked until the user confirms the target name. */
-  const [unlockedFor, setUnlockedFor] = useState<string | null>(channel);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,7 +216,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   useEffect(() => {
     if (prevChannel.current !== channel) {
       prevChannel.current = channel;
-      setUnlockedFor(null);
+      // Focused view: switching the single composer to another channel clears ack.
+      if (useUi.getState().sendAckChannel !== channel) {
+        useUi.setState({ sendAckChannel: null });
+      }
     }
     setError(null);
     setCompletion(null);
@@ -236,7 +238,8 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   if (auth.status !== "logged_in") return compact ? null : <LoginPrompt />;
 
   const connected = writeStatus === "connected";
-  const locked = unlockedFor !== channel;
+  /** Shared ack — grid panes lock when another pane (or focused channel) was confirmed. */
+  const locked = sendAckChannel !== channel;
   const length = Array.from(text).length;
 
   const submit = () => {
@@ -371,7 +374,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             className={cn("w-full", compact ? "h-8 text-[13px]" : "h-9")}
             data-testid="channel-switch-unlock"
             onClick={() => {
-              setUnlockedFor(channel);
+              ackSendChannel(channel);
               setTimeout(() => inputRef.current?.focus(), 0);
             }}
           >

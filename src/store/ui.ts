@@ -8,6 +8,12 @@ interface UiState {
   navOpen: boolean;
   /** Tray "Quit" asked the UI to confirm before exiting. */
   quitConfirmOpen: boolean;
+  /**
+   * Channel the user confirmed for sending. Shared so grid panes lock when you
+   * move to another pane (focused view already locked on channel prop change).
+   * `null` means nothing confirmed yet — every composer stays locked.
+   */
+  sendAckChannel: string | null;
   /** Text a channel's composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
   insert: { text: string; channel: string; nonce: number } | null;
 }
@@ -17,8 +23,14 @@ export const useUi = create<UiState>(() => ({
   settingsOpen: false,
   navOpen: false,
   quitConfirmOpen: false,
+  sendAckChannel: null,
   insert: null,
 }));
+
+/** Confirm this channel as the send target (unlocks its composer; locks the others). */
+export function ackSendChannel(channel: string): void {
+  useUi.setState({ sendAckChannel: channel });
+}
 
 export function insertIntoComposer(text: string, channel: string): void {
   useUi.setState((s) => ({ insert: { text, channel, nonce: (s.insert?.nonce ?? 0) + 1 } }));
