@@ -51,21 +51,36 @@ function MobileNav() {
   );
 }
 
-/** Floating control when the sidebar and top bar are hidden so you can bring them back. */
+/** Floating controls when the sidebar and top bar are hidden. */
 function ChromeReveal() {
+  const readOnly = useChat((s) => s.settings.readOnly);
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="secondary"
-      className="absolute top-2 left-2 z-30 gap-1.5 shadow-lg"
-      data-testid="show-chrome"
-      onClick={() => chat.updateSettings({ chromeHidden: false })}
-      title="Show sidebar and top bar"
-    >
-      <PanelLeftOpen className="size-3.5" />
-      Show UI
-    </Button>
+    <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="gap-1.5 shadow-lg"
+        data-testid="show-chrome"
+        onClick={() => chat.updateSettings({ chromeHidden: false })}
+        title="Show sidebar and top bar"
+      >
+        <PanelLeftOpen className="size-3.5" />
+        Show UI
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant={readOnly ? "default" : "secondary"}
+        className="gap-1.5 shadow-lg"
+        data-testid="read-only-toggle"
+        aria-pressed={readOnly}
+        onClick={() => chat.updateSettings({ readOnly: !readOnly })}
+        title={readOnly ? "Read only on — click to show the message box again" : "Read only — hide the message box"}
+      >
+        {readOnly ? "Reading" : "Read only"}
+      </Button>
+    </div>
   );
 }
 
@@ -76,6 +91,7 @@ export default function App() {
   const focused = useChat((s) => s.settings.focused);
   const count = useChat((s) => s.settings.channels.length);
   const chromeHidden = useChat((s) => s.settings.chromeHidden);
+  const readOnly = useChat((s) => s.settings.readOnly);
   const mentions = useChat((s) => Object.values(s.channels).reduce((sum, c) => sum + c.mentions, 0));
   const loggedIn = useChat((s) => s.auth.status === "logged_in");
 
@@ -161,7 +177,7 @@ export default function App() {
             ) : (
               <FocusedView key={focused} login={focused} />
             )}
-            {mode === "focused" && focused ? (
+            {readOnly ? null : mode === "focused" && focused ? (
               <Composer channel={focused} />
             ) : count > 0 && !loggedIn ? (
               <LoginPrompt />

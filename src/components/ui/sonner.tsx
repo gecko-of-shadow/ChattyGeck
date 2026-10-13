@@ -1,10 +1,13 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+import { THEMES } from "@/lib/themes"
+import { useChat } from "@/store/chat"
 
 const Toaster = ({ ...props }: ToasterProps) => {
+  const surface = useChat((s) => THEMES[s.settings.skin]?.surface ?? "dark")
   return (
     <Sonner
-      theme="dark"
+      theme={surface}
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,

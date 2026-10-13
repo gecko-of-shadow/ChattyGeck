@@ -482,6 +482,61 @@ await step("animal themes", async () => {
   await page.keyboard.press("Escape");
 });
 
+await step("appearance themes", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  const search = page.getByTestId("settings-search");
+  await search.fill("Light");
+  await page.getByRole("button", { name: /^Light/ }).click();
+  let skin = await page.evaluate(() => document.documentElement.dataset.skin);
+  if (skin !== "light") throw new Error(`theme is ${skin}, expected light`);
+  await shot("07-theme-light");
+
+  await search.fill("Deuteranopia");
+  await page.getByRole("button", { name: /^Deuteranopia/ }).click();
+  skin = await page.evaluate(() => document.documentElement.dataset.skin);
+  if (skin !== "deuteranopia") throw new Error(`theme is ${skin}, expected deuteranopia`);
+
+  await search.fill("Eye comfort");
+  await page.getByRole("button", { name: /^Eye comfort/ }).click();
+  skin = await page.evaluate(() => document.documentElement.dataset.skin);
+  if (skin !== "eyecomfort") throw new Error(`theme is ${skin}, expected eyecomfort`);
+  await shot("07-theme-eyecomfort");
+
+  await search.fill("");
+  await page.getByRole("button", { name: /Crested gecko/ }).click();
+  await page.keyboard.press("Escape");
+});
+
+await step("read only hides composers", async () => {
+  const headerToggle = page.getByTestId("read-only-toggle").first();
+  await headerToggle.click();
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "true",
+    null,
+    { timeout: 3_000 },
+  );
+  if (await page.getByTestId("channel-switch-ack").count()) {
+    throw new Error("channel confirm still visible in read only");
+  }
+  if (await page.locator('input[placeholder*=" to #"]').count()) {
+    throw new Error("composer still visible in read only");
+  }
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.getByTestId("settings-search").fill("Read only");
+  await page.locator("#pref-read-only").waitFor({ timeout: 3_000 });
+  await page.locator('label[for="pref-read-only"]').click();
+  await page.keyboard.press("Escape");
+  await page.locator('input[placeholder*=" to #"]').or(page.getByTestId("channel-switch-unlock")).first().waitFor({
+    timeout: 5_000,
+  });
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "false",
+    null,
+    { timeout: 3_000 },
+  );
+  await shot("07-read-only-off");
+});
+
 await step("log out falls back to anonymous reading", async () => {
   await page.getByRole("button", { name: "Log out" }).first().click();
   await page.getByText("Anonymous lurker").waitFor({ timeout: 5_000 });

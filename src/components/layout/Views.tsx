@@ -264,6 +264,7 @@ function ChatBox({ login }: { login: string }) {
   );
   const index = useChat((s) => s.settings.gridChannels.indexOf(login));
   const count = useChat((s) => s.settings.gridChannels.length);
+  const readOnly = useChat((s) => s.settings.readOnly);
   if (!view) return null;
 
   const statusTitle =
@@ -339,9 +340,11 @@ function ChatBox({ login }: { login: string }) {
           compactEmpty
         />
       </div>
-      <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
-        <Composer channel={login} compact />
-      </div>
+      {readOnly ? null : (
+        <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
+          <Composer channel={login} compact />
+        </div>
+      )}
     </section>
   );
 }

@@ -49,6 +49,11 @@ export interface Settings {
   closeToTray: boolean;
   /** Hide the sidebar and top bar so the chat boxes fill the window (toggle from the header). */
   chromeHidden: boolean;
+  /**
+   * Watch-only: hide composers, emote/send controls, and channel-switch confirms on every pane.
+   * Logs and channel headers stay so each pane is still identifiable.
+   */
+  readOnly: boolean;
   /** Start ZooChattr when Windows signs you in (portable: a Startup shortcut to this exe). */
   startOnLogin: boolean;
   /** Keep ~48 hours of chat per channel in ZooChattr-data so logs survive restarts. */
@@ -191,6 +196,7 @@ export const DEFAULT_SETTINGS: Settings = {
   zebra: false,
   closeToTray: true,
   chromeHidden: false,
+  readOnly: false,
   startOnLogin: false,
   rememberChatHistory: true,
   autoCheckUpdates: true,
@@ -300,6 +306,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     zebra: bool(input.zebra, DEFAULT_SETTINGS.zebra),
     closeToTray: bool(input.closeToTray, DEFAULT_SETTINGS.closeToTray),
     chromeHidden: bool(input.chromeHidden, DEFAULT_SETTINGS.chromeHidden),
+    readOnly: bool(input.readOnly, DEFAULT_SETTINGS.readOnly),
     startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
     rememberChatHistory: bool(input.rememberChatHistory, DEFAULT_SETTINGS.rememberChatHistory),
     autoCheckUpdates: bool(input.autoCheckUpdates, DEFAULT_SETTINGS.autoCheckUpdates),
