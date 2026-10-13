@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   AppWindow,
   Check,
-  ClipboardCopy,
   Download,
   FolderOpen,
   Hash,
   KeyRound,
   Palette,
-  PanelLeftClose,
   RefreshCw,
   RotateCcw,
   Smile,
@@ -637,15 +635,6 @@ function BackupRow() {
     toast("Backup saved", { description: "Check your Downloads folder. Includes your channel list, not your login." });
   };
 
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(backupText());
-      toast("Settings copied", { description: "Paste them somewhere safe, or straight into another ZooChattr." });
-    } catch {
-      toast.error("Couldn't reach the clipboard");
-    }
-  };
-
   const restoreText = (text: string, source: string) => {
     const settings = readBackup(text);
     if (!settings) {
@@ -670,28 +659,14 @@ function BackupRow() {
     restoreText(await file.text(), "file");
   };
 
-  const pasteRestore = async () => {
-    try {
-      restoreText(await navigator.clipboard.readText(), "clipboard text");
-    } catch {
-      toast.error("Couldn't read the clipboard", { description: "Use Restore from file instead." });
-    }
-  };
-
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5">
         <Button variant="outline" size="sm" onClick={download}>
           <Download /> Back up
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void copy()}>
-          <ClipboardCopy /> Copy
-        </Button>
         <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
           <Upload /> Restore from file
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void pasteRestore()}>
-          Restore from clipboard
         </Button>
         <Button
           variant={confirmReset ? "destructive" : "outline"}
@@ -807,21 +782,11 @@ export function SettingsDialog() {
               setting="startOnLogin"
             />
             <ToggleRow
-              id="pref-chrome"
-              label="Hide sidebar & top bar"
-              hint="Gives the chat grid more room. Use the floating button (or Settings) to bring the chrome back."
-              setting="chromeHidden"
-            />
-            <ToggleRow
               id="pref-chat-history"
               label="Remember chat history"
               hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
               setting="rememberChatHistory"
             />
-            <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <PanelLeftClose className="mt-0.5 size-3.5 shrink-0" />
-              <p>In Grid view you can also hide chrome with the button in the top bar — same as this switch.</p>
-            </div>
           </Section>
 
           <Section icon={KeyRound} title="Twitch account">
