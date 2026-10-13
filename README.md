@@ -106,7 +106,7 @@ The exe isn't code-signed, so SmartScreen may say "Windows protected your PC". C
 
 ### Publishing a release
 
-Push a version tag and GitHub builds the exe on Windows and attaches the zip to a new release:
+Push a version tag and GitHub builds the exe on Windows and attaches the zip to a new release. The workflow then deletes every older release. Git tags stay, so older source is still reachable:
 
 ```bash
 npm version patch          # bumps package.json (the app reads its version from there) and tags it
