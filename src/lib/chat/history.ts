@@ -4,8 +4,8 @@ import type { ChatMessage, MessageKind, NoticeTone } from "@/lib/twitch/types";
 export const HISTORY_TTL_MS = 48 * 60 * 60_000;
 
 /**
- * Hard ceiling per channel so a hyper-active chat can't fill the disk.
- * ~48h of a busy Twitch chat is usually well under this.
+ * Newest rows kept in memory per channel. Disk keeps every line younger than
+ * 48 hours and is trimmed only when the app starts.
  */
 export const HISTORY_HARD_CAP = 25_000;
 
@@ -111,8 +111,8 @@ export function sanitizeHistory(raw: unknown, now = Date.now()): ChatMessage[] {
     }
 
     out.push(message);
-    if (out.length >= HISTORY_HARD_CAP) break;
   }
+  // Files can grow past the cap between startups. Keep the newest rows.
   return trimByAgeAndCap(out, now);
 }
 

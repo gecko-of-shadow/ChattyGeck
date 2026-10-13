@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Position, Size, State, Theme, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, Position, RunEvent, Size, State, Theme, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -33,6 +33,10 @@ struct AppState {
     normal_geom: Mutex<Option<storage::WindowGeom>>,
     /// Debounce window-layout writes while the user drags/resizes.
     geom_save_after: Mutex<Option<Instant>>,
+    /// Set once the webview has flushed history, so ExitRequested can finish.
+    allow_exit: AtomicBool,
+    /// One shutdown flush and one 2s watchdog, even if close and exit both fire.
+    exit_flush_started: AtomicBool,
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -95,6 +99,16 @@ fn chat_history_save(
 ) -> Result<(), String> {
     let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     storage::save_chat_history(&state.data, &channel, &messages)
+}
+
+#[tauri::command]
+fn chat_history_append(
+    state: State<'_, AppState>,
+    channel: String,
+    messages: serde_json::Value,
+) -> Result<u64, String> {
+    let _guard = state.save_lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    storage::append_chat_history(&state.data, &channel, &messages)
 }
 
 #[tauri::command]
@@ -176,6 +190,33 @@ fn quit_app(app: AppHandle) {
     // Tear down Settings first so a dead/disabled popout can't keep the process alive.
     force_close_settings(&app);
     app.exit(0);
+}
+
+#[tauri::command]
+fn finish_exit(app: AppHandle, state: State<'_, AppState>) {
+    state.allow_exit.store(true, Ordering::Relaxed);
+    app.exit(0);
+}
+
+fn request_history_flush(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    if state.allow_exit.load(Ordering::Relaxed) {
+        return false;
+    }
+    if state.exit_flush_started.swap(true, Ordering::Relaxed) {
+        return true;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("flush-history", ());
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(2));
+        let state = app.state::<AppState>();
+        state.allow_exit.store(true, Ordering::Relaxed);
+        app.exit(0);
+    });
+    true
 }
 
 #[tauri::command]
@@ -412,6 +453,8 @@ pub fn run() {
                     g
                 })),
                 geom_save_after: Mutex::new(None),
+                allow_exit: AtomicBool::new(false),
+                exit_flush_started: AtomicBool::new(false),
             });
 
             let window_config = app
@@ -489,6 +532,9 @@ pub fn run() {
                     if state.close_to_tray.load(Ordering::Relaxed) {
                         api.prevent_close();
                         let _ = webview.hide();
+                    } else {
+                        api.prevent_close();
+                        request_history_flush(window.app_handle());
                     }
                 }
                 WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
@@ -507,6 +553,7 @@ pub fn run() {
             settings_save,
             chat_history_load,
             chat_history_save,
+            chat_history_append,
             chat_history_clear,
             session_load,
             session_save,
@@ -515,12 +562,23 @@ pub fn run() {
             set_close_to_tray,
             set_tray_status,
             quit_app,
+            finish_exit,
             get_launch_at_login,
             set_launch_at_login,
             check_for_update,
             apply_update,
             open_settings_window_cmd
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running ZooChattr");
+        .build(tauri::generate_context!())
+        .expect("error while running ZooChattr")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, .. } = event {
+                let state = app.state::<AppState>();
+                if state.allow_exit.load(Ordering::Relaxed) {
+                    return;
+                }
+                api.prevent_exit();
+                request_history_flush(app);
+            }
+        });
 }

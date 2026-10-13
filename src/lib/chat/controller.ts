@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { config } from "@/lib/config";
-import { historyBoundary, messagesForDisk, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
+import { historyBoundary, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
 import { channelOnScreen, readMarkerAfterFocus } from "@/lib/chat/visibility";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify";
@@ -41,7 +41,8 @@ export const ALL_CHANNELS = "*";
 const JOIN_TIMEOUT_MS = 45_000;
 const EMOTE_RELOAD_GAP_MS = 5 * 60_000;
 const REFRESH_MARGIN_MS = 5 * 60_000;
-const HISTORY_SAVE_GAP_MS = 2_000;
+/** How often a busy channel appends the lines still only in memory. */
+export const HISTORY_FLUSH_MS = 30_000;
 const UPDATE_CHECK_GAP_MS = 6 * 60 * 60_000;
 
 interface PendingSend {
@@ -66,6 +67,16 @@ function anonymousNick(): string {
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function messageStamp(message: ChatMessage): string {
+  let hash = 2166136261;
+  const text = message.text;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${message.deleted ? 1 : 0}:${message.ts}:${text.length}:${hash >>> 0}`;
 }
 
 function emotePrefsFrom(settings: Settings): EmotePrefs {
@@ -106,8 +117,13 @@ class ChatController {
   private lastAttention = 0;
   /** When the last live mention chime started. 0 means none yet. Preview does not set this. */
   private lastMentionSoundAt = 0;
-  private historyTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private historyDirty = new Set<string>();
+  /** Channels whose in-memory lines are ahead of the log file. */
+  private historyUnsaved = new Set<string>();
+  /** Id → stamp of lines already appended. */
+  private historyOnDisk = new Map<string, Map<string, string>>();
+  private historyFlushTimer: ReturnType<typeof setInterval> | null = null;
+  private historyWriting = new Map<string, Promise<void>>();
+  private exitFlushListening = false;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -154,6 +170,7 @@ class ChatController {
 
     if (settings.rememberChatHistory) {
       await this.restoreHistory(settings.channels);
+      this.armHistoryFlush();
     }
 
     const stored = await platform.loadSession().catch((err) => {
@@ -186,8 +203,12 @@ class ChatController {
       this.write?.retryNow();
     });
     window.addEventListener("beforeunload", () => {
-      void this.flushHistoryNow();
+      void this.flushSavedHistory();
     });
+    window.addEventListener("pagehide", () => {
+      void this.flushSavedHistory();
+    });
+    void this.listenForExitFlush();
     setInterval(() => this.tick(), 5_000);
     setInterval(() => void this.validateHourly(), 60 * 60_000);
     this.armUpdateChecks(settings.autoCheckUpdates);
@@ -857,8 +878,7 @@ class ChatController {
       next[index] = update(list[index]);
       return { channels: { ...state.channels, [channel]: { ...view, messages: next } } };
     });
-    // The 2s history timer may already have saved and stripped this pending row.
-    // The echo (or a cleared pending flag) has to be written too.
+    // A pending row is stripped before it hits disk. The echo has to be written too.
     if (changed) this.scheduleHistorySave(channel);
   }
 
@@ -946,6 +966,7 @@ class ChatController {
       return p.channel !== name;
     });
     this.flush();
+    this.dropHistoryChannel(name);
     set((s) => {
       const channels = { ...s.channels };
       delete channels[name];
@@ -1114,7 +1135,9 @@ class ChatController {
     }
     if (after.rememberChatHistory && !before.rememberChatHistory) {
       for (const channel of Object.keys(get().channels)) this.scheduleHistorySave(channel);
+      this.armHistoryFlush();
     } else if (!after.rememberChatHistory && before.rememberChatHistory) {
+      this.stopHistoryFlush();
       void this.forgetAllHistory();
     }
     if (after.autoCheckUpdates !== before.autoCheckUpdates) {
@@ -1126,9 +1149,8 @@ class ChatController {
 
   /** Wipe every saved chat log (Settings → Storage). */
   async clearSavedHistory(): Promise<void> {
-    for (const timer of this.historyTimers.values()) clearTimeout(timer);
-    this.historyTimers.clear();
-    this.historyDirty.clear();
+    this.historyUnsaved.clear();
+    this.historyOnDisk.clear();
     await platform.clearChatHistory();
     set((state) => {
       const channels = { ...state.channels };
@@ -1200,12 +1222,36 @@ class ChatController {
           const raw = await platform.loadChatHistory(channel);
           const history = sanitizeHistory(raw);
           if (!history.length) return;
+          let unsavedLive = false;
           this.patchChannel(channel, (view) => {
-            // Keep any lines that arrived while history was loading.
-            const seen = new Set(history.map((m) => m.id));
-            const live = view.messages.filter((m) => !seen.has(m.id) && !m.id.startsWith("hist-boundary:"));
-            return { ...view, messages: this.capMessages([...history, historyBoundary(channel), ...live]) };
+            // Lines already on screen (they arrived while the file was loading)
+            // win over the copy from disk so a delete in that window is kept.
+            const liveById = new Map<string, ChatMessage>();
+            for (const message of view.messages) {
+              if (!message.id.startsWith("hist-boundary:")) liveById.set(message.id, message);
+            }
+            const seen = new Set<string>();
+            const merged: ChatMessage[] = [];
+            for (const message of history) {
+              const live = liveById.get(message.id);
+              if (live && !live.pending) {
+                merged.push(live);
+                if (messageStamp(live) !== messageStamp(message)) unsavedLive = true;
+              } else {
+                merged.push(message);
+              }
+              seen.add(message.id);
+            }
+            const liveOnly: ChatMessage[] = [];
+            for (const message of view.messages) {
+              if (message.id.startsWith("hist-boundary:") || seen.has(message.id)) continue;
+              liveOnly.push(message);
+              if (!message.pending) unsavedLive = true;
+            }
+            return { ...view, messages: this.capMessages([...merged, historyBoundary(channel), ...liveOnly]) };
           });
+          this.markOnDisk(channel, history);
+          if (unsavedLive) this.scheduleHistorySave(channel);
         } catch {
           // Missing or unreadable history is fine — start empty.
         }
@@ -1215,41 +1261,104 @@ class ChatController {
 
   private scheduleHistorySave(channel: string): void {
     if (!get().settings.rememberChatHistory) return;
-    this.historyDirty.add(channel);
-    if (this.historyTimers.has(channel)) return;
-    this.historyTimers.set(
-      channel,
-      setTimeout(() => {
-        this.historyTimers.delete(channel);
-        void this.persistHistory(channel);
-      }, HISTORY_SAVE_GAP_MS),
-    );
+    this.historyUnsaved.add(channel);
+    this.armHistoryFlush();
   }
 
-  private async persistHistory(channel: string): Promise<void> {
-    if (!get().settings.rememberChatHistory) return;
-    this.historyDirty.delete(channel);
+  private armHistoryFlush(): void {
+    if (this.historyFlushTimer || !get().settings.rememberChatHistory) return;
+    this.historyFlushTimer = setInterval(() => {
+      void this.flushSavedHistory();
+    }, HISTORY_FLUSH_MS);
+  }
+
+  private stopHistoryFlush(): void {
+    if (!this.historyFlushTimer) return;
+    clearInterval(this.historyFlushTimer);
+    this.historyFlushTimer = null;
+  }
+
+  private markOnDisk(channel: string, messages: ChatMessage[]): void {
+    const saved = new Map<string, string>();
+    for (const message of messages) {
+      if (message.pending || message.id.startsWith("hist-boundary:")) continue;
+      saved.set(message.id, messageStamp(message));
+    }
+    this.historyOnDisk.set(channel, saved);
+  }
+
+  private dropHistoryChannel(channel: string): void {
+    this.historyUnsaved.delete(channel);
+    this.historyOnDisk.delete(channel);
+  }
+
+  private linesToAppend(channel: string): ChatMessage[] {
     const view = get().channels[channel];
-    if (!view) return;
+    if (!view) return [];
+    const known = this.historyOnDisk.get(channel) ?? new Map<string, string>();
+    const batch: ChatMessage[] = [];
+    for (const message of view.messages) {
+      if (message.pending || message.id.startsWith("hist-boundary:")) continue;
+      const stamp = messageStamp(message);
+      if (known.get(message.id) === stamp) continue;
+      batch.push(message);
+    }
+    return batch;
+  }
+
+  private async appendUnsaved(channel: string): Promise<void> {
+    const previous = this.historyWriting.get(channel) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(() => this.appendUnsavedNow(channel));
+    this.historyWriting.set(channel, run);
     try {
-      await platform.saveChatHistory(channel, messagesForDisk(view.messages));
-    } catch {
-      // Don't toast on every chat line; Settings will surface disk issues elsewhere.
+      await run;
+    } finally {
+      if (this.historyWriting.get(channel) === run) this.historyWriting.delete(channel);
     }
   }
 
-  private async flushHistoryNow(): Promise<void> {
-    for (const timer of this.historyTimers.values()) clearTimeout(timer);
-    this.historyTimers.clear();
-    const channels = [...this.historyDirty];
-    this.historyDirty.clear();
-    await Promise.all(channels.map((channel) => this.persistHistory(channel)));
+  private async appendUnsavedNow(channel: string): Promise<void> {
+    if (!get().settings.rememberChatHistory) return;
+    const batch = this.linesToAppend(channel);
+    if (!batch.length) return;
+    try {
+      await platform.appendChatHistory(channel, batch);
+      const known = this.historyOnDisk.get(channel) ?? new Map<string, string>();
+      for (const message of batch) known.set(message.id, messageStamp(message));
+      this.historyOnDisk.set(channel, known);
+    } catch {
+      this.historyUnsaved.add(channel);
+    }
+  }
+
+  /** Append lines that are still only in memory. Quit, update, and shutdown call this too. */
+  async flushSavedHistory(): Promise<void> {
+    if (!get().settings.rememberChatHistory) return;
+    // The 80ms paint queue is not on screen yet. Empty it before reading the view.
+    this.flush();
+    const channels = [...this.historyUnsaved];
+    this.historyUnsaved.clear();
+    await Promise.all(channels.map((channel) => this.appendUnsaved(channel)));
+  }
+
+  private async listenForExitFlush(): Promise<void> {
+    if (!platform.isTauri || this.exitFlushListening) return;
+    this.exitFlushListening = true;
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      await listen("flush-history", async () => {
+        await this.flushSavedHistory();
+        await platform.finishExit();
+      });
+    } catch {
+      this.exitFlushListening = false;
+    }
   }
 
   private async forgetAllHistory(): Promise<void> {
-    for (const timer of this.historyTimers.values()) clearTimeout(timer);
-    this.historyTimers.clear();
-    this.historyDirty.clear();
+    this.stopHistoryFlush();
+    this.historyUnsaved.clear();
+    this.historyOnDisk.clear();
     try {
       await platform.clearChatHistory();
     } catch (err) {

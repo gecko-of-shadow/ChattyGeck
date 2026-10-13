@@ -66,6 +66,8 @@ export async function fetchLatestRelease(): Promise<UpdateInfo | null> {
 /** Downloads the portable zip and swaps in the new exe, keeping ZooChattr-data. Restarts the app. */
 export async function applyUpdate(downloadUrl: string): Promise<void> {
   if (!isTauri) throw new Error("Updates only install from the desktop app.");
+  const { chat } = await import("@/lib/chat/controller");
+  await chat.flushSavedHistory();
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("apply_update", { downloadUrl });
 }

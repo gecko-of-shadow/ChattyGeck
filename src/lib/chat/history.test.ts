@@ -85,6 +85,23 @@ describe("chat history (48h)", () => {
     expect(trimLiveBuffer(messages, now).map((m) => m.id)).toEqual(["fresh"]);
   });
 
+  it("keeps the newest rows when a saved log is over the cap", () => {
+    const now = 1_700_000_000_000;
+    const raw = Array.from({ length: HISTORY_HARD_CAP + 10 }, (_, i) => ({
+      id: String(i),
+      channel: "x",
+      kind: "chat",
+      ts: now - (HISTORY_HARD_CAP + 10 - i),
+      text: "y",
+      badges: [],
+      twitchEmotes: [],
+    }));
+    const cleaned = sanitizeHistory(raw, now);
+    expect(cleaned).toHaveLength(HISTORY_HARD_CAP);
+    expect(cleaned[0].id).toBe("10");
+    expect(cleaned.at(-1)?.id).toBe(String(HISTORY_HARD_CAP + 9));
+  });
+
   it("hard-caps a buffer that is still inside the time window", () => {
     const now = 1_700_000_000_000;
     const messages = Array.from({ length: HISTORY_HARD_CAP + 10 }, (_, i) =>

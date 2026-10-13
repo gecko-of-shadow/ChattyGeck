@@ -122,16 +122,65 @@ export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
 
 const chatHistoryKey = (channel: string) => `zoochattr.chat.${channel}`;
 
+function rememberParsedLine(items: unknown[], index: Map<string, number>, value: unknown): void {
+  if (!value || typeof value !== "object") return;
+  const id = (value as { id?: unknown }).id;
+  if (typeof id !== "string") {
+    items.push(value);
+    return;
+  }
+  const at = index.get(id);
+  if (at === undefined) {
+    index.set(id, items.length);
+    items.push(value);
+  } else {
+    items[at] = value;
+  }
+}
+
+/** JSON array (old logs) or JSON Lines. A later line with the same id wins. */
+function parseStoredHistory(raw: string): unknown[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const items: unknown[] = [];
+  const index = new Map<string, number>();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (Array.isArray(parsed)) {
+        for (const row of parsed) rememberParsedLine(items, index, row);
+        return items;
+      }
+    } catch {
+      // Fall through and try lines.
+    }
+  }
+  for (const line of trimmed.split("\n")) {
+    if (!line) continue;
+    try {
+      rememberParsedLine(items, index, JSON.parse(line) as unknown);
+    } catch {
+      // Skip a torn line.
+    }
+  }
+  return items;
+}
+
+function historyToJsonl(items: unknown[]): string {
+  if (!items.length) return "";
+  return `${items.map((item) => JSON.stringify(item)).join("\n")}\n`;
+}
+
 /** Last saved chat lines for a channel (or null when none). */
 export async function loadChatHistory(channel: string): Promise<unknown | null> {
   if (isTauri) return invoke<unknown | null>("chat_history_load", { channel });
   const raw = localStorage.getItem(chatHistoryKey(channel));
   if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  const items = parseStoredHistory(raw);
+  if (raw.trim().startsWith("[")) {
+    localStorage.setItem(chatHistoryKey(channel), historyToJsonl(items));
   }
+  return items.length ? items : null;
 }
 
 export async function saveChatHistory(channel: string, messages: unknown): Promise<void> {
@@ -139,7 +188,20 @@ export async function saveChatHistory(channel: string, messages: unknown): Promi
     await invoke("chat_history_save", { channel, messages });
     return;
   }
-  localStorage.setItem(chatHistoryKey(channel), JSON.stringify(messages));
+  const items = Array.isArray(messages) ? messages : [];
+  localStorage.setItem(chatHistoryKey(channel), historyToJsonl(items));
+}
+
+/** Append lines in one write. Returns the log size. An empty list does not touch storage. */
+export async function appendChatHistory(channel: string, messages: unknown[]): Promise<number> {
+  if (!messages.length) return 0;
+  if (isTauri) return invoke<number>("chat_history_append", { channel, messages });
+  const key = chatHistoryKey(channel);
+  const prev = localStorage.getItem(key) ?? "";
+  const base = prev.trim().startsWith("[") ? historyToJsonl(parseStoredHistory(prev)) : prev;
+  const next = `${base}${messages.map((message) => JSON.stringify(message)).join("\n")}\n`;
+  localStorage.setItem(key, next);
+  return next.length;
 }
 
 /** Wipe one channel's history, or every channel when `channel` is omitted. */
@@ -155,4 +217,9 @@ export async function clearChatHistory(channel?: string): Promise<void> {
   for (const key of Object.keys(localStorage)) {
     if (key.startsWith("zoochattr.chat.")) localStorage.removeItem(key);
   }
+}
+
+/** Lets the process exit after the history buffer has been appended. */
+export async function finishExit(): Promise<void> {
+  if (isTauri) await invoke("finish_exit");
 }

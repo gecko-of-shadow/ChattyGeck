@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { chat } from "@/lib/chat/controller";
 import { isTauri, quitApp } from "@/lib/platform";
 import { useUi } from "@/store/ui";
 
@@ -42,7 +43,9 @@ export function QuitConfirmDialog() {
             variant="destructive"
             onClick={() => {
               useUi.setState({ quitConfirmOpen: false });
-              void quitApp();
+              void chat.flushSavedHistory().finally(() => {
+                void quitApp();
+              });
             }}
           >
             Quit
