@@ -134,13 +134,24 @@ export class IrcConnection {
   }
 
   sendRaw(line: string): boolean {
-    if (!this.ws || this.ws.readyState !== 1 || this._status !== "connected") return false;
-    this.ws.send(`${line}\r\n`);
-    return true;
+    if (this._status !== "connected") return false;
+    return this.transmit(line);
   }
 
   privmsg(channel: string, text: string): boolean {
-    return this.sendRaw(`PRIVMSG #${channel} :${text}`);
+    // A pasted line break must stay inside the message. CR/LF here would start a second command.
+    const safeChannel = channel.replace(/[\r\n\0]/g, "");
+    const safeText = text.replace(/\r\n|\n|\r/g, " ").replace(/\0/g, "").trim();
+    if (!/^[a-z0-9_]{2,25}$/.test(safeChannel) || !safeText) return false;
+    return this.sendRaw(`PRIVMSG #${safeChannel} :${safeText}`);
+  }
+
+  /** Writes one IRC command. Refuses CR, LF, or NUL so a payload cannot smuggle a second command. */
+  private transmit(line: string): boolean {
+    if (!this.ws || this.ws.readyState !== 1) return false;
+    if (/[\r\n\0]/.test(line)) return false;
+    this.ws.send(`${line}\r\n`);
+    return true;
   }
 
   private setStatus(status: ConnectionStatus, detail: ConnectionDetail): void {
@@ -187,9 +198,11 @@ export class IrcConnection {
 
     ws.onopen = () => {
       if (generation !== this.generation) return;
-      ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n");
-      ws.send(`PASS ${credentials.pass ?? "SCHMOOPIIE"}\r\n`);
-      ws.send(`NICK ${credentials.nick}\r\n`);
+      const pass = credentials.pass ?? "SCHMOOPIIE";
+      const nick = credentials.nick;
+      this.transmit("CAP REQ :twitch.tv/tags twitch.tv/commands");
+      if (!/[\r\n\0]/.test(pass)) this.transmit(`PASS ${pass}`);
+      if (!/[\r\n\0]/.test(nick)) this.transmit(`NICK ${nick}`);
     };
     ws.onmessage = (event) => {
       if (generation !== this.generation) return;
@@ -217,9 +230,11 @@ export class IrcConnection {
     if (!message) return;
 
     switch (message.command) {
-      case "PING":
-        this.ws?.send(`PONG :${message.params[0] ?? "tmi.twitch.tv"}\r\n`);
+      case "PING": {
+        const token = message.params[0] ?? "tmi.twitch.tv";
+        if (!/[\r\n\0]/.test(token)) this.transmit(`PONG :${token}`);
         return;
+      }
       case "PONG":
         if (this.pongTimer) clearTimeout(this.pongTimer);
         this.pongTimer = null;
@@ -303,8 +318,7 @@ export class IrcConnection {
     const every = this.opts.keepaliveMs ?? 60_000;
     const timeout = this.opts.pongTimeoutMs ?? 10_000;
     this.keepaliveTimer = setInterval(() => {
-      if (!this.ws || this.ws.readyState !== 1) return;
-      this.ws.send("PING :zoochattr\r\n");
+      if (!this.transmit("PING :zoochattr")) return;
       if (this.pongTimer) clearTimeout(this.pongTimer);
       this.pongTimer = setTimeout(() => {
         this.pongTimer = null;
