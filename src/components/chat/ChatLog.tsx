@@ -111,7 +111,8 @@ export function ChatLog({
     const el = scrollRef.current;
     if (!el) return;
     if (!pause) {
-      el.scrollTop = el.scrollHeight;
+      // Already pinned. Writing scrollTop again forces a layout under the caret.
+      if (el.scrollHeight - el.scrollTop - el.clientHeight > 2) el.scrollTop = el.scrollHeight;
     } else if (anchorFromBottom.current !== null) {
       // Older history was just rendered above the viewport; keep the same lines in view.
       el.scrollTop = el.scrollHeight - anchorFromBottom.current;

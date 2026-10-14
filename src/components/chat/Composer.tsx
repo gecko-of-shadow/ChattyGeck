@@ -379,7 +379,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   };
 
   return (
-    <div className={cn("border-t border-border/80 bg-card/70 backdrop-blur", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
+    <div className={cn("border-t border-border/80 bg-card", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-destructive", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
@@ -455,9 +455,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
               aria-controls={completion ? listId : undefined}
               aria-expanded={tabComplete ? !!completion : undefined}
               aria-activedescendant={completion ? `${listId}-${completion.index}` : undefined}
-              className={cn("pr-12", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
+              className={cn("bg-card pr-12 transition-none", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
               autoComplete="off"
-              spellCheck
+              autoCorrect="off"
+              autoCapitalize="off"
+              // Edge spellcheck rechecks the word under the caret on every arrow press.
+              spellCheck={false}
             />
             {length > 400 ? (
               <span

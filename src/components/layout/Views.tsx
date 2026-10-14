@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -211,6 +211,8 @@ function ChannelLog({
 }) {
   const messages = useChat((s) => s.channels[login]?.messages);
   const readMarker = useChat((s) => s.channels[login]?.readMarker);
+  // A fresh function here would redraw every visible row on each incoming line.
+  const onNameClick = useCallback((name: string) => insertIntoComposer(`@${name} `, login), [login]);
   if (!messages) return null;
   return (
     <ChatLog
@@ -221,7 +223,7 @@ function ChannelLog({
       liveRows={liveRows}
       readMarker={readMarker}
       empty={<ChannelPlaceholder login={login} compact={compactEmpty} />}
-      onNameClick={(name) => insertIntoComposer(`@${name} `, login)}
+      onNameClick={onNameClick}
     />
   );
 }
