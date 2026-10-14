@@ -650,7 +650,8 @@ class ChatController {
   // ---------------------------------------------------------------- sending
 
   send(channel: string, raw: string, reply?: { id: string; login: string; displayName: string; text: string }): ActionResult {
-    const text = raw.trim();
+    // Collapse pasted line breaks so the bubble and the wire stay one IRC command.
+    const text = raw.replace(/\r\n|\n|\r/g, " ").replace(/\0/g, "").trim();
     if (!text) return { ok: false };
     if (!this.session || !this.write) return { ok: false, error: "Log in with Twitch to chat. Reading works without it." };
     const view = get().channels[channel];
