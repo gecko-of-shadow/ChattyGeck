@@ -104,6 +104,27 @@ describe("IrcConnection", () => {
     expect(socket.sent).toHaveLength(before);
   });
 
+  it("keeps a pasted line break inside one PRIVMSG", async () => {
+    const { conn } = setup();
+    const socket = await connect(conn);
+    const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    expect(conn.privmsg("geckotown", "hello\r\nPRIVMSG #other :injected")).toBe(true);
+    expect(conn.privmsg("geckotown", "hello\r\nPRIVMSG #other :injected", id)).toBe(true);
+    const privmsgs = socket.sent.filter((line) => line.includes("PRIVMSG #"));
+    expect(privmsgs.slice(-2)).toEqual([
+      "PRIVMSG #geckotown :hello PRIVMSG #other :injected\r\n",
+      `@reply-parent-msg-id=${id} PRIVMSG #geckotown :hello PRIVMSG #other :injected\r\n`,
+    ]);
+  });
+
+  it("does not answer a PING whose token smuggles another command", async () => {
+    const { conn } = setup();
+    const socket = await connect(conn);
+    const before = socket.sent.length;
+    socket.receive("PING :tmi.twitch.tv\nPRIVMSG #x :injected");
+    expect(socket.sent.slice(before)).toEqual([]);
+  });
+
   it("answers server PINGs", async () => {
     const { conn } = setup();
     const socket = await connect(conn);
