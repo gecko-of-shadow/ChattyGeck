@@ -1,3 +1,5 @@
+import { TAB_COMPLETE_HINT, TAB_COMPLETE_LABEL } from "@/store/settings";
+
 /** One settings control that can be shown or hidden by search. */
 export interface SettingsSearchRow {
   id: string;
@@ -156,8 +158,8 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       },
       {
         id: "tab",
-        label: "Tab finishes emote names",
-        hint: "Type the first letters, press Tab; Tab again cycles the matches",
+        label: TAB_COMPLETE_LABEL,
+        hint: TAB_COMPLETE_HINT,
       },
       {
         id: "picker",
@@ -188,7 +190,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
           "BetterTTV",
           "FrankerFaceZ",
           "Overlay emotes",
-          "Tab finishes emote names",
+          TAB_COMPLETE_LABEL,
           "Emote menu",
           "Preview on hover",
           "Highlight words",

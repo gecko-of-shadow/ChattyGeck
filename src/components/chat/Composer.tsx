@@ -1,9 +1,10 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { CircleAlert, Clock, Lock, SendHorizontal, Smile, Users } from "lucide-react";
+import { CircleAlert, Clock, CornerDownRight, Lock, SendHorizontal, Smile, Users, X } from "lucide-react";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { completionInsert, tabMatches, type TabMatch } from "@/lib/chat/activeUsers";
 import { chat } from "@/lib/chat/controller";
 import { findEmotes, wordAt } from "@/lib/emotes/search";
 import { emoteKey, emoteUrls, type Emote } from "@/lib/emotes/types";
@@ -11,7 +12,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { ackSendChannel, useUi } from "@/store/ui";
+import { ackSendChannel, clearReplyTarget, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
 import { useEmoteIndex } from "./useEmoteIndex";
 
@@ -88,12 +89,22 @@ export function LoginPrompt() {
 
 /** A Tab-completion in progress: which word is being finished and which match is in the box right now. */
 interface Completion {
-  matches: Emote[];
+  matches: TabMatch[];
   index: number;
   /** Where the typed word started. */
   start: number;
   /** Where the inserted name (plus its trailing space) ends. */
   end: number;
+}
+
+function matchKey(match: TabMatch): string {
+  return match.kind === "emote" ? emoteKey(match.emote) : `user:${match.login}`;
+}
+
+function matchLabel(match: TabMatch): string {
+  if (match.kind === "emote") return match.emote.name;
+  if (match.displayName.toLowerCase() === match.login) return `@${match.login}`;
+  return `@${match.login} (${match.displayName})`;
 }
 
 const MIN_TYPED = 2;
@@ -157,15 +168,15 @@ function CompletionBar({
       id={id}
       data-testid="tab-complete"
       role="listbox"
-      aria-label="Emote suggestions"
+      aria-label="Suggestions"
       className="zoo-scroll fixed z-50 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
       style={{ left: box.left, width: box.width, bottom: box.bottom }}
     >
-      {completion.matches.map((emote, i) => {
+      {completion.matches.map((match, i) => {
         const active = i === completion.index;
         return (
           <button
-            key={emoteKey(emote)}
+            key={matchKey(match)}
             id={`${id}-${i}`}
             ref={active ? activeRef : undefined}
             type="button"
@@ -180,9 +191,13 @@ function CompletionBar({
             )}
           >
             <span className="grid size-7 shrink-0 place-items-center">
-              <CompletionEmoteThumb emote={emote} still={still} />
+              {match.kind === "emote" ? (
+                <CompletionEmoteThumb emote={match.emote} still={still} />
+              ) : (
+                <span className="text-sm font-semibold">@</span>
+              )}
             </span>
-            <span className="min-w-0 flex-1 truncate font-medium">{emote.name}</span>
+            <span className="min-w-0 flex-1 truncate font-medium">{matchLabel(match)}</span>
           </button>
         );
       })}
@@ -201,6 +216,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
   const insert = useUi((s) => s.insert);
   const sendAckChannel = useUi((s) => s.sendAckChannel);
+  const replyTo = useUi((s) => (channel && s.replyTo?.channel === channel ? s.replyTo : null));
   const { emotes, index } = useEmoteIndex(channel);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -231,6 +247,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     ackSendChannel(channel);
     inputRef.current?.focus();
   }, [insert, channel]);
+
+  useEffect(() => {
+    if (!replyTo) return;
+    inputRef.current?.focus();
+  }, [replyTo?.nonce]);
 
   useEffect(() => {
     const previous = prevChannel.current;
@@ -270,13 +291,20 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   const submit = () => {
     if (locked || !text.trim()) return;
-    const result = chat.send(channel, text);
+    const result = chat.send(
+      channel,
+      text,
+      replyTo
+        ? { id: replyTo.id, login: replyTo.login, displayName: replyTo.displayName, text: replyTo.text }
+        : undefined,
+    );
     if (result.ok) {
       history.current = [text, ...history.current.filter((h) => h !== text)].slice(0, 50);
       historyIndex.current = -1;
       setText("");
       setError(null);
       setCompletion(null);
+      if (replyTo) clearReplyTarget(channel);
     } else if (result.error) {
       setError(result.error);
     }
@@ -284,7 +312,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   /** Replaces text[start..end] with the match's name and a space; returns the updated completion. */
   const applyMatch = (base: Completion, nextIndex: number) => {
-    const name = base.matches[nextIndex].name;
+    const name = completionInsert(base.matches[nextIndex]);
     const after = text.slice(base.end);
     const spacer = after.startsWith(" ") ? "" : " ";
     const inserted = `${name}${spacer}`;
@@ -303,8 +331,9 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const startCompletion = (backwards: boolean): boolean => {
     const caret = inputRef.current?.selectionStart ?? text.length;
     const word = wordAt(text, caret);
-    if (!word || word.word.length < MIN_TYPED) return false;
-    const matches = findEmotes(index, word.word);
+    if (!word) return false;
+    const emoteHits = word.word.startsWith("@") || word.word.length < MIN_TYPED ? [] : findEmotes(index, word.word);
+    const matches = tabMatches(word.word, emoteHits, chat.activeChatters(channel));
     if (!matches.length) return false;
     applyMatch({ matches, index: 0, start: word.start, end: word.end }, backwards ? matches.length - 1 : 0);
     return true;
@@ -374,6 +403,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       historyIndex.current -= 1;
       setText(historyIndex.current >= 0 ? history.current[historyIndex.current] : "");
     } else if (event.key === "Escape") {
+      if (replyTo) clearReplyTarget(channel);
       setError(null);
     }
   };
@@ -409,6 +439,30 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           </Button>
         </div>
       ) : (
+        <div>
+          {replyTo ? (
+            <div
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg bg-muted px-2 py-1 text-muted-foreground",
+                compact ? "mb-1 text-[11px]" : "mb-1.5 text-xs",
+              )}
+              data-testid="reply-banner"
+            >
+              <CornerDownRight className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">
+                Replying to <span className="font-medium text-foreground">@{replyTo.displayName}</span>
+                {replyTo.text ? `: ${replyTo.text}` : ""}
+              </span>
+              <button
+                type="button"
+                className="rounded-md p-0.5 hover:bg-background hover:text-foreground"
+                aria-label="Cancel reply"
+                onClick={() => clearReplyTarget(channel)}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
         <form
           className="flex items-center gap-1.5"
           onSubmit={(event) => {
@@ -485,6 +539,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             <SendHorizontal className="size-4" />
           </Button>
         </form>
+        </div>
       )}
       {compact ? null : <RoomChips channel={channel} />}
       {!compact && !connected && !locked ? (

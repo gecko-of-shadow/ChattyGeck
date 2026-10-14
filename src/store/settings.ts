@@ -79,7 +79,7 @@ export interface Settings {
   blockedEmotes: string[];
   /** Keep emote lists on disk so pictures show instantly next launch. */
   rememberEmotes: boolean;
-  /** Tab finishes emote names in the message box. */
+  /** Tab finishes emote names and chatter names in the message box. */
   tabComplete: boolean;
   /** The emote menu button in the message box. */
   emotePicker: boolean;
@@ -121,12 +121,16 @@ export type ChannelFeature =
   | "highlightWords"
   | "showDeleted";
 
+export const TAB_COMPLETE_LABEL = "Tab finishes emote and chatter names";
+export const TAB_COMPLETE_HINT =
+  "Type the first letters or @ and a name, then Tab. Tab again cycles emotes and people in this chat.";
+
 export const CHANNEL_FEATURES: { id: ChannelFeature; label: string }[] = [
   { id: "7tv", label: "7TV" },
   { id: "bttv", label: "BetterTTV" },
   { id: "ffz", label: "FrankerFaceZ" },
   { id: "overlayEmotes", label: "Overlay emotes" },
-  { id: "tabComplete", label: "Tab finishes emote names" },
+  { id: "tabComplete", label: TAB_COMPLETE_LABEL },
   { id: "emotePicker", label: "Emote menu" },
   { id: "emotePreview", label: "Preview on hover" },
   { id: "highlightWords", label: "Highlight words" },

@@ -1,3 +1,4 @@
+import { replyParentMsgId } from "../twitch/reply";
 import { channelFromParam, parseIrcLine, type IrcMessage } from "./parser";
 
 export type ConnectionStatus =
@@ -139,7 +140,11 @@ export class IrcConnection {
     return true;
   }
 
-  privmsg(channel: string, text: string): boolean {
+  privmsg(channel: string, text: string, replyParentId?: string): boolean {
+    if (replyParentId !== undefined) {
+      if (replyParentMsgId(replyParentId) !== replyParentId) return false;
+      return this.sendRaw(`@reply-parent-msg-id=${replyParentId} PRIVMSG #${channel} :${text}`);
+    }
     return this.sendRaw(`PRIVMSG #${channel} :${text}`);
   }
 

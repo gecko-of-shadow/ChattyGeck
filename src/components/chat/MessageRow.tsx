@@ -2,6 +2,8 @@ import { memo, useMemo, useState, type ReactNode } from "react";
 import { CircleAlert, CornerDownRight, Info, LoaderCircle, Sparkles } from "lucide-react";
 import { GeckoEggIcon, GeckoTailIcon } from "@/components/mascots/icons";
 import { chat } from "@/lib/chat/controller";
+import { canReplyTo } from "@/lib/twitch/reply";
+import { setReplyTarget } from "@/store/ui";
 import { tokenize, type Fragment } from "@/lib/chat/tokenize";
 import { readableNameColor } from "@/lib/colors";
 import { emoteRegistry } from "@/lib/emotes/registry";
@@ -169,6 +171,7 @@ function MessageRowInner({
   const deleted = !!message.deleted;
   /** Hidden deletions: the words are replaced by a note, like Twitch does. */
   const hideText = deleted && !prefs.showDeleted;
+  const replyable = canReplyTo(message);
 
   const badges = prefs.showBadges
     ? message.badges.map((badge) => {
@@ -193,7 +196,8 @@ function MessageRowInner({
   return (
     <div
       className={cn(
-        "chat-row relative px-3 py-[3px] leading-[1.6] break-words [overflow-wrap:anywhere]",
+        "chat-row group relative px-3 py-[3px] leading-[1.6] break-words [overflow-wrap:anywhere]",
+        replyable && "pr-8",
         message.mention && "bg-[rgb(var(--mention-rgb)/0.10)] shadow-[inset_3px_0_0_var(--mention)]",
         message.highlighted && "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
         message.firstMsg && !message.mention && "shadow-[inset_3px_0_0_var(--mascot-belly)]",
@@ -204,6 +208,27 @@ function MessageRowInner({
       data-deleted={deleted || undefined}
       data-mention={message.mention || undefined}
     >
+      {replyable ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          className="pointer-events-none absolute top-0.5 right-1 rounded-md p-1 text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-80"
+          aria-label={`Reply to ${name}`}
+          title="Reply"
+          onClick={() =>
+            message.login &&
+            setReplyTarget({
+              channel: message.channel,
+              id: message.id,
+              login: message.login,
+              displayName: name,
+              text: message.text,
+            })
+          }
+        >
+          <CornerDownRight className="size-3.5" />
+        </button>
+      ) : null}
       {message.reply ? (
         <div className="mb-0.5 flex items-center gap-1 truncate pl-1 text-[0.82em] text-muted-foreground">
           <CornerDownRight className="size-3 shrink-0" />

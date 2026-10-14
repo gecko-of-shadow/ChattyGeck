@@ -36,6 +36,8 @@ import { useChat } from "@/store/chat";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import {
   CHANNEL_FEATURES,
+  TAB_COMPLETE_HINT,
+  TAB_COMPLETE_LABEL,
   DEFAULT_SETTINGS,
   MENTION_COOLDOWN_MAX,
   MENTION_COOLDOWN_MIN,
@@ -409,7 +411,7 @@ function EmotesSection() {
           <ToggleRow id="pref-preview" label="Preview on hover" hint="Point at an emote to see it big with its name and source" setting="emotePreview" />
         </Searchable>
         <Searchable section="Emotes" id="tab">
-          <ToggleRow id="pref-tab" label="Tab finishes emote names" hint="Type the first letters, press Tab; Tab again cycles the matches" setting="tabComplete" />
+          <ToggleRow id="pref-tab" label={TAB_COMPLETE_LABEL} hint={TAB_COMPLETE_HINT} setting="tabComplete" />
         </Searchable>
         <Searchable section="Emotes" id="picker">
           <ToggleRow id="pref-picker" label="Emote menu" hint="The animal button next to the message box" setting="emotePicker" />

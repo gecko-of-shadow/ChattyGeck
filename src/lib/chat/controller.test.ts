@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chat, HISTORY_FLUSH_MS } from "@/lib/chat/controller";
+import { chat, HISTORY_FLUSH_MS, ALL_CHANNELS } from "@/lib/chat/controller";
 import { newChannelView, useChat } from "@/store/chat";
 import { DEFAULT_SETTINGS } from "@/store/settings";
+import { useUi } from "@/store/ui";
 import type { ChatMessage } from "@/lib/twitch/types";
 import type { IrcMessage } from "@/lib/irc/parser";
 
@@ -87,9 +88,18 @@ describe("chat controller view and history", () => {
     installStorage();
     vi.stubGlobal("document", { hasFocus: () => true });
     vi.useFakeTimers();
-    const internal = chat as unknown as { session: unknown; pendingSends: unknown[] };
+    const internal = chat as unknown as {
+      session: unknown;
+      pendingSends: unknown[];
+      write: unknown;
+      sentLog: number[];
+      chatterLists: Map<string, unknown>;
+    };
     internal.session = null;
     internal.pendingSends = [];
+    internal.write = null;
+    internal.sentLog = [];
+    internal.chatterLists.clear();
     resetHistoryBookkeeping();
   });
 
@@ -282,5 +292,91 @@ describe("chat controller view and history", () => {
     expect(messages[0]?.id).toBe("twitch-late");
     expect(messages[0]?.pending).toBeUndefined();
     internal.session = null;
+  });
+
+  it("remembers people who spoke, newest first, and forgets them when you leave", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"] });
+    const enqueue = (chat as unknown as { enqueue: (message: ChatMessage) => void }).enqueue.bind(chat);
+    enqueue({ ...line("geckotown", "hi", "a"), login: "ada", displayName: "Ada" });
+    enqueue({ ...line("geckotown", "yo", "b"), login: "bea", displayName: "Bea" });
+    enqueue({ ...line("geckotown", "me", "c"), login: "me", displayName: "Me", self: true });
+    enqueue({ ...line(ALL_CHANNELS, "everywhere", "sys"), kind: "system", login: "mod", displayName: "Mod" });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(chat.activeChatters("geckotown").map((user) => user.login)).toEqual(["bea", "ada"]);
+    chat.removeChannel("geckotown");
+    expect(chat.activeChatters("geckotown")).toEqual([]);
+  });
+
+  it("seeds chatter names from restored history, newest last in the file", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    const older = { ...line("geckotown", "old", "disk-ada"), login: "ada", displayName: "Ada" };
+    const newer = { ...line("geckotown", "new", "disk-bea"), login: "bea", displayName: "Bea" };
+    memory.set("zoochattr.chat.geckotown", `${JSON.stringify(older)}\n${JSON.stringify(newer)}\n`);
+    putMessage("geckotown", { ...line("geckotown", "live", "live-cy"), login: "cy", displayName: "Cy" });
+    const restore = (chat as unknown as { restoreHistory: (channels: string[]) => Promise<void> }).restoreHistory.bind(chat);
+    await restore(["geckotown"]);
+    expect(chat.activeChatters("geckotown").map((user) => user.login)).toEqual(["cy", "bea", "ada"]);
+  });
+
+  it("drops your own name from tab completion once you are logged in", () => {
+    const internal = chat as unknown as {
+      chatterLists: Map<string, { login: string; displayName: string }[]>;
+      setSession: (session: unknown, remembered?: boolean) => void;
+    };
+    internal.chatterLists.set("geckotown", [
+      { login: "me", displayName: "Me" },
+      { login: "ada", displayName: "Ada" },
+    ]);
+    internal.setSession(
+      { login: "me", userId: "1", clientId: "c", accessToken: "t", expiresAt: 1, scopes: [] },
+      true,
+    );
+    expect(chat.activeChatters("geckotown").map((user) => user.login)).toEqual(["ada"]);
+    internal.setSession(null);
+  });
+
+  it("sends a reply tag and shows who you are answering", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"] });
+    const sent: { channel: string; text: string; reply?: string }[] = [];
+    const internal = chat as unknown as {
+      session: unknown;
+      write: { privmsg: (channel: string, text: string, reply?: string) => boolean };
+    };
+    internal.session = { login: "me", userId: "1", clientId: "c", accessToken: "t", expiresAt: 1, scopes: [] };
+    internal.write = {
+      privmsg(channel: string, text: string, reply?: string) {
+        sent.push({ channel, text, reply });
+        return true;
+      },
+    };
+    const parent = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    expect(chat.send("geckotown", "hello", { id: "send-not-real", login: "ada", displayName: "Ada", text: "yo" }).ok).toBe(false);
+    expect(sent).toEqual([]);
+    expect(
+      chat.send("geckotown", "hello", { id: parent, login: "ada", displayName: "Ada", text: "yo there" }).ok,
+    ).toBe(true);
+    expect(sent).toEqual([{ channel: "geckotown", text: "hello", reply: parent }]);
+    await vi.advanceTimersByTimeAsync(100);
+    const row = useChat.getState().channels.geckotown.messages[0];
+    expect(row?.reply).toEqual({ login: "ada", displayName: "Ada", text: "yo there" });
+    expect(row?.pending).toBe("sending");
+    internal.session = null;
+    internal.write = undefined as unknown as typeof internal.write;
+  });
+
+  it("clears a reply aimed at a channel you leave", () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown", "other"] });
+    useUi.setState({
+      replyTo: {
+        channel: "geckotown",
+        id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        login: "ada",
+        displayName: "Ada",
+        text: "hi",
+        nonce: 1,
+      },
+    });
+    chat.removeChannel("geckotown");
+    expect(useUi.getState().replyTo).toBeNull();
   });
 });

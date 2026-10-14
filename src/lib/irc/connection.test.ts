@@ -88,6 +88,22 @@ describe("IrcConnection", () => {
     expect(conn.status).toBe("connected");
   });
 
+  it("sends a PRIVMSG, and a reply tag only for a safe parent id", async () => {
+    const { conn } = setup();
+    const socket = await connect(conn);
+    const id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    expect(conn.privmsg("xqc", "hello")).toBe(true);
+    expect(conn.privmsg("xqc", "hello", id)).toBe(true);
+    const before = socket.sent.length;
+    expect(conn.privmsg("xqc", "hello", "send-abc-defghij")).toBe(false);
+    expect(conn.privmsg("xqc", "hello", "bad id")).toBe(false);
+    expect(socket.sent.slice(-2)).toEqual([
+      "PRIVMSG #xqc :hello\r\n",
+      `@reply-parent-msg-id=${id} PRIVMSG #xqc :hello\r\n`,
+    ]);
+    expect(socket.sent).toHaveLength(before);
+  });
+
   it("answers server PINGs", async () => {
     const { conn } = setup();
     const socket = await connect(conn);

@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { config } from "@/lib/config";
+import { rememberUsers, type ActiveUser } from "@/lib/chat/activeUsers";
 import { historyBoundary, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
 import { channelOnScreen, readMarkerAfterFocus } from "@/lib/chat/visibility";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
@@ -33,7 +34,8 @@ import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { isFeatureOn, MAX_GRID_SLOTS, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { THEMES } from "@/lib/themes";
-import { useUi } from "@/store/ui";
+import { clearReplyTarget, useUi } from "@/store/ui";
+import { replyParentMsgId, replySnippet } from "@/lib/twitch/reply";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
 export const ALL_CHANNELS = "*";
@@ -60,6 +62,7 @@ export interface ActionResult {
 
 const get = useChat.getState;
 const set = useChat.setState;
+const NO_CHATTERS: ActiveUser[] = [];
 
 function anonymousNick(): string {
   return `justinfan${Math.floor(10_000 + Math.random() * 89_999)}`;
@@ -104,6 +107,8 @@ class ChatController {
   private saveErrorShown = false;
   private pendingSends: PendingSend[] = [];
   private sentLog: number[] = [];
+  /** Recent chatters per channel, newest first. Not in the store, so a new line does not redraw the message box. */
+  private chatterLists = new Map<string, ActiveUser[]>();
   private globalBadges: BadgeMap = new Map();
   private channelBadges = new Map<string, BadgeMap>();
   private emoteLoadedAt = new Map<string, number>();
@@ -306,6 +311,7 @@ class ChatController {
 
   private setSession(session: Session | null, remembered = true): void {
     this.session = session;
+    if (session) this.dropSelfFromChatters(session.login);
     set({
       auth: session
         ? { status: "logged_in", login: session.login, userId: session.userId, remembered }
@@ -643,7 +649,7 @@ class ChatController {
 
   // ---------------------------------------------------------------- sending
 
-  send(channel: string, raw: string): ActionResult {
+  send(channel: string, raw: string, reply?: { id: string; login: string; displayName: string; text: string }): ActionResult {
     const text = raw.trim();
     if (!text) return { ok: false };
     if (!this.session || !this.write) return { ok: false, error: "Log in with Twitch to chat. Reading works without it." };
@@ -668,13 +674,16 @@ class ChatController {
       kind = "action";
     }
 
+    const parentId = reply ? replyParentMsgId(reply.id) : null;
+    if (reply && !parentId) return { ok: false, error: "That message can't be replied to." };
+
     const limit = view.me?.mod ? 100 : 20;
     const now = Date.now();
     this.sentLog = this.sentLog.filter((t) => now - t < 30_000);
     if (this.sentLog.length >= limit) {
       return { ok: false, error: `Easy there: Twitch allows ${limit} messages every 30 seconds.` };
     }
-    if (!this.write.privmsg(channel, wire)) {
+    if (!this.write.privmsg(channel, wire, parentId ?? undefined)) {
       return { ok: false, error: "Not connected to Twitch chat right now. Your message wasn't sent." };
     }
     this.sentLog.push(now);
@@ -695,6 +704,10 @@ class ChatController {
       twitchEmotes: [],
       self: true,
       pending: "sending",
+      reply:
+        reply && parentId
+          ? { login: reply.login, displayName: reply.displayName || reply.login, text: replySnippet(reply.text) }
+          : undefined,
     });
     this.pendingSends.push({
       id,
@@ -704,6 +717,28 @@ class ChatController {
       timer: setTimeout(() => this.expirePending(id), 10_000),
     });
     return { ok: true };
+  }
+
+  /** Recent chatters in this channel, newest first. Read when Tab is pressed, not on each message. */
+  activeChatters(channel: string): readonly ActiveUser[] {
+    return this.chatterLists.get(channel) ?? NO_CHATTERS;
+  }
+
+  private noteUsers(channel: string, messages: readonly ChatMessage[]): void {
+    const prev = this.chatterLists.get(channel) ?? NO_CHATTERS;
+    const next = rememberUsers(prev, messages, this.session?.login);
+    if (next !== prev) this.chatterLists.set(channel, next);
+  }
+
+  /** History can load before login. Drop your own name once the account is known. */
+  private dropSelfFromChatters(login: string): void {
+    const self = login.toLowerCase();
+    for (const [channel, list] of this.chatterLists) {
+      if (!list.some((user) => user.login === self)) continue;
+      const next = list.filter((user) => user.login !== self);
+      if (next.length) this.chatterLists.set(channel, next);
+      else this.chatterLists.delete(channel);
+    }
   }
 
   /** Twitch echoes our message on the read connection with full emote tags; swap it in. */
@@ -790,6 +825,7 @@ class ChatController {
     }
     this.maybeMentionSound(batch);
 
+    const noted = new Map<string, ChatMessage[]>();
     set((state) => {
       const { mode, focused } = state.settings;
       const additions = new Map<string, ChatMessage[]>();
@@ -830,8 +866,10 @@ class ChatController {
         };
         this.scheduleHistorySave(channel);
       }
+      for (const [channel, list] of additions) noted.set(channel, list);
       return { channels };
     });
+    for (const [channel, list] of noted) this.noteUsers(channel, list);
   }
 
   /**
@@ -967,6 +1005,8 @@ class ChatController {
     });
     this.flush();
     this.dropHistoryChannel(name);
+    this.chatterLists.delete(name);
+    clearReplyTarget(name);
     set((s) => {
       const channels = { ...s.channels };
       delete channels[name];
@@ -1252,6 +1292,8 @@ class ChatController {
           });
           this.markOnDisk(channel, history);
           if (unsavedLive) this.scheduleHistorySave(channel);
+          const seeded = get().channels[channel]?.messages;
+          if (seeded) this.noteUsers(channel, seeded);
         } catch {
           // Missing or unreadable history is fine — start empty.
         }
