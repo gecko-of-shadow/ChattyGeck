@@ -7,7 +7,9 @@ import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
 import { Mascot } from "@/components/mascots/Mascot";
 import { ChatHeader, ConnectionBanner } from "@/components/layout/ChatHeader";
+import { QuickSwitcher } from "@/components/layout/QuickSwitcher";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { ViewHotkeys } from "@/components/layout/ViewHotkeys";
 import { EmptyState, FocusedView, GridView } from "@/components/layout/Views";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
@@ -39,7 +41,7 @@ function MobileNav() {
   if (!open) return null;
   const close = () => useUi.setState({ navOpen: false });
   return (
-    <div className="fixed inset-0 z-40 md:hidden">
+    <div className="fixed inset-0 z-40 min-[900px]:hidden">
       <button type="button" aria-label="Close channel list" className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={close} />
       <div className="absolute inset-y-0 left-0 w-[min(18rem,85vw)] shadow-2xl animate-in slide-in-from-left duration-200">
         <Sidebar onNavigate={close} />
@@ -80,6 +82,15 @@ function ChromeReveal() {
       >
         {readOnly ? "Reading" : "Read only"}
       </Button>
+    </div>
+  );
+}
+
+function LiveRegion() {
+  const message = useUi((s) => s.liveMessage);
+  return (
+    <div className="sr-only" aria-live="polite" aria-atomic="true">
+      {message}
     </div>
   );
 }
@@ -162,7 +173,7 @@ export default function App() {
       ) : (
         <div className="relative flex h-full">
           {chromeHidden ? null : (
-            <div className="hidden w-64 shrink-0 md:block lg:w-72">
+            <div className="hidden w-64 shrink-0 min-[900px]:block lg:w-72">
               <Sidebar />
             </div>
           )}
@@ -186,6 +197,9 @@ export default function App() {
           <LoginDialog />
           <SettingsDialog />
           <QuitConfirmDialog />
+          <QuickSwitcher />
+          <ViewHotkeys />
+          <LiveRegion />
         </div>
       )}
       <Toaster position="top-center" />

@@ -109,12 +109,6 @@ export async function quitApp(): Promise<void> {
   else window.close();
 }
 
-/** Whether ZooChattr is set to start when Windows signs you in. */
-export async function getLaunchAtLogin(): Promise<boolean> {
-  if (isTauri) return invoke<boolean>("get_launch_at_login");
-  return false;
-}
-
 /** Start (or stop starting) ZooChattr when Windows signs you in. */
 export async function setLaunchAtLogin(enabled: boolean): Promise<void> {
   if (isTauri) await invoke("set_launch_at_login", { enabled });
@@ -181,15 +175,6 @@ export async function loadChatHistory(channel: string): Promise<unknown | null> 
     localStorage.setItem(chatHistoryKey(channel), historyToJsonl(items));
   }
   return items.length ? items : null;
-}
-
-export async function saveChatHistory(channel: string, messages: unknown): Promise<void> {
-  if (isTauri) {
-    await invoke("chat_history_save", { channel, messages });
-    return;
-  }
-  const items = Array.isArray(messages) ? messages : [];
-  localStorage.setItem(chatHistoryKey(channel), historyToJsonl(items));
 }
 
 /** Append lines in one write. Returns the log size. An empty list does not touch storage. */

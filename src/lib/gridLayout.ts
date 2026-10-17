@@ -12,7 +12,17 @@ export interface ChatGridLayout {
   rows: number;
   cellWidth: number;
   cellHeight: number;
+  /** The window is a single column of chat, or under 480px. The UI may offer Single; it does not switch by itself. */
+  suggestSingle: boolean;
 }
+
+/** Wider than this is too narrow for two columns: stack and scroll. */
+const STACK_BELOW = 620;
+/** Below this width, Single is a better fit. */
+const SINGLE_BELOW = 480;
+const ULTRAWIDE = 21 / 9;
+/** Ultrawide rows should not stretch a box past this. */
+const MAX_CELL_WIDTH = 900;
 
 /**
  * Pick a multi-chat grid of square-ish panes.
@@ -31,13 +41,19 @@ export function layoutChatGrid(
   const minH = opts?.minHeight ?? BOX_MIN_HEIGHT;
   const n = Math.max(1, count);
   const idealCols = Math.max(1, Math.round(Math.sqrt(n)));
+  const narrow = areaWidth < STACK_BELOW;
+  const ultrawide = areaHeight > 0 && areaWidth / areaHeight >= ULTRAWIDE;
+  const suggestSingle = n === 1 || areaWidth < SINGLE_BELOW;
+  const neededForCap = ultrawide ? Math.max(1, Math.ceil((areaWidth + gap) / (MAX_CELL_WIDTH + gap))) : 1;
+  const columnLimit = narrow ? 1 : Math.min(9, Math.max(n, ultrawide ? neededForCap : n));
 
-  let best: (ChatGridLayout & { score: number }) | null = null;
+  let best: { columns: number; rows: number; cellWidth: number; cellHeight: number; score: number } | null = null;
 
-  for (let columns = 1; columns <= n; columns++) {
+  for (let columns = 1; columns <= columnLimit; columns++) {
     const rows = Math.ceil(n / columns);
     const cellWidth = (areaWidth - gap * (columns - 1)) / columns;
-    if (cellWidth < minW - 0.5) continue;
+    if (columns > 1 && cellWidth < minW - 0.5) continue;
+    if (ultrawide && columns < columnLimit && cellWidth > MAX_CELL_WIDTH + 0.5) continue;
 
     const fillHeight = (areaHeight - gap * (rows - 1)) / rows;
     // Cap height to width so panes stay squares or landscape, never tall skinny columns.
@@ -51,7 +67,8 @@ export function layoutChatGrid(
     const emptySlots = rows * columns - n;
     const squareness = cellHeight / cellWidth;
     // Bran’s bug: four wide squares in one short row with empty window underneath.
-    const shortStrip = rows === 1 && columns === n && heightFill < 0.82;
+    const shortStrip = rows === 1 && columns >= n && heightFill < 0.82;
+    const portrait = areaHeight > areaWidth;
 
     const score =
       squareness * 1.2 +
@@ -59,7 +76,8 @@ export function layoutChatGrid(
       Math.abs(columns - idealCols) -
       emptySlots * 0.5 -
       (shortStrip ? 5 : 0) +
-      heightFill * 0.3;
+      heightFill * 0.3 +
+      (portrait && rows >= columns ? 0.6 : 0);
 
     if (!best || score > best.score) {
       best = {
@@ -73,7 +91,13 @@ export function layoutChatGrid(
   }
 
   if (best) {
-    return { columns: best.columns, rows: best.rows, cellWidth: best.cellWidth, cellHeight: best.cellHeight };
+    return {
+      columns: best.columns,
+      rows: best.rows,
+      cellWidth: best.cellWidth,
+      cellHeight: best.cellHeight,
+      suggestSingle,
+    };
   }
 
   return {
@@ -81,5 +105,6 @@ export function layoutChatGrid(
     rows: n,
     cellWidth: Math.max(minW, Math.floor(areaWidth)),
     cellHeight: minH,
+    suggestSingle,
   };
 }

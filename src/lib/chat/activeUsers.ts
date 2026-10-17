@@ -6,10 +6,10 @@ export interface ActiveUser {
   displayName: string;
 }
 
-export const MAX_ACTIVE_USERS = 400;
-export const MAX_USER_MATCHES = 20;
+const MAX_ACTIVE_USERS = 400;
+const MAX_USER_MATCHES = 20;
 /** `@` with nothing after it lists this many recent chatters. */
-export const MAX_BARE_MENTION_MATCHES = 8;
+const MAX_BARE_MENTION_MATCHES = 8;
 
 const LOGIN = /^[a-z0-9_]{1,25}$/;
 

@@ -68,6 +68,7 @@ const SEVEN_TV = {
     { id: "7g1", name: "peepoHappy", animated: true },
     { id: "7g2", name: "catJAM", animated: true },
     { id: "7g3", name: "FeelsOkayMan" },
+    { id: "7g4", name: "Kappa" },
   ],
   channel: {
     [GECKOTOWN]: [
@@ -277,6 +278,18 @@ const httpServer = http.createServer(async (req, res) => {
     case "POST /__expire":
       tokens.clear();
       return json(res, 200, { ok: true });
+    case "GET /__sent":
+      return json(res, 200, { messages: sentMessages });
+    case "POST /__sent/reset":
+      sentMessages.length = 0;
+      return json(res, 200, { ok: true });
+    case "POST /__heavy": {
+      heavyRate = Math.max(0, Number(url.searchParams.get("rate") ?? 50));
+      return json(res, 200, { rate: heavyRate });
+    }
+    case "POST /__heavy/off":
+      heavyRate = 0;
+      return json(res, 200, { rate: 0 });
     case "POST /__burst": {
       const channel = url.searchParams.get("channel") ?? "";
       const count = Number(url.searchParams.get("n") ?? 50);
@@ -296,6 +309,7 @@ const httpServer = http.createServer(async (req, res) => {
 // ------------------------------------------------------------------ IRC over WebSocket
 
 const clients = new Set();
+const sentMessages = [];
 let msgCounter = 0;
 
 function tagString(tags) {
@@ -395,6 +409,7 @@ wss.on("connection", (socket) => {
         if (!client.authed) return;
         const channel = rest[0].replace(/^#/, "").toLowerCase();
         const text = line.slice(line.indexOf(" :") + 2);
+        sentMessages.push({ channel, text, nick: client.nick });
         if (text.includes("fail-me")) {
           return client.send(`@msg-id=msg_ratelimit :tmi.twitch.tv NOTICE #${channel} :Your message was not sent because you are sending messages too quickly.`);
         }
@@ -413,6 +428,7 @@ const chatters = [
   { login: "leopard_lou", id: "11", displayName: "Leopard_Lou", color: "#F4C542", badges: "subscriber/0" },
   { login: "tokaytom", id: "12", displayName: "TokayTom", color: "#7CB8FF", badges: "vip/1" },
   { login: "crestedcarl", id: "13", displayName: "CrestedCarl", color: "", badges: "" },
+  { login: "username", id: "14", displayName: "Username", color: "#E0A0FF", badges: "" },
 ];
 const lines = [
   "anyone else sticking around for the next round? Kappa",
@@ -422,6 +438,26 @@ const lines = [
   "LUL that was close",
   "gg",
 ];
+const heavyLines = [
+  "Kappa Kappa busy chat",
+  "geckoWave peepoHappy",
+  "KEKW LilZ geckoPog",
+  "catJAM this room is flying",
+];
+/** Messages per second per joined channel. 0 until POST /__heavy?rate=50 or MOCK_HEAVY. */
+let heavyRate = Math.max(0, Number(process.env.MOCK_HEAVY ?? 0));
+setInterval(() => {
+  if (heavyRate <= 0) return;
+  const batch = Math.max(1, Math.round(heavyRate / 10));
+  for (const client of clients) {
+    for (const channel of client.channels) {
+      for (let i = 0; i < batch; i++) {
+        const user = chatters[i % chatters.length];
+        client.send(privmsgLine(channel, user, `${heavyLines[i % heavyLines.length]} #${msgCounter}`));
+      }
+    }
+  }
+}, 100);
 setInterval(() => {
   for (const client of clients) {
     for (const channel of client.channels) {

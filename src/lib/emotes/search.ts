@@ -1,7 +1,7 @@
 // Finding emotes by the start of their name (Tab to finish names, the picker's search box).
 import type { Emote } from "./types";
 
-export const MAX_MATCHES = 50;
+const MAX_MATCHES = 50;
 
 export interface NameIndex {
   entries: { lower: string; emote: Emote }[];

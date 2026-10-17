@@ -13,7 +13,7 @@ const KINDS: MessageKind[] = ["chat", "action", "event", "notice", "system"];
 const TONES: NoticeTone[] = ["info", "warn", "error", "success"];
 
 /** Marker row inserted between restored history and new live chat (never written to disk). */
-export const HISTORY_BOUNDARY_PREFIX = "hist-boundary:";
+const HISTORY_BOUNDARY_PREFIX = "hist-boundary:";
 
 export function isHistoryBoundary(message: ChatMessage): boolean {
   return message.id.startsWith(HISTORY_BOUNDARY_PREFIX);

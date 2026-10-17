@@ -3,7 +3,7 @@ import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
 export type { Skin } from "@/lib/themes";
-/** `grid`: up to four channels in boxes. `focused`: one channel fills the window. */
+/** `grid`: several channels in boxes. `focused`: one channel fills the window (Single). */
 export type ViewMode = "grid" | "focused";
 /** How many times their normal size emotes are drawn. */
 export type EmoteSize = 1 | 1.5 | 2;
@@ -11,14 +11,16 @@ export type EmoteSize = 1 | 1.5 | 2;
 export type EmoteAnimation = "always" | "hover" | "never";
 export type PickerTab = "fav" | "channel" | "all";
 
-/** How many chats can sit on the grid at once; the rest stay followed in the sidebar. */
-export const MAX_GRID_SLOTS = 4;
+/** Hard cap on grid boxes. The user's setting ({@link DEFAULT_GRID_SLOTS}) starts at 4. */
+const MAX_GRID_SLOTS = 9;
+/** Grid boxes for a settings file that never chose a count. */
+const DEFAULT_GRID_SLOTS = 4;
 
 export const TEXT_SIZE_MIN = 10;
 export const TEXT_SIZE_MAX = 40;
 export const MENTION_COOLDOWN_MIN = 1;
 export const MENTION_COOLDOWN_MAX = 120;
-export const MENTION_COOLDOWN_DEFAULT = 10;
+const MENTION_COOLDOWN_DEFAULT = 10;
 export const TEXT_SIZE_PRESETS: { label: string; px: number }[] = [
   { label: "Small", px: 12.5 },
   { label: "Medium", px: 13.5 },
@@ -35,6 +37,8 @@ export interface Settings {
    * Other followed channels stay in the sidebar until you pin them or open Focused.
    */
   gridChannels: string[];
+  /** How many boxes the grid may hold (1–{@link MAX_GRID_SLOTS}). Older files omit this and stay at 4. */
+  gridSlots: number;
   mode: ViewMode;
   focused: string | null;
   skin: Skin;
@@ -103,6 +107,12 @@ export interface Settings {
   mentionSoundCooldown: number;
   /** Keep deleted messages readable (faded and crossed out) instead of hiding what they said. */
   showDeleted: boolean;
+  /** Our own spell checker in the message box. Edge's checker stays off. */
+  spellCheck: boolean;
+  /** Words that are never underlined. Edited in Settings and by "Add to dictionary". */
+  spellDictionary: string[];
+  /** Hunspell language id. Only en-US ships today; the list is built so more can be added. */
+  spellLanguage: string;
 
   /**
    * Features switched off for one channel only (like Geckmotes' per-channel overrides).
@@ -163,7 +173,7 @@ export function isFeatureOn(settings: Settings, channel: string | null | undefin
 }
 
 /** Distinct, known feature ids from a saved override list. */
-export function cleanFeatureList(value: unknown): ChannelFeature[] {
+function cleanFeatureList(value: unknown): ChannelFeature[] {
   if (!Array.isArray(value)) return [];
   const out: ChannelFeature[] = [];
   for (const entry of value) {
@@ -190,6 +200,7 @@ export const DEFAULT_SETTINGS: Settings = {
   version: 2,
   channels: [],
   gridChannels: [],
+  gridSlots: DEFAULT_GRID_SLOTS,
   mode: "grid",
   focused: null,
   skin: DEFAULT_SKIN,
@@ -222,6 +233,9 @@ export const DEFAULT_SETTINGS: Settings = {
   mentionSound: false,
   mentionSoundCooldown: MENTION_COOLDOWN_DEFAULT,
   showDeleted: true,
+  spellCheck: true,
+  spellDictionary: [],
+  spellLanguage: "en-US",
   channelOverrides: {},
 };
 
@@ -235,10 +249,10 @@ const bool = (value: unknown, fallback: boolean) => (typeof value === "boolean" 
 
 const MAX_LIST = 200;
 /** Favourites are picked one click at a time; emote fans collect a lot of them. */
-export const MAX_FAVOURITES = 2000;
+const MAX_FAVOURITES = 2000;
 
 /** Distinct, trimmed, non-empty strings; at most `max` of them. */
-export function cleanWordList(value: unknown, max = MAX_LIST): string[] {
+function cleanWordList(value: unknown, max = MAX_LIST): string[] {
   if (!Array.isArray(value)) return [];
   const out = new Set<string>();
   for (const entry of value) {
@@ -284,7 +298,8 @@ export function sanitizeSettings(raw: unknown): Settings {
   const focused = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
-  const gridChannels = sanitizeGridChannels(input.gridChannels, channels);
+  const gridSlots = clampGridSlots(input.gridSlots);
+  const gridChannels = sanitizeGridChannels(input.gridChannels, channels, gridSlots);
   const textSize =
     typeof input.textSize === "number"
       ? clampTextSize(input.textSize)
@@ -300,6 +315,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     version: 2,
     channels,
     gridChannels,
+    gridSlots,
     mode,
     focused,
     skin: pick(input.skin, SKIN_ORDER, DEFAULT_SETTINGS.skin),
@@ -336,8 +352,19 @@ export function sanitizeSettings(raw: unknown): Settings {
     mentionSound: bool(input.mentionSound, DEFAULT_SETTINGS.mentionSound),
     mentionSoundCooldown: clampMentionCooldown(input.mentionSoundCooldown),
     showDeleted: bool(input.showDeleted, DEFAULT_SETTINGS.showDeleted),
+    spellCheck: bool(input.spellCheck, DEFAULT_SETTINGS.spellCheck),
+    spellDictionary: cleanWordList(input.spellDictionary),
+    spellLanguage: sanitizeSpellLanguage(input.spellLanguage),
     channelOverrides: cleanChannelOverrides(input.channelOverrides),
   };
+}
+
+/** Known spell-check languages. Unknown saved values fall back to en-US. */
+export const SPELL_LANGUAGE_OPTIONS = [{ id: "en-US", label: "English (US)" }] as const;
+
+function sanitizeSpellLanguage(value: unknown): string {
+  const id = typeof value === "string" ? value : "";
+  return SPELL_LANGUAGE_OPTIONS.some((option) => option.id === id) ? id : DEFAULT_SETTINGS.spellLanguage;
 }
 
 /** What a settings backup file holds. */
@@ -374,8 +401,16 @@ export function readBackup(text: string): Settings | null {
 
 const GENERIC_KEYS = new Set(["version", "mode", "channels", "gridChannels", "focused"]);
 
-/** Pins that still exist, unique, at most MAX_GRID_SLOTS. Missing list → first slots (older builds). */
-export function sanitizeGridChannels(raw: unknown, channels: string[]): string[] {
+/** Whole number of grid boxes from 1 to {@link MAX_GRID_SLOTS}. Missing or junk stays at 4. */
+export function clampGridSlots(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_GRID_SLOTS;
+  return Math.min(MAX_GRID_SLOTS, Math.max(1, Math.round(n)));
+}
+
+/** Pins that still exist, unique, at most `slots`. Missing list → the first slots (older builds). */
+function sanitizeGridChannels(raw: unknown, channels: string[], slots = DEFAULT_GRID_SLOTS): string[] {
+  const cap = clampGridSlots(slots);
   const allowed = new Set(channels);
   const out: string[] = [];
   if (Array.isArray(raw)) {
@@ -384,10 +419,9 @@ export function sanitizeGridChannels(raw: unknown, channels: string[]): string[]
       const name = normalizeChannelName(entry);
       if (!name || !allowed.has(name) || out.includes(name)) continue;
       out.push(name);
-      if (out.length >= MAX_GRID_SLOTS) break;
+      if (out.length >= cap) break;
     }
     return out;
   }
-  // Pre-gridChannels builds: everything was on the grid — keep the first four.
-  return channels.slice(0, MAX_GRID_SLOTS);
+  return channels.slice(0, cap);
 }

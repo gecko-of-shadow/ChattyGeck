@@ -18,7 +18,7 @@ const DEFAULT_NAME_COLORS = [
 ];
 
 /** Accent colours for channel avatars. */
-export const CHANNEL_TAG_COLORS = [
+const CHANNEL_TAG_COLORS = [
   "#9be15d",
   "#f6b73c",
   "#ff8a4c",
@@ -31,7 +31,7 @@ export const CHANNEL_TAG_COLORS = [
   "#ffa6c9",
 ];
 
-export function hashString(text: string): number {
+function hashString(text: string): number {
   let hash = 0;
   for (let i = 0; i < text.length; i++) hash = (hash * 31 + text.charCodeAt(i)) | 0;
   return Math.abs(hash);

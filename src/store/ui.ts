@@ -18,6 +18,15 @@ interface UiState {
   sendAckChannel: string | null;
   /** Channel whose message box was armed by an insert. */
   armedComposer: string | null;
+  /** Grid box under the pointer, used when Ctrl+G opens Single. */
+  hoveredChannel: string | null;
+  /** Grid box currently under a drag, so it can show a highlight. */
+  dropTarget: string | null;
+  /** Quick switcher (Ctrl+K). */
+  quickSwitchOpen: boolean;
+  /** Polite announcements for drag, swap, and shortcuts. */
+  liveMessage: string;
+  liveNonce: number;
   /** Text a channel's composer should insert (e.g. "@name "), with a nonce so repeats still fire. */
   insert: { text: string; channel: string; nonce: number } | null;
   /** Message the composer will send as a Twitch reply. Stays on its channel when you look at another chat. */
@@ -42,6 +51,11 @@ export const useUi = create<UiState>(() => ({
   updateCheckNonce: 0,
   sendAckChannel: null,
   armedComposer: null,
+  hoveredChannel: null,
+  dropTarget: null,
+  quickSwitchOpen: false,
+  liveMessage: "",
+  liveNonce: 0,
   insert: null,
   replyTo: null,
 }));
@@ -83,10 +97,6 @@ export function insertIntoComposer(text: string, channel: string): void {
     insert: { text, channel, nonce: (s.insert?.nonce ?? 0) + 1 },
     armedComposer: channel,
   }));
-}
-
-export function armComposer(channel: string): void {
-  useUi.setState({ armedComposer: channel });
 }
 
 /** Desktop: own Settings window (main stays blocked). Browser: in-app dialog. */

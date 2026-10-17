@@ -34,6 +34,7 @@ import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
+import { beginChannelDrag } from "./gridDrag";
 
 export function ChannelAvatar({ login, className }: { login: string; className?: string }) {
   const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl);
@@ -122,13 +123,17 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
         active ? "bg-sidebar-accent shadow-[inset_2px_0_0_var(--primary)]" : "hover:bg-sidebar-accent/60",
         !onGrid && !active && "opacity-85",
       )}
+      onPointerDown={(event) => beginChannelDrag(event, login, "sidebar")}
+      onMouseDown={(event) => beginChannelDrag(event, login, "sidebar")}
     >
       <button
         type="button"
+        data-drag-channel={login}
         onClick={onSelect}
         className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
         aria-label={`Open #${login}`}
         aria-current={active ? "page" : undefined}
+        title="Drag onto a grid box to replace it"
       />
       <span className="relative">
         <ChannelAvatar login={login} />

@@ -31,6 +31,21 @@ describe("sanitizeSettings", () => {
     expect(sanitizeSettings({ skin: "eyecomfort" }).skin).toBe("eyecomfort");
   });
 
+  it("defaults spell check on and keeps a saved dictionary through backup", () => {
+    expect(sanitizeSettings({}).spellCheck).toBe(true);
+    expect(sanitizeSettings({}).spellDictionary).toEqual([]);
+    expect(sanitizeSettings({}).spellLanguage).toBe("en-US");
+    const saved = sanitizeSettings({
+      spellCheck: false,
+      spellDictionary: [" recieve ", "recieve", "Kappa"],
+      spellLanguage: "fr",
+    });
+    expect(saved.spellCheck).toBe(false);
+    expect(saved.spellDictionary).toEqual(["recieve", "Kappa"]);
+    expect(saved.spellLanguage).toBe("en-US");
+    expect(readBackup(JSON.stringify(makeBackup(saved)))?.spellDictionary).toEqual(["recieve", "Kappa"]);
+  });
+
   it("defaults readOnly off and accepts an explicit on", () => {
     expect(sanitizeSettings({}).readOnly).toBe(false);
     expect(sanitizeSettings({ readOnly: true }).readOnly).toBe(true);
@@ -40,6 +55,15 @@ describe("sanitizeSettings", () => {
     const settings = sanitizeSettings({ channels: ["#XQC", "xqc", "bad name", "twitch.tv/summit1g"], focused: "gone" });
     expect(settings.channels).toEqual(["xqc", "summit1g"]);
     expect(settings.focused).toBe("xqc");
+  });
+
+  it("keeps a missing slot count at 4 and allows up to 9", () => {
+    const many = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"];
+    expect(sanitizeSettings({ channels: many }).gridSlots).toBe(4);
+    expect(sanitizeSettings({ channels: many }).gridChannels).toHaveLength(4);
+    expect(sanitizeSettings({ channels: many, gridSlots: 9 }).gridChannels).toHaveLength(9);
+    expect(sanitizeSettings({ gridSlots: 40 }).gridSlots).toBe(9);
+    expect(sanitizeSettings({ gridSlots: 0 }).gridSlots).toBe(1);
   });
 
   it("limits the grid to four channels and migrates older all-on-grid lists", () => {

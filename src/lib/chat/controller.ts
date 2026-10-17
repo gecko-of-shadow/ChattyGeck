@@ -32,7 +32,8 @@ import {
 } from "@/lib/twitch/messages";
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
-import { isFeatureOn, MAX_GRID_SLOTS, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { isFeatureOn, clampGridSlots, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
 import { THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
 import { replyParentMsgId, replySnippet } from "@/lib/twitch/reply";
@@ -964,7 +965,7 @@ class ChatController {
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
     if (this.settingsUiOnly) {
       if (get().settings.channels.includes(name)) return { ok: true, channel: name };
-      const gridFull = get().settings.gridChannels.length >= MAX_GRID_SLOTS;
+      const gridFull = get().settings.gridChannels.length >= this.gridCap();
       this.updateSettings((s) => ({
         channels: [...s.channels, name],
         gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
@@ -977,7 +978,7 @@ class ChatController {
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
-    const gridFull = get().settings.gridChannels.length >= MAX_GRID_SLOTS;
+    const gridFull = get().settings.gridChannels.length >= this.gridCap();
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
       gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
@@ -988,7 +989,7 @@ class ChatController {
     if (this.session) void this.loadProfiles([name]);
     if (gridFull) {
       toast(`Following #${name}`, {
-        description: `Grid is full (${MAX_GRID_SLOTS}). It's tucked in the sidebar — Show in grid or open Focused anytime.`,
+        description: `Grid is full (${this.gridCap()}). It's tucked in the sidebar — Show in grid or open Single anytime.`,
       });
     }
     return { ok: true, channel: name };
@@ -1024,27 +1025,50 @@ class ChatController {
 
   moveChannel(name: string, offset: number): void {
     this.updateSettings((s) => {
-      const index = s.channels.indexOf(name);
-      const target = index + offset;
-      if (index < 0 || target < 0 || target >= s.channels.length) return {};
-      const channels = s.channels.slice();
-      channels.splice(index, 1);
-      channels.splice(target, 0, name);
-      return { channels };
+      const channels = moveItem(s.channels, name, offset);
+      return channels ? { channels } : {};
     });
   }
 
   /** Reorder a box on the grid (not the full follow list). */
   moveGridChannel(name: string, offset: number): void {
     this.updateSettings((s) => {
-      const index = s.gridChannels.indexOf(name);
-      const target = index + offset;
-      if (index < 0 || target < 0 || target >= s.gridChannels.length) return {};
-      const gridChannels = s.gridChannels.slice();
-      gridChannels.splice(index, 1);
-      gridChannels.splice(target, 0, name);
+      const gridChannels = moveItem(s.gridChannels, name, offset);
+      if (!gridChannels) return {};
+      this.announce(`Moved #${name} ${offset < 0 ? "earlier" : "later"}`);
       return { gridChannels };
     });
+  }
+
+  /** Exchange two grid boxes. */
+  swapGridChannels(a: string, b: string): void {
+    this.updateSettings((s) => {
+      const gridChannels = swapItems(s.gridChannels, a, b);
+      if (!gridChannels) return {};
+      this.announce(`Swapped #${a} with #${b}`);
+      return { gridChannels };
+    });
+  }
+
+  /** Drop a followed channel onto a grid box, swapping when it is already pinned. */
+  replaceInGrid(slot: string, incoming: string): void {
+    if (!get().settings.channels.includes(incoming)) return;
+    this.updateSettings((s) => {
+      const gridChannels = replaceGridSlot(s.gridChannels, slot, incoming);
+      if (!gridChannels) return {};
+      this.announce(
+        s.gridChannels.includes(incoming) ? `Swapped #${slot} with #${incoming}` : `Replaced #${slot} with #${incoming}`,
+      );
+      return { gridChannels };
+    });
+  }
+
+  private gridCap(): number {
+    return clampGridSlots(get().settings.gridSlots);
+  }
+
+  private announce(text: string): void {
+    useUi.setState((s) => ({ liveMessage: text, liveNonce: s.liveNonce + 1 }));
   }
 
   /** Pin a followed channel onto the grid (max {@link MAX_GRID_SLOTS}). */
@@ -1055,10 +1079,11 @@ class ChatController {
       this.setMode("grid");
       return { ok: true };
     }
-    if (settings.gridChannels.length >= MAX_GRID_SLOTS) {
+    const cap = this.gridCap();
+    if (settings.gridChannels.length >= cap) {
       return {
         ok: false,
-        error: `Grid is full (${MAX_GRID_SLOTS}). Hide one from the grid first, or open this channel in Focused.`,
+        error: `Grid is full (${cap}). Hide one from the grid first, or open this channel in Single.`,
       };
     }
     this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name] }));

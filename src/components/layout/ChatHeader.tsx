@@ -78,8 +78,8 @@ function ConnectionPill() {
 function ModeToggle() {
   const mode = useChat((s) => s.settings.mode);
   const options: { value: ViewMode; label: string; icon: typeof LayoutGrid; hint: string }[] = [
-    { value: "grid", label: "Grid", icon: LayoutGrid, hint: "Every chat in its own box" },
-    { value: "focused", label: "Focused", icon: PanelTop, hint: "One chat at a time" },
+    { value: "grid", label: "Grid", icon: LayoutGrid, hint: "Every chat in its own box (Ctrl+G)" },
+    { value: "focused", label: "Focused", icon: PanelTop, hint: "Single chat (Ctrl+G). Esc returns to the grid." },
   ];
   return (
     <div role="radiogroup" aria-label="Reading mode" className="flex rounded-lg border bg-muted/60 p-0.5">
@@ -126,7 +126,7 @@ export function ChatHeader() {
       <Button
         variant="ghost"
         size="icon-sm"
-        className="relative md:hidden"
+        className="relative min-[900px]:hidden"
         onClick={() => useUi.setState({ navOpen: true })}
         aria-label="Open channel list"
       >

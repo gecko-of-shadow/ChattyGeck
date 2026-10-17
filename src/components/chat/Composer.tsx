@@ -5,8 +5,12 @@ import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { completionInsert, tabMatches, type TabMatch } from "@/lib/chat/activeUsers";
+import { reduceComposerKey } from "@/lib/chat/composerKeys";
 import { chat } from "@/lib/chat/controller";
 import { findEmotes, wordAt } from "@/lib/emotes/search";
+import { loadSpellEngine, type SpellLanguageId } from "@/lib/spell/engine";
+import { findMisspellings, indexAtWidth, rankSuggestions, replaceSpellWord, type SpellSpan } from "@/lib/spell/misspellings";
+import { ignoreSpellWord, ignoredSpellWords, subscribeSpellIgnore } from "@/lib/spell/session";
 import { emoteKey, emoteUrls, type Emote } from "@/lib/emotes/types";
 import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
@@ -14,6 +18,7 @@ import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { ackSendChannel, clearReplyTarget, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
+import { SpellMenu, SpellMirror } from "./SpellOverlay";
 import { useEmoteIndex } from "./useEmoteIndex";
 
 function srcSet(urls: { url1x: string; url2x?: string; url4x?: string }): string | undefined {
@@ -218,9 +223,16 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const sendAckChannel = useUi((s) => s.sendAckChannel);
   const replyTo = useUi((s) => (channel && s.replyTo?.channel === channel ? s.replyTo : null));
   const { emotes, index } = useEmoteIndex(channel);
+  const spellCheck = useChat((s) => s.settings.spellCheck);
+  const spellDictionary = useChat((s) => s.settings.spellDictionary);
+  const spellLanguage = useChat((s) => s.settings.spellLanguage);
+  const textSize = useChat((s) => s.settings.textSize);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
+  const [misspellings, setMisspellings] = useState<SpellSpan[]>([]);
+  const [spellMenu, setSpellMenu] = useState<{ x: number; y: number; span: SpellSpan; suggestions: string[] } | null>(null);
+  const [ignoreVersion, setIgnoreVersion] = useState(0);
   const history = useRef<string[]>([]);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -232,6 +244,56 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const histories = useRef(new Map<string, string[]>());
   const listId = useId();
   textRef.current = text;
+  const [spellArmed, setSpellArmed] = useState(false);
+  const spellLanguageId: SpellLanguageId = spellLanguage === "en-US" ? "en-US" : "en-US";
+
+  useEffect(() => subscribeSpellIgnore(() => setIgnoreVersion((version) => version + 1)), []);
+
+  useEffect(() => {
+    if (!spellCheck || !spellArmed || !channel) {
+      setMisspellings([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void loadSpellEngine(spellLanguageId)
+        .then((engine) => {
+          if (cancelled) return;
+          const names = new Set(emotes.map((emote) => emote.name.toLowerCase()));
+          const messages = useChat.getState().channels[channel]?.messages ?? [];
+          const recent = messages.slice(-120);
+          for (const message of recent) {
+            if (!message.twitchEmotes?.length) continue;
+            const chars = Array.from(message.text);
+            for (const range of message.twitchEmotes) {
+              if (range.start < 0 || range.end >= chars.length) continue;
+              names.add(chars.slice(range.start, range.end + 1).join("").toLowerCase());
+            }
+          }
+          const people = new Set<string>();
+          for (const user of chat.activeChatters(channel)) {
+            people.add(user.login.toLowerCase());
+            people.add(user.displayName.toLowerCase());
+          }
+          setMisspellings(
+            findMisspellings(textRef.current, {
+              isEmote: (word) => names.has(word.toLowerCase()),
+              chatters: people,
+              dictionary: new Set(spellDictionary.map((word) => word.toLowerCase())),
+              ignored: ignoredSpellWords(),
+              correct: (word) => engine.correct(word),
+            }),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setMisspellings([]);
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [text, spellCheck, spellArmed, spellDictionary, spellLanguageId, emotes, channel, ignoreVersion]);
 
   useEffect(() => {
     if (!insert || !channel || insert.channel !== channel) return;
@@ -310,8 +372,43 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     }
   };
 
-  /** Replaces text[start..end] with the match's name and a space; returns the updated completion. */
-  const applyMatch = (base: Completion, nextIndex: number) => {
+  const applySpelling = (span: SpellSpan, next: string) => {
+    const replaced = replaceSpellWord(text, span, next);
+    setText(replaced.text);
+    pendingCaret.current = replaced.caret;
+    historyIndex.current = -1;
+    setSpellMenu(null);
+    inputRef.current?.focus();
+  };
+
+  const onSpellContextMenu = (event: React.MouseEvent<HTMLInputElement>) => {
+    if (!spellCheck) return;
+    const input = inputRef.current;
+    if (!input) return;
+    const style = getComputedStyle(input);
+    const rect = input.getBoundingClientRect();
+    const pad = Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth);
+    const x = event.clientX - rect.left - pad + input.scrollLeft;
+    const canvas = document.createElement("canvas").getContext("2d");
+    if (!canvas) return;
+    canvas.font = style.font;
+    const at = indexAtWidth(text, x, (end) => canvas.measureText(text.slice(0, end)).width);
+    const span = misspellings.find((item) => at >= item.start && at < item.end);
+    if (!span) return;
+    event.preventDefault();
+    const engine = loadSpellEngine(spellLanguageId);
+    void engine.then((checker) => {
+      setSpellMenu({
+        x: event.clientX,
+        y: event.clientY,
+        span,
+        suggestions: rankSuggestions(span.word, checker.suggest(span.word)),
+      });
+    });
+  };
+
+  /** Replaces text[start..end] with the match's name and a space. `close` accepts it and drops the list. */
+  const applyMatch = (base: Completion, nextIndex: number, close = false) => {
     const name = completionInsert(base.matches[nextIndex]);
     const after = text.slice(base.end);
     const spacer = after.startsWith(" ") ? "" : " ";
@@ -325,7 +422,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       setText(next);
       pendingCaret.current = end;
     }
-    setCompletion({ ...base, index: nextIndex, end });
+    if (close) {
+      setCompletion(null);
+      inputRef.current?.focus();
+    } else {
+      setCompletion({ ...base, index: nextIndex, end });
+    }
   };
 
   const startCompletion = (backwards: boolean): boolean => {
@@ -358,53 +460,67 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Tab" && tabComplete && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      if (completion) {
-        event.preventDefault();
-        const count = completion.matches.length;
-        applyMatch(completion, (completion.index + (event.shiftKey ? count - 1 : 1)) % count);
-      } else if (startCompletion(event.shiftKey)) {
-        event.preventDefault();
-      }
+    if (spellMenu && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      setSpellMenu(null);
       return;
     }
-    if (completion) {
-      const count = completion.matches.length;
-      if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+    const decision = reduceComposerKey({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      composing: event.nativeEvent.isComposing,
+      tabComplete,
+      completion: completion ? { index: completion.index, count: completion.matches.length } : null,
+      text,
+      history: history.current,
+      historyIndex: historyIndex.current,
+    });
+    switch (decision.kind) {
+      case "cycle":
         event.preventDefault();
-        applyMatch(completion, (completion.index + 1) % count);
+        if (completion) applyMatch(completion, decision.index);
         return;
-      }
-      if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-        event.preventDefault();
-        applyMatch(completion, (completion.index + count - 1) % count);
+      case "start":
+        if (startCompletion(decision.backwards)) event.preventDefault();
         return;
-      }
-      if (event.key === "Escape") {
+      case "accept":
+        // The match (and its trailing space) is already in the box. Close the list; the next Enter sends.
         event.preventDefault();
+        if (completion) {
+          const end = completion.end;
+          setCompletion(null);
+          const el = inputRef.current;
+          el?.focus();
+          el?.setSelectionRange(end, end);
+        }
+        return;
+      case "close":
+        event.preventDefault();
+        event.stopPropagation();
         setCompletion(null);
         return;
-      }
-      // Typing / Enter / etc. closes the list; Shift alone does not.
-      if (event.key !== "Shift") setCompletion(null);
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    } else if (event.key === "ArrowUp" && (text === "" || historyIndex.current >= 0)) {
-      const next = Math.min(historyIndex.current + 1, history.current.length - 1);
-      if (next >= 0 && history.current[next] !== undefined) {
+      case "dismiss":
+        setCompletion(null);
+        return;
+      case "submit":
         event.preventDefault();
-        historyIndex.current = next;
-        setText(history.current[next]);
-      }
-    } else if (event.key === "ArrowDown" && historyIndex.current >= 0) {
-      event.preventDefault();
-      historyIndex.current -= 1;
-      setText(historyIndex.current >= 0 ? history.current[historyIndex.current] : "");
-    } else if (event.key === "Escape") {
-      if (replyTo) clearReplyTarget(channel);
-      setError(null);
+        submit();
+        return;
+      case "history":
+        event.preventDefault();
+        historyIndex.current = decision.historyIndex;
+        setText(decision.text);
+        return;
+      case "escape":
+        if (replyTo) clearReplyTarget(channel);
+        setError(null);
+        return;
+      default:
+        return;
     }
   };
 
@@ -478,11 +594,32 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                 compact={compact}
                 anchorRef={inputRef}
                 onChoose={(i) => {
-                  applyMatch(completion, i);
-                  inputRef.current?.focus();
+                  applyMatch(completion, i, true);
                 }}
               />
             ) : null}
+            {spellCheck ? <SpellMirror text={text} spans={misspellings} inputRef={inputRef} /> : null}
+            {spellMenu
+              ? createPortal(
+                  <SpellMenu
+                    x={spellMenu.x}
+                    y={spellMenu.y}
+                    suggestions={spellMenu.suggestions}
+                    onPick={(word) => applySpelling(spellMenu.span, word)}
+                    onAdd={() => {
+                      const word = spellMenu.span.word;
+                      const exists = spellDictionary.some((entry) => entry.toLowerCase() === word.toLowerCase());
+                      if (!exists) chat.updateSettings({ spellDictionary: [...spellDictionary, word] });
+                      setSpellMenu(null);
+                    }}
+                    onIgnore={() => {
+                      ignoreSpellWord(spellMenu.span.word);
+                      setSpellMenu(null);
+                    }}
+                  />,
+                  document.body,
+                )
+              : null}
             <Input
               ref={inputRef}
               value={text}
@@ -490,9 +627,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                 setText(event.target.value);
                 historyIndex.current = -1;
                 setCompletion(null);
+                setSpellMenu(null);
                 if (error) setError(null);
               }}
               onKeyDown={onKeyDown}
+              onContextMenu={onSpellContextMenu}
+              style={{ fontSize: textSize }}
               onBlur={(event) => {
                 const next = event.relatedTarget;
                 if (next instanceof Element && next.closest("[data-testid='tab-complete']")) return;
@@ -503,8 +643,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                   setCompletion(null);
                 }, 0);
               }}
+              onFocus={() => setSpellArmed(true)}
               placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
               aria-label={`Message #${channel}`}
+              data-composer={channel}
               aria-autocomplete={tabComplete ? "list" : undefined}
               aria-controls={completion ? listId : undefined}
               aria-expanded={tabComplete ? !!completion : undefined}

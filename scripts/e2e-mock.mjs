@@ -8,7 +8,17 @@ import { chromium } from "playwright-core";
 const url = process.env.E2E_URL ?? "http://127.0.0.1:17440";
 const mock = process.env.MOCK_HTTP ?? "http://127.0.0.1:17423";
 const out = process.env.E2E_OUT ?? "test-results/e2e";
-const chromePath = process.env.CHROME_PATH ?? "/usr/local/bin/google-chrome";
+function defaultChromePath() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+  const candidates = [
+    "/usr/local/bin/google-chrome",
+    "/usr/bin/google-chrome",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+}
+const chromePath = defaultChromePath();
 fs.mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: chromePath, headless: true });
@@ -40,11 +50,12 @@ const rowsWith = (text) => page.locator(".chat-row", { hasText: text });
 /** Confirm-before-typing hides the box until this click. No-op when that setting is off. */
 const messageBox = async (scope, channel) => {
   const root = scope ?? page;
-  const unlock = root.getByRole("button", { name: new RegExp(`Switch to #${channel} to type`, "i") });
+  const unlock = root.getByRole("button", { name: new RegExp(`chat in #${channel}`, "i") });
   if ((await unlock.count()) && (await unlock.first().isVisible())) await unlock.first().click();
   return root.getByLabel(new RegExp(`^Message #${channel}$`, "i"));
 };
 
+await mockPost("/__unfail-emotes");
 await page.goto(url);
 await page.evaluate(() => {
   localStorage.clear();
@@ -210,6 +221,143 @@ await step("Tab finishes emote names and cycles the matches", async () => {
   if ((await input.inputValue()) !== "hi geckoWave ") throw new Error(`after click: "${await input.inputValue()}"`);
   await shot("05c-tab-complete");
   await input.fill("");
+});
+
+await step("Enter accepts a tab completion and does not send until the next Enter", async () => {
+  await mockPost("/__sent/reset");
+  const input = await messageBox(page, "geckotown");
+  await input.fill("Kap");
+  await input.press("Tab");
+  if ((await input.inputValue()) !== "Kappa ") throw new Error(`after Tab: "${await input.inputValue()}"`);
+  await input.press("Enter");
+  if ((await input.inputValue()) !== "Kappa ") throw new Error(`first Enter changed the box: "${await input.inputValue()}"`);
+  await page.getByTestId("tab-complete").waitFor({ state: "hidden", timeout: 2_000 });
+  const held = await (await fetch(`${mock}/__sent`)).json();
+  if (held.messages?.length) throw new Error(`first Enter sent ${JSON.stringify(held.messages)}`);
+  await input.press("Enter");
+  await page.waitForTimeout(600);
+  const sent = await (await fetch(`${mock}/__sent`)).json();
+  const texts = (sent.messages ?? []).map((message) => message.text);
+  if (!texts.includes("Kappa")) throw new Error(`second Enter did not send Kappa, saw ${JSON.stringify(texts)}`);
+  await input.fill("");
+
+  await mockPost("/__say?channel=geckotown&who=3&text=" + encodeURIComponent("username says hi"));
+  await rowsWith("username says hi").first().waitFor({ timeout: 8_000 });
+  await mockPost("/__sent/reset");
+  await input.fill("@us");
+  await input.press("Tab");
+  if ((await input.inputValue()) !== "@username ") throw new Error(`mention Tab: "${await input.inputValue()}"`);
+  await input.press("Enter");
+  if ((await input.inputValue()) !== "@username ") throw new Error(`mention Enter changed the box: "${await input.inputValue()}"`);
+  const heldMention = await (await fetch(`${mock}/__sent`)).json();
+  if (heldMention.messages?.length) throw new Error(`mention Enter sent ${JSON.stringify(heldMention.messages)}`);
+  await input.press("Enter");
+  await page.waitForTimeout(600);
+  const sentMention = await (await fetch(`${mock}/__sent`)).json();
+  const mentionTexts = (sentMention.messages ?? []).map((message) => message.text);
+  if (!mentionTexts.includes("@username")) throw new Error(`mention was not sent, saw ${JSON.stringify(mentionTexts)}`);
+  await input.fill("");
+});
+
+await step("spell check underlines misspellings and skips emotes", async () => {
+  const input = await messageBox(page, "geckotown");
+  await input.fill("I recieve teh message");
+  await page.getByTestId("spell-miss").nth(1).waitFor({ timeout: 10_000 });
+  const flagged = await page.getByTestId("spell-miss").allTextContents();
+  if (flagged.join(" ") !== "recieve teh" && flagged.join(",") !== "recieve,teh") {
+    if (!flagged.includes("recieve") || !flagged.includes("teh")) {
+      throw new Error(`underlines: ${JSON.stringify(flagged)}`);
+    }
+  }
+  await input.fill("Kappa geckoPog @username !uptime https://twitch.tv KEKW");
+  await page.waitForTimeout(400);
+  if (await page.getByTestId("spell-miss").count()) {
+    const left = await page.getByTestId("spell-miss").allTextContents();
+    throw new Error(`expected no underlines, saw ${JSON.stringify(left)}`);
+  }
+  await input.fill("");
+});
+
+await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => {
+  const backToGecko = async () => {
+    await page.keyboard.press("Escape").catch(() => {});
+    const nav = page.getByRole("navigation", { name: "Channels" });
+    for (const name of ["lizardlounge", "geckotown"]) {
+      const options = nav.getByRole("button", { name: `Options for #${name}` });
+      if (!(await options.count())) continue;
+      await options.click();
+      const show = page.getByRole("menuitem", { name: "Show in grid" });
+      if (await show.count()) await show.click();
+      else await page.keyboard.press("Escape");
+    }
+    await page.getByRole("button", { name: "Open #geckotown" }).click();
+    await page.getByLabel("Chat messages").waitFor({ timeout: 5_000 });
+  };
+  try {
+  await page.getByRole("radio", { name: /grid/i }).click();
+  const orderOf = () =>
+    page.locator("[data-grid-channel]").evaluateAll((els) => els.map((el) => el.getAttribute("data-grid-channel")));
+  const before = await orderOf();
+  if (before.length < 2) throw new Error(`need two grid boxes, saw ${before.join(",")}`);
+  await page.keyboard.press("Control+g");
+  await page.getByLabel("Chat messages").waitFor({ timeout: 3_000 });
+  await page.getByTestId("chat-grid").waitFor({ state: "hidden", timeout: 3_000 });
+  await page.keyboard.press("Control+g");
+  await page.getByTestId("chat-grid").waitFor({ timeout: 3_000 });
+  if ((await orderOf()).join() !== before.join()) throw new Error(`grid order changed: ${await orderOf()}`);
+
+  const source = page.getByTestId(`grid-header-${before[0]}`);
+  const target = page.locator(`[data-grid-channel="${before[1]}"]`);
+  const a = await source.boundingBox();
+  const b = await target.boundingBox();
+  if (!a || !b) throw new Error("missing drag boxes");
+  await page.mouse.move(a.x + Math.min(80, a.width * 0.35), a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + Math.min(80, b.height / 2), { steps: 20 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const swapped = await orderOf();
+  if (swapped[0] !== before[1] || swapped[1] !== before[0]) {
+    const live = await page.locator("[aria-live='polite']").innerText().catch(() => "");
+    throw new Error(`drag did not swap: before ${before.join(",")} after ${swapped.join(",")} live "${live}"`);
+  }
+
+  const firstBox = page.locator(`[data-grid-channel="${swapped[0]}"]`);
+  const firstUnlock = firstBox.getByTestId("channel-switch-unlock");
+  if (await firstUnlock.count()) await firstUnlock.click();
+  await page.keyboard.press("Control+1");
+  const active = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
+  if (active !== `Message #${swapped[0]}`) throw new Error(`Ctrl+1 focused ${active}`);
+
+  await page.keyboard.press("Control+k");
+  const quick = page.getByTestId("quick-switch");
+  await quick.waitFor({ timeout: 2_000 });
+  await quick.fill("liz");
+  await quick.press("Enter");
+  await page.getByLabel("Chat messages").waitFor({ timeout: 3_000 });
+  await page.getByText("#Lizardlounge", { exact: false }).first().waitFor({ timeout: 3_000 });
+  await page.keyboard.press("Control+g");
+  await page.getByTestId("chat-grid").waitFor({ timeout: 5_000 });
+
+  await page.getByRole("region", { name: "#lizardlounge chat" }).getByRole("button", { name: "Options for #lizardlounge" }).click();
+  await page.getByRole("menuitem", { name: "Hide from grid" }).click();
+  const side = page.getByRole("button", { name: "Open #lizardlounge" });
+  const sideBox = await side.boundingBox();
+  const host = page.locator("[data-grid-channel]").first();
+  const hostName = await host.getAttribute("data-grid-channel");
+  const hostHeader = page.getByTestId(`grid-header-${hostName}`);
+  const hostBox = await hostHeader.boundingBox();
+  if (!sideBox || !hostBox || !hostName) throw new Error("missing sidebar drag target");
+  await page.mouse.move(sideBox.x + sideBox.width / 2, sideBox.y + sideBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hostBox.x + hostBox.width / 2, hostBox.y + hostBox.height / 2, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const afterDrop = await orderOf();
+  if (!afterDrop.includes("lizardlounge")) throw new Error(`sidebar drop missed: ${afterDrop.join(",")}`);
+  } finally {
+    await backToGecko();
+  }
 });
 
 await step("emote menu inserts emotes and remembers favourites", async () => {

@@ -36,6 +36,7 @@ import { useChat } from "@/store/chat";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import {
   CHANNEL_FEATURES,
+  SPELL_LANGUAGE_OPTIONS,
   TAB_COMPLETE_HINT,
   TAB_COMPLETE_LABEL,
   DEFAULT_SETTINGS,
@@ -44,6 +45,7 @@ import {
   TEXT_SIZE_MAX,
   TEXT_SIZE_MIN,
   TEXT_SIZE_PRESETS,
+  clampGridSlots,
   clampMentionCooldown,
   clampTextSize,
   makeBackup,
@@ -129,6 +131,59 @@ function Choice<T extends string | number>({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function GridSlotsRow() {
+  const slots = useChat((s) => s.settings.gridSlots);
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Label htmlFor="pref-grid-slots" className="flex flex-col items-start gap-0.5">
+        <span className="text-sm">Grid slots</span>
+        <span className="text-xs font-normal text-muted-foreground">How many chats can sit on the grid. 4 by default, up to 9.</span>
+      </Label>
+      <Input
+        id="pref-grid-slots"
+        type="number"
+        min={1}
+        max={9}
+        value={slots}
+        className="h-8 w-16"
+        onChange={(event) => chat.updateSettings({ gridSlots: clampGridSlots(event.target.value) })}
+      />
+    </div>
+  );
+}
+
+function SpellCheckRows() {
+  const enabled = useChat((s) => s.settings.spellCheck);
+  const language = useChat((s) => s.settings.spellLanguage);
+  return (
+    <div className="space-y-3">
+      <ToggleRow
+        id="pref-spell"
+        label="Spell check"
+        hint="Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off."
+        setting="spellCheck"
+      />
+      {enabled ? (
+        <>
+          <Choice
+            label="Language"
+            value={language}
+            options={SPELL_LANGUAGE_OPTIONS.map((option) => ({ value: option.id, label: option.label }))}
+            onChange={(value) => chat.updateSettings({ spellLanguage: value })}
+          />
+          <WordListField
+            id="pref-spell-dictionary"
+            label="Dictionary"
+            hint="Words that should never be underlined. One per line (spaces and commas work too). Add to dictionary from the message box saves here too."
+            placeholder={"recieve\nPogChamp"}
+            setting="spellDictionary"
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -264,7 +319,7 @@ function WordListField({
   label: string;
   hint: string;
   placeholder: string;
-  setting: "highlightWords" | "blockedEmotes";
+  setting: "highlightWords" | "blockedEmotes" | "spellDictionary";
 }) {
   const saved = useChat((s) => s.settings[setting]);
   const [draft, setDraft] = useState(saved.join("\n"));
@@ -913,6 +968,9 @@ export function SettingsBody({
             <Searchable section="Chat display" id="mention-sound">
               <MentionSoundRow />
             </Searchable>
+            <Searchable section="Chat display" id="spell">
+              <SpellCheckRows />
+            </Searchable>
           </div>
         </Section>
 
@@ -937,6 +995,14 @@ export function SettingsBody({
                 hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
                 setting="startOnLogin"
               />
+            </Searchable>
+            <Searchable section="Window" id="grid-slots">
+              <GridSlotsRow />
+            </Searchable>
+            <Searchable section="Window" id="shortcuts">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Ctrl+G switches Grid and Single. Ctrl+K finds a channel (Enter opens it, Alt+Enter puts it in the active grid slot). Ctrl+1 through Ctrl+9 jump to a slot. Ctrl+Tab and Ctrl+Shift+Tab move between chats in Single. Alt+Shift+Left and Alt+Shift+Right move a box. Esc returns to the grid. Drag a box header to swap, or drag a sidebar channel onto a box to replace it.
+              </p>
             </Searchable>
             <Searchable section="Window" id="confirm-channel">
               <ToggleRow

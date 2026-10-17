@@ -45,7 +45,7 @@ export function matchesTerms(haystack: string, terms: string[]): boolean {
   return terms.every((term) => hay.includes(term));
 }
 
-export function rowSearchText(sectionTitle: string, row: SettingsSearchRow): string {
+function rowSearchText(sectionTitle: string, row: SettingsSearchRow): string {
   return [sectionTitle, row.label, row.hint ?? "", ...(row.choices ?? [])].join(" ");
 }
 
@@ -133,6 +133,12 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         label: "Mention sound",
         hint: "A short chime when your name, a reply to you, or a highlight word shows up in any open chat. Cooldown.",
       },
+      {
+        id: "spell",
+        label: "Spell check",
+        hint: "Wavy underlines in the message box. Emotes, names, commands and links are skipped. Language dictionary.",
+        choices: ["English (US)"],
+      },
     ],
   },
   {
@@ -211,6 +217,16 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         id: "startup",
         label: "Start with Windows",
         hint: "Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder.",
+      },
+      {
+        id: "grid-slots",
+        label: "Grid slots",
+        hint: "How many chats can sit on the grid. 4 by default, up to 9.",
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        hint: "Ctrl+G grid and single. Ctrl+K switch channel. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc.",
       },
       {
         id: "confirm-channel",

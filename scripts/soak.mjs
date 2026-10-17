@@ -2,19 +2,32 @@
 // anonymously, and logs memory / DOM / message counters once a minute.
 //
 //   SOAK_URL=http://127.0.0.1:17420 SOAK_MINUTES=60 SOAK_CHANNELS=xqc,summit1g npm run soak
+//   SOAK_MOCK=1 SOAK_MINUTES=45 npm run soak          (mock UI on :17440, Windows Chrome auto-detected)
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright-core";
 
-const url = process.env.SOAK_URL ?? "http://127.0.0.1:17420";
+function defaultChromePath() {
+  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
+  const candidates = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "/usr/local/bin/google-chrome",
+    "/usr/bin/google-chrome",
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
+}
+
+const mockMode = process.env.SOAK_MOCK === "1";
+const url = process.env.SOAK_URL ?? (mockMode ? "http://127.0.0.1:17440" : "http://127.0.0.1:17420");
 const minutes = Number(process.env.SOAK_MINUTES ?? 60);
 const intervalMs = Number(process.env.SOAK_INTERVAL_MS ?? 60_000);
-const channels = (process.env.SOAK_CHANNELS ?? "xqc,summit1g")
+const channels = (process.env.SOAK_CHANNELS ?? (mockMode ? "geckotown,lizardlounge,penguinpond,elephantroom" : "xqc,summit1g"))
   .split(",")
   .map((c) => c.trim())
   .filter(Boolean);
 const outDir = process.env.SOAK_OUT ?? "soak";
-const chromePath = process.env.CHROME_PATH ?? "/usr/local/bin/google-chrome";
+const chromePath = defaultChromePath();
 
 fs.mkdirSync(outDir, { recursive: true });
 const log = fs.createWriteStream(path.join(outDir, "soak.jsonl"), { flags: "a" });
@@ -33,10 +46,25 @@ page.on("console", (msg) => {
 
 await page.goto(url);
 await page.evaluate(
-  (list) => localStorage.setItem("zoochattr.settings", JSON.stringify({ channels: list, mode: "grid" })),
+  (list) =>
+    localStorage.setItem(
+      "zoochattr.settings",
+      JSON.stringify({
+        channels: list,
+        gridChannels: list,
+        gridSlots: Math.min(9, list.length),
+        mode: "grid",
+        confirmChannelSwitch: false,
+        rememberChatHistory: false,
+        autoCheckUpdates: false,
+      }),
+    ),
   channels,
 );
 await page.reload();
+if (mockMode && process.env.SOAK_HEAVY !== "0") {
+  await fetch("http://127.0.0.1:17423/__heavy?rate=50", { method: "POST" });
+}
 
 const started = Date.now();
 let sample = 0;
@@ -70,5 +98,6 @@ while (Date.now() - started < minutes * 60_000) {
 }
 
 await page.screenshot({ path: path.join(outDir, "soak-final.png") });
+if (mockMode) await fetch("http://127.0.0.1:17423/__heavy/off", { method: "POST" }).catch(() => {});
 await browser.close();
 log.end();

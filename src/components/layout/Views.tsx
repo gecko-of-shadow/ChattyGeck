@@ -1,8 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
-  ArrowLeft,
-  ArrowRight,
   Clock,
   ExternalLink,
   Link2,
@@ -37,10 +35,12 @@ import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { insertIntoComposer } from "@/store/ui";
+import { insertIntoComposer, useUi } from "@/store/ui";
+import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 
 export function EmptyState() {
+  const gridSlots = useChat((s) => s.settings.gridSlots);
   return (
     <div className="zoo-texture-soft flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
       <div className="w-full max-w-md space-y-6 text-center">
@@ -48,8 +48,8 @@ export function EmptyState() {
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Follow Twitch channels — up to four sit on this grid. Add more to keep watching from the sidebar, then pin
-            them here or open one in Focused.
+            Follow Twitch channels — up to {gridSlots} sit on this grid. Add more to keep watching from the sidebar, then pin
+            them here or open one in Single.
           </p>
         </div>
         <div className="mx-auto max-w-sm text-left">
@@ -264,9 +264,9 @@ function ChatBox({ login }: { login: string }) {
       return { status: channel.status, error: channel.error, displayName: channel.displayName };
     }),
   );
-  const index = useChat((s) => s.settings.gridChannels.indexOf(login));
-  const count = useChat((s) => s.settings.gridChannels.length);
+  const gridChannels = useChat((s) => s.settings.gridChannels);
   const readOnly = useChat((s) => s.settings.readOnly);
+  const dropTarget = useUi((s) => s.dropTarget);
   if (!view) return null;
 
   const statusTitle =
@@ -275,9 +275,24 @@ function ChatBox({ login }: { login: string }) {
   return (
     <section
       aria-label={`#${login} chat`}
-      className="flex h-full min-h-0 w-full min-w-0 flex-col rounded-xl border border-border/80 bg-card/50 shadow-sm"
+      data-grid-channel={login}
+      onPointerEnter={() => useUi.setState({ hoveredChannel: login })}
+      className={cn(
+        "flex h-full min-h-0 w-full min-w-0 flex-col rounded-xl border bg-card/50 shadow-sm",
+        dropTarget === login ? "border-primary ring-2 ring-primary/50" : "border-border/80",
+      )}
     >
-      <header className="flex h-9 shrink-0 items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2">
+      <header
+        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2 active:cursor-grabbing"
+        data-testid={`grid-header-${login}`}
+        onPointerDown={(event) => beginChannelDrag(event, login, "box")}
+        onMouseDown={(event) => beginChannelDrag(event, login, "box")}
+        onDoubleClick={(event) => {
+          if (event.target instanceof Element && event.target.closest("button")) return;
+          chat.focus(login);
+        }}
+        title="Drag to swap. Double-click to open Single."
+      >
         <span className="relative shrink-0">
           <ChannelAvatar login={login} className="size-5 text-[10px]" />
           <span
@@ -316,12 +331,13 @@ function ChatBox({ login }: { login: string }) {
             <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
               <ExternalLink /> Open on twitch.tv
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={index <= 0} onClick={() => chat.moveGridChannel(login, -1)}>
-              <ArrowLeft /> Move earlier
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={index >= count - 1} onClick={() => chat.moveGridChannel(login, 1)}>
-              <ArrowRight /> Move later
-            </DropdownMenuItem>
+            {gridChannels
+              .filter((other) => other !== login)
+              .map((other) => (
+                <DropdownMenuItem key={other} onClick={() => chat.swapGridChannels(login, other)}>
+                  Swap with #{other}
+                </DropdownMenuItem>
+              ))}
             <DropdownMenuItem onClick={() => chat.hideFromGrid(login)}>
               <X /> Hide from grid
             </DropdownMenuItem>
@@ -355,6 +371,7 @@ function ChatBox({ login }: { login: string }) {
 export function GridView() {
   const channels = useChat((s) => s.settings.gridChannels);
   const following = useChat((s) => s.settings.channels.length);
+  const gridSlots = useChat((s) => s.settings.gridSlots);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 1200, height: 800 });
 
@@ -388,30 +405,34 @@ export function GridView() {
           <p className="text-sm text-muted-foreground">
             {following === 0
               ? "Add a channel from the sidebar to start."
-              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (up to 4) or open one in Focused.`}
+              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (up to ${gridSlots}) or open one in Single.`}
           </p>
         </div>
       </div>
     );
   }
 
-  const { columns, cellHeight } = layoutChatGrid(channels.length, area.width, area.height);
+  const layout = layoutChatGrid(channels.length, area.width, area.height);
 
   return (
     <div
       ref={scrollRef}
+      data-testid="grid-canvas"
       className="zoo-scroll zoo-texture-soft min-h-0 flex-1 overflow-y-auto"
       style={{ padding: GRID_EDGE }}
     >
+      {layout.suggestSingle && area.width < 480 && channels.length > 1 ? (
+        <p className="mb-1 px-1 text-[11px] text-muted-foreground">This window is narrow. Ctrl+G opens Single. The grid stays stacked.</p>
+      ) : null}
       <div
         className="grid w-full justify-items-stretch"
         style={{
           gap: GRID_GAP,
-          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-          gridAutoRows: `${cellHeight}px`,
+          gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+          gridAutoRows: `${layout.cellHeight}px`,
         }}
         data-testid="chat-grid"
-        data-grid-cols={columns}
+        data-grid-cols={layout.columns}
       >
         {channels.map((login) => (
           <ChatBox key={login} login={login} />
