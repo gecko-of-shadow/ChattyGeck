@@ -24,6 +24,8 @@ fn main() {
                 "check_for_update",
                 "apply_update",
                 "open_settings_window_cmd",
+                "spell_check",
+                "spell_suggest",
             ]),
         ),
     )

@@ -275,6 +275,39 @@ await step("spell check underlines misspellings and skips emotes", async () => {
     const left = await page.getByTestId("spell-miss").allTextContents();
     throw new Error(`expected no underlines, saw ${JSON.stringify(left)}`);
   }
+  // Chat words: a stretched word, a lowercase name and a joined channel's name.
+  await input.fill("noooo chinese geckotown lizardlounge");
+  await page.waitForTimeout(400);
+  if (await page.getByTestId("spell-miss").count()) {
+    const left = await page.getByTestId("spell-miss").allTextContents();
+    throw new Error(`chat words were underlined: ${JSON.stringify(left)}`);
+  }
+  await input.fill("");
+});
+
+await step("spelling fixes are only offered, and Backspace undoes a picked one", async () => {
+  const input = await messageBox(page, "geckotown");
+  const bar = page.getByTestId("spell-bar");
+  const value = async () => await input.inputValue();
+  await input.fill("I recieve teh ");
+  await bar.waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(400);
+  await shot("05c-spell-bar");
+  if ((await value()) !== "I recieve teh ") throw new Error(`text changed on its own: "${await value()}"`);
+  await bar.locator('[data-fix="the"]').click();
+  if ((await value()) !== "I recieve the ") throw new Error(`picking "the" gave "${await value()}"`);
+  await input.press("Backspace");
+  if ((await value()) !== "I recieve teh ") throw new Error(`Backspace after the fix gave "${await value()}"`);
+  await bar.waitFor({ timeout: 10_000 });
+  await input.press("Alt+1");
+  if ((await value()) !== "I recieve the ") throw new Error(`Alt+1 gave "${await value()}"`);
+  await input.press("Backspace");
+  await input.press("Backspace");
+  if ((await value()) !== "I recieve teh") throw new Error(`a second Backspace should just delete: "${await value()}"`);
+  // Nothing on the never-flag list gets a bar.
+  await input.fill("Kappa geckotown @username !uptime https://twitch.tv ");
+  await page.waitForTimeout(600);
+  if (await bar.count()) throw new Error("the fixes bar showed up for chat words");
   await input.fill("");
 });
 
@@ -282,13 +315,17 @@ await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => 
   const backToGecko = async () => {
     await page.keyboard.press("Escape").catch(() => {});
     const nav = page.getByRole("navigation", { name: "Channels" });
+    const menu = page.getByRole("menu");
     for (const name of ["lizardlounge", "geckotown"]) {
       const options = nav.getByRole("button", { name: `Options for #${name}` });
       if (!(await options.count())) continue;
       await options.click();
-      const show = page.getByRole("menuitem", { name: "Show in grid" });
+      // Read the menu only once it is open, and let it close before the next click, or a half-open menu blocks the page.
+      await menu.waitFor({ timeout: 3_000 });
+      const show = menu.getByRole("menuitem", { name: "Show in grid" });
       if (await show.count()) await show.click();
       else await page.keyboard.press("Escape");
+      await menu.waitFor({ state: "hidden", timeout: 3_000 });
     }
     await page.getByRole("button", { name: "Open #geckotown" }).click();
     await page.getByLabel("Chat messages").waitFor({ timeout: 5_000 });

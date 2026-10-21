@@ -208,3 +208,15 @@ export async function clearChatHistory(channel?: string): Promise<void> {
 export async function finishExit(): Promise<void> {
   if (isTauri) await invoke("finish_exit");
 }
+
+/** Windows' own spell checker: whether each word is spelled right. Throws outside the desktop app. */
+export async function spellCheck(language: string, words: string[]): Promise<boolean[]> {
+  if (!isTauri) throw new Error("The Windows spell checker needs the desktop app");
+  return invoke<boolean[]>("spell_check", { language, words });
+}
+
+/** Windows' own spell checker: suggestions for one word, best first. Throws outside the desktop app. */
+export async function spellSuggest(language: string, word: string): Promise<string[]> {
+  if (!isTauri) throw new Error("The Windows spell checker needs the desktop app");
+  return invoke<string[]>("spell_suggest", { language, word });
+}

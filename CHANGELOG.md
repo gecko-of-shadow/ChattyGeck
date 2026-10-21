@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A fixes strip above the message box for the misspelled word you just typed, with up to three suggestions. Click one or press Alt+1, Alt+2 or Alt+3. Nothing changes until you pick, and Backspace right after a pick puts your word back. Picks from the right-click menu undo the same way.
+
+### Changed
+
+- Spell check uses Windows' built-in spell checker: offline, nothing to install. ZooChattr only asks it to check and suggest. It never adds words to the Windows dictionary or corrects anything by itself. The bundled dictionary stays as the fallback in the browser dev build, the mock, and on other systems.
+- Spell check leaves chat words alone: words three or more different chatters used in the last 48 hours, every loaded emote from any joined channel, Twitch emotes seen in chat, joined channels, chatters from every channel, stretched words (noooo) and lowercase names (chinese). A contraction typed without its apostrophe (dont) is still underlined, with "don't" offered first.
+
+### Fixed
+
+- The end-to-end test's grid cleanup waits for channel menus to open and close, so one slow menu no longer fails a dozen later steps.
+
 ## 0.5.0
 
 ### Fixed

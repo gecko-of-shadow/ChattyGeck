@@ -8,6 +8,7 @@ import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify"
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
+import { chatWords } from "@/lib/spell/chatWords";
 import { applyUpdate, fetchLatestRelease, isNewerVersion } from "@/lib/updates";
 import { refreshSession, revokeToken, validateToken, type Session } from "@/lib/twitch/auth";
 import {
@@ -729,6 +730,9 @@ class ChatController {
     const prev = this.chatterLists.get(channel) ?? NO_CHATTERS;
     const next = rememberUsers(prev, messages, this.session?.login);
     if (next !== prev) this.chatterLists.set(channel, next);
+    // Restored history can be tens of thousands of rows; learn its words in the background.
+    if (messages.length > 2_000) void chatWords.noteGradually(messages);
+    else chatWords.note(messages);
   }
 
   /** History can load before login. Drop your own name once the account is known. */

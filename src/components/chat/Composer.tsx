@@ -8,9 +8,21 @@ import { completionInsert, tabMatches, type TabMatch } from "@/lib/chat/activeUs
 import { reduceComposerKey } from "@/lib/chat/composerKeys";
 import { chat } from "@/lib/chat/controller";
 import { findEmotes, wordAt } from "@/lib/emotes/search";
-import { loadSpellEngine, type SpellLanguageId } from "@/lib/spell/engine";
-import { findMisspellings, indexAtWidth, rankSuggestions, replaceSpellWord, type SpellSpan } from "@/lib/spell/misspellings";
+import { chatWords } from "@/lib/spell/chatWords";
+import { loadSpellEngine, suggestFixes, type SpellLanguageId } from "@/lib/spell/engine";
+import {
+  findMisspellings,
+  indexAtWidth,
+  replaceSpellWord,
+  spellCandidates,
+  spellTarget,
+  undoSpellFix,
+  type SpellFix,
+  type SpellSpan,
+  type VocabularyContext,
+} from "@/lib/spell/misspellings";
 import { ignoreSpellWord, ignoredSpellWords, subscribeSpellIgnore } from "@/lib/spell/session";
+import { channelNames, chatterNames, loadedEmoteNames } from "@/lib/spell/vocabulary";
 import { emoteKey, emoteUrls, type Emote } from "@/lib/emotes/types";
 import { THEMES } from "@/lib/themes";
 import { cn } from "@/lib/utils";
@@ -18,7 +30,8 @@ import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { ackSendChannel, clearReplyTarget, useUi } from "@/store/ui";
 import { EmotePicker } from "./EmotePicker";
-import { SpellMenu, SpellMirror } from "./SpellOverlay";
+import { SpellBar, SpellMenu, SpellMirror } from "./SpellOverlay";
+import { useAnchorAbove } from "./useAnchorAbove";
 import { useEmoteIndex } from "./useEmoteIndex";
 
 function srcSet(urls: { url1x: string; url2x?: string; url4x?: string }): string | undefined {
@@ -130,30 +143,7 @@ function CompletionBar({
 }) {
   const still = useChat((s) => s.settings.emoteAnimation === "never");
   const activeRef = useRef<HTMLButtonElement>(null);
-  const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const el = anchorRef.current;
-    if (!el) return;
-    const place = () => {
-      const rect = el.getBoundingClientRect();
-      setBox({
-        left: rect.left,
-        width: rect.width,
-        bottom: Math.max(8, window.innerHeight - rect.top + 6),
-      });
-    };
-    place();
-    const observer = new ResizeObserver(place);
-    observer.observe(el);
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
-  }, [anchorRef, completion.matches.length, completion.index]);
+  const box = useAnchorAbove(anchorRef, [completion.matches.length, completion.index]);
 
   useEffect(() => {
     const active = activeRef.current;
@@ -245,6 +235,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const listId = useId();
   textRef.current = text;
   const [spellArmed, setSpellArmed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [caretAt, setCaretAt] = useState(0);
+  const [spellBar, setSpellBar] = useState<{ span: SpellSpan; fixes: string[] } | null>(null);
+  /** The fix you picked last, so the very next Backspace can undo it. */
+  const lastFix = useRef<SpellFix | null>(null);
   const spellLanguageId: SpellLanguageId = spellLanguage === "en-US" ? "en-US" : "en-US";
 
   useEffect(() => subscribeSpellIgnore(() => setIgnoreVersion((version) => version + 1)), []);
@@ -257,33 +252,28 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void loadSpellEngine(spellLanguageId)
-        .then((engine) => {
+        .then(async (engine) => {
           if (cancelled) return;
-          const names = new Set(emotes.map((emote) => emote.name.toLowerCase()));
-          const messages = useChat.getState().channels[channel]?.messages ?? [];
-          const recent = messages.slice(-120);
-          for (const message of recent) {
-            if (!message.twitchEmotes?.length) continue;
-            const chars = Array.from(message.text);
-            for (const range of message.twitchEmotes) {
-              if (range.start < 0 || range.end >= chars.length) continue;
-              names.add(chars.slice(range.start, range.end + 1).join("").toLowerCase());
-            }
-          }
-          const people = new Set<string>();
-          for (const user of chat.activeChatters(channel)) {
-            people.add(user.login.toLowerCase());
-            people.add(user.displayName.toLowerCase());
-          }
-          setMisspellings(
-            findMisspellings(textRef.current, {
-              isEmote: (word) => names.has(word.toLowerCase()),
-              chatters: people,
-              dictionary: new Set(spellDictionary.map((word) => word.toLowerCase())),
-              ignored: ignoredSpellWords(),
-              correct: (word) => engine.correct(word),
-            }),
-          );
+          // Chat vocabulary from every joined channel, not just this one.
+          const views = useChat.getState().channels;
+          const joined = Object.keys(views);
+          const emoteNames = loadedEmoteNames(joined);
+          const vocabulary: VocabularyContext = {
+            isEmote: (word) => emoteNames.has(word.toLowerCase()) || chatWords.isTwitchEmote(word),
+            chatters: chatterNames(joined.map((name) => chat.activeChatters(name))),
+            channelNames: channelNames(Object.values(views)),
+            communityWord: (word) => chatWords.isCommunityWord(word),
+            dictionary: new Set(spellDictionary.map((word) => word.toLowerCase())),
+            ignored: ignoredSpellWords(),
+            allCapsForms: engine.judgesAllCaps,
+          };
+          // One round trip to the dictionary for every word on the line.
+          const line = textRef.current;
+          const forms = spellCandidates(line, vocabulary);
+          const verdicts = await engine.check(forms);
+          if (cancelled) return;
+          const correct = new Map(forms.map((form, i) => [form, verdicts[i]]));
+          setMisspellings(findMisspellings(line, { ...vocabulary, correct: (word) => correct.get(word) !== false }));
         })
         .catch(() => {
           if (!cancelled) setMisspellings([]);
@@ -294,6 +284,28 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       window.clearTimeout(timer);
     };
   }, [text, spellCheck, spellArmed, spellDictionary, spellLanguageId, emotes, channel, ignoreVersion]);
+
+  // Fixes for the word you just typed. They are only offered: nothing changes until you pick one.
+  const barTarget = spellCheck && focused && !completion && !spellMenu ? spellTarget(text, misspellings, caretAt) : null;
+  useEffect(() => {
+    if (!barTarget) {
+      setSpellBar(null);
+      return;
+    }
+    let cancelled = false;
+    void loadSpellEngine(spellLanguageId)
+      .then((engine) => suggestFixes(engine, barTarget.word, 3))
+      .catch(() => [] as string[])
+      .then((fixes) => {
+        if (!cancelled) setSpellBar(fixes.length ? { span: barTarget, fixes } : null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // The span's position and word are what matter, not the object.
+  }, [barTarget?.start, barTarget?.end, barTarget?.word, spellLanguageId]);
+  const showSpellBar =
+    spellBar && barTarget && spellBar.span.start === barTarget.start && spellBar.span.word === barTarget.word ? spellBar : null;
 
   useEffect(() => {
     if (!insert || !channel || insert.channel !== channel) return;
@@ -342,6 +354,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     if (caret === null || !el) return;
     pendingCaret.current = null;
     el.setSelectionRange(caret, caret);
+    setCaretAt(caret);
   }, [text]);
 
   if (!channel) return null;
@@ -372,12 +385,18 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     }
   };
 
+  /** Your pick from the bar or the right-click menu. The next Backspace puts the old word back. */
   const applySpelling = (span: SpellSpan, next: string) => {
-    const replaced = replaceSpellWord(text, span, next);
+    const caretBefore = inputRef.current?.selectionStart ?? text.length;
+    const replaced = replaceSpellWord(text, span, next, caretBefore);
+    lastFix.current = { before: text, caretBefore, after: replaced.text, caretAfter: replaced.caret };
     setText(replaced.text);
     pendingCaret.current = replaced.caret;
     historyIndex.current = -1;
     setSpellMenu(null);
+    setSpellBar(null);
+    // The old underlines no longer line up; the next check redraws them.
+    setMisspellings([]);
     inputRef.current?.focus();
   };
 
@@ -396,15 +415,11 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     const span = misspellings.find((item) => at >= item.start && at < item.end);
     if (!span) return;
     event.preventDefault();
-    const engine = loadSpellEngine(spellLanguageId);
-    void engine.then((checker) => {
-      setSpellMenu({
-        x: event.clientX,
-        y: event.clientY,
-        span,
-        suggestions: rankSuggestions(span.word, checker.suggest(span.word)),
-      });
-    });
+    const { clientX, clientY } = event;
+    void loadSpellEngine(spellLanguageId)
+      .then((engine) => suggestFixes(engine, span.word))
+      .catch(() => [] as string[])
+      .then((suggestions) => setSpellMenu({ x: clientX, y: clientY, span, suggestions }));
   };
 
   /** Replaces text[start..end] with the match's name and a space. `close` accepts it and drops the list. */
@@ -465,6 +480,27 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       event.stopPropagation();
       setSpellMenu(null);
       return;
+    }
+    if (showSpellBar && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+      const slot = /^(?:Digit|Numpad)([1-3])$/.exec(event.code)?.[1] ?? (/^[1-3]$/.test(event.key) ? event.key : null);
+      const fix = slot ? showSpellBar.fixes[Number(slot) - 1] : undefined;
+      if (fix) {
+        event.preventDefault();
+        applySpelling(showSpellBar.span, fix);
+        return;
+      }
+    }
+    if (event.key === "Backspace" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      const el = inputRef.current;
+      const undo = undoSpellFix(lastFix.current, text, el?.selectionStart ?? null, el?.selectionEnd ?? null);
+      if (undo) {
+        event.preventDefault();
+        lastFix.current = null;
+        setText(undo.text);
+        pendingCaret.current = undo.caret;
+        setMisspellings([]);
+        return;
+      }
     }
     const decision = reduceComposerKey({
       key: event.key,
@@ -598,6 +634,15 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                 }}
               />
             ) : null}
+            {showSpellBar ? (
+              <SpellBar
+                word={showSpellBar.span.word}
+                fixes={showSpellBar.fixes}
+                compact={compact}
+                anchorRef={inputRef}
+                onPick={(fix) => applySpelling(showSpellBar.span, fix)}
+              />
+            ) : null}
             {spellCheck ? <SpellMirror text={text} spans={misspellings} inputRef={inputRef} /> : null}
             {spellMenu
               ? createPortal(
@@ -625,15 +670,20 @@ export function Composer({ channel, compact = false }: { channel: string | null;
               value={text}
               onChange={(event) => {
                 setText(event.target.value);
+                setCaretAt(event.target.selectionStart ?? event.target.value.length);
+                // Typing anything after a fix keeps it; only an immediate Backspace undoes it.
+                lastFix.current = null;
                 historyIndex.current = -1;
                 setCompletion(null);
                 setSpellMenu(null);
                 if (error) setError(null);
               }}
+              onSelect={(event) => setCaretAt(event.currentTarget.selectionStart ?? 0)}
               onKeyDown={onKeyDown}
               onContextMenu={onSpellContextMenu}
               style={{ fontSize: textSize }}
               onBlur={(event) => {
+                setFocused(false);
                 const next = event.relatedTarget;
                 if (next instanceof Element && next.closest("[data-testid='tab-complete']")) return;
                 window.setTimeout(() => {
@@ -643,7 +693,10 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                   setCompletion(null);
                 }, 0);
               }}
-              onFocus={() => setSpellArmed(true)}
+              onFocus={() => {
+                setSpellArmed(true);
+                setFocused(true);
+              }}
               placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
               aria-label={`Message #${channel}`}
               data-composer={channel}

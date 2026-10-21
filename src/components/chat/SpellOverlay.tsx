@@ -1,5 +1,8 @@
 import { useLayoutEffect, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import type { SpellSpan } from "@/lib/spell/misspellings";
+import { cn } from "@/lib/utils";
+import { useAnchorAbove } from "./useAnchorAbove";
 
 interface MirrorStyle {
   font: string;
@@ -161,5 +164,55 @@ export function SpellMenu({
         Ignore
       </button>
     </div>
+  );
+}
+
+/**
+ * Up to three fixes for the word you just typed, in the strip Tab completion uses.
+ * It only offers: nothing changes until you click one or press Alt+1, Alt+2 or Alt+3.
+ */
+export function SpellBar({
+  word,
+  fixes,
+  compact,
+  anchorRef,
+  onPick,
+}: {
+  word: string;
+  fixes: string[];
+  compact: boolean;
+  anchorRef: RefObject<HTMLElement | null>;
+  onPick: (fix: string) => void;
+}) {
+  const box = useAnchorAbove(anchorRef, [word, fixes.length]);
+  if (!box || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      data-testid="spell-bar"
+      role="group"
+      aria-label={`Spelling fixes for ${word}`}
+      className="fixed z-50 flex flex-col gap-0.5 rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      style={{ left: box.left, width: box.width, bottom: box.bottom }}
+    >
+      {fixes.map((fix, i) => (
+        <button
+          key={fix}
+          type="button"
+          data-testid="spell-fix"
+          data-fix={fix}
+          title={`Replace “${word}” with “${fix}” (Alt+${i + 1})`}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onPick(fix)}
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left hover:bg-accent",
+            compact ? "text-[11px]" : "text-xs",
+          )}
+        >
+          <span className="min-w-0 flex-1 truncate font-medium">{fix}</span>
+          <kbd className="shrink-0 font-mono text-[10px] text-muted-foreground">Alt+{i + 1}</kbd>
+        </button>
+      ))}
+    </div>,
+    document.body,
   );
 }
