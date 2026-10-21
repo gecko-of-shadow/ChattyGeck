@@ -132,6 +132,24 @@ fn session_clear() -> Result<(), String> {
     secrets::clear()
 }
 
+/// Main window only: the history server's read token. Settings can save it but never read it back.
+#[tauri::command]
+fn history_token_load() -> Result<Option<String>, String> {
+    secrets::load_history_token()
+}
+
+/// An empty token forgets the saved one.
+#[tauri::command]
+fn history_token_save(token: String) -> Result<(), String> {
+    secrets::save_history_token(&token)
+}
+
+/// Whether a read token is saved, without handing it to the page.
+#[tauri::command]
+fn history_token_saved() -> Result<bool, String> {
+    secrets::load_history_token().map(|token| token.is_some())
+}
+
 /// Login name only — for the Settings popout. Never returns tokens.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -558,6 +576,9 @@ pub fn run() {
             session_load,
             session_save,
             session_clear,
+            history_token_load,
+            history_token_save,
+            history_token_saved,
             auth_display,
             set_close_to_tray,
             set_tray_status,

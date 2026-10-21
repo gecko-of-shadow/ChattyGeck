@@ -48,6 +48,21 @@ describe("chat history (48h)", () => {
     expect(disk.map((m) => m.id)).toEqual(["fresh"]);
   });
 
+  it("puts lines appended out of order back in time order, ties in file order", () => {
+    const now = 1_700_000_000_000;
+    const loaded = sanitizeHistory(
+      [
+        base({ id: "a", ts: now - 9_000 }),
+        base({ id: "live", ts: now - 1_000 }),
+        // Filled in from the history server after "live" was already written.
+        base({ id: "gap-1", ts: now - 5_000 }),
+        base({ id: "gap-2", ts: now - 5_000 }),
+      ],
+      now,
+    );
+    expect(loaded.map((m) => m.id)).toEqual(["a", "gap-1", "gap-2", "live"]);
+  });
+
   it("sanitizes junk from disk", () => {
     const now = 1_700_000_000_000;
     const cleaned = sanitizeHistory(

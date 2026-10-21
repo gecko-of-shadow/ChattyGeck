@@ -5,7 +5,8 @@
 //
 // Device login auto-approves after two polls. The IRC side behaves like Twitch where it
 // matters to ZooChattr: one command per frame, no echo to the sending connection, USERSTATE
-// after a send, NOTICE on failures, RECONNECT/drops on demand.
+// after a send, NOTICE on failures, RECONNECT/drops on demand. It also stands in for the
+// history server (logger/): GET /api/v2/recent-messages/<login> with READ_TOKEN.
 import http from "node:http";
 import { WebSocketServer } from "ws";
 
@@ -54,6 +55,31 @@ const roomId = (channel) => String(100000 + ([...channel].reduce((h, c) => h * 3
 
 /** Providers that should answer with 500 until cleared (for the Problems e2e step). */
 const failProviders = new Set();
+
+// ------------------------------------------------------------------ History server (the logger/ Worker's read API)
+
+/** Settings → History server: address http://127.0.0.1:17423, this read token. */
+const READ_TOKEN = "mock-read-token";
+/** channel -> lines "the logger heard", oldest first. Only /__say and /__history lines are kept. */
+const recorded = new Map();
+
+function record(channel, id, ts, line) {
+  const list = recorded.get(channel) ?? [];
+  list.push({ id, ts, line });
+  recorded.set(channel, list.slice(-5_000));
+}
+
+function recentMessages(res, login, url, bearer) {
+  if (bearer !== READ_TOKEN) return json(res, 401, { messages: [], error: "Unauthorized", error_code: "unauthorized" });
+  const list = recorded.get(login.toLowerCase());
+  if (!list) return json(res, 404, { messages: [], error: "This channel isn't recorded", error_code: "channel_not_joined" });
+  const number = (name) => (url.searchParams.has(name) ? Number(url.searchParams.get(name)) : undefined);
+  const after = number("after");
+  const before = number("before");
+  const limit = Math.max(1, Math.min(800, number("limit") ?? 800));
+  const picked = list.filter((entry) => (after === undefined || entry.ts > after) && (before === undefined || entry.ts < before));
+  return json(res, 200, { messages: picked.slice(-limit).map((entry) => entry.line), error: null, error_code: null });
+}
 
 // ------------------------------------------------------------------ Third-party emotes
 
@@ -140,6 +166,7 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "image/svg+xml", "access-control-allow-origin": "*", "cache-control": "no-store" });
       return res.end(emoteSvg(name));
     }
+    if ((m = url.pathname.match(/^\/api\/v2\/recent-messages\/([A-Za-z0-9_]{1,25})$/))) return recentMessages(res, m[1], url, bearer);
     if ((m = url.pathname.match(/^\/7tv\/users\/twitch\/(\d+)$/))) {
       const set = SEVEN_TV.channel[m[1]];
       if (!set) return json(res, 404, { error: "Unknown User" });
@@ -243,19 +270,39 @@ const httpServer = http.createServer(async (req, res) => {
       const text = url.searchParams.get("text") ?? "";
       const who = chatters[Number(url.searchParams.get("who") ?? 0) % chatters.length];
       const id = `mock-say-${++msgCounter}`;
-      const extra = { id };
+      const ts = Date.now();
+      const extra = { id, "tmi-sent-ts": ts };
       const reply = url.searchParams.get("reply");
       if (reply) {
         extra["reply-parent-user-login"] = reply;
         extra["reply-parent-display-name"] = reply;
         extra["reply-parent-msg-body"] = url.searchParams.get("replyText") ?? "earlier";
       }
-      for (const client of clients) if (client.channels.has(channel)) client.send(privmsgLine(channel, who, text, extra));
+      const line = privmsgLine(channel, who, text, extra);
+      for (const client of clients) if (client.channels.has(channel)) client.send(line);
+      // The history server hears it too, like the real logger.
+      record(channel, id, ts, line);
       return json(res, 200, { id });
+    }
+    case "POST /__history": {
+      // Lines said "while ZooChattr was closed": only the history server has them.
+      const channel = url.searchParams.get("channel") ?? "";
+      const text = url.searchParams.get("text") ?? "said while ZooChattr was closed";
+      const count = Math.max(1, Number(url.searchParams.get("n") ?? 3));
+      const ids = [];
+      for (let i = 1; i <= count; i++) {
+        const id = `mock-hist-${++msgCounter}`;
+        const ts = Date.now() - (count - i) * 1_000;
+        record(channel, id, ts, privmsgLine(channel, chatters[i % chatters.length], `${text} ${i}`, { id, "tmi-sent-ts": ts }));
+        ids.push(id);
+      }
+      return json(res, 200, { ids });
     }
     case "POST /__delete": {
       const channel = url.searchParams.get("channel") ?? "";
       const id = url.searchParams.get("id") ?? "";
+      // The logger drops deleted lines.
+      if (recorded.has(channel)) recorded.set(channel, recorded.get(channel).filter((entry) => entry.id !== id));
       for (const client of clients) {
         if (client.channels.has(channel)) client.send(`@login=mock;target-msg-id=${id};tmi-sent-ts=${Date.now()} :tmi.twitch.tv CLEARMSG #${channel} :deleted`);
       }

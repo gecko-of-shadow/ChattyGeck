@@ -22,12 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { chat } from "@/lib/chat/controller";
+import { checkHistoryServer, parseHistoryServer, type ServerCheck } from "@/lib/chat/remoteHistory";
 import { playMentionChime } from "@/lib/notify";
 import { config } from "@/lib/config";
 import { problemLog, type EmoteProblem } from "@/lib/emotes/problems";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
-import { isTauri, openExternal } from "@/lib/platform";
+import { historyTokenSaved, isTauri, openExternal, saveHistoryToken } from "@/lib/platform";
 import { settingsSearchHelpers, type SettingsSearchHelpers } from "@/lib/settingsSearch";
 import { applyUpdate, fetchLatestRelease, isNewerVersion, type UpdateInfo } from "@/lib/updates";
 import { normalizeChannelName } from "@/lib/twitch/messages";
@@ -392,6 +393,148 @@ function ClientIdField() {
             ? "This copy of ZooChattr ships with a Client ID, so login works out of the box."
             : "No Client ID is built in. Reading chat works anyway; login needs one."}
       </p>
+    </form>
+  );
+}
+
+type FieldStatus = { error: boolean; text: string };
+
+function describeCheck(check: ServerCheck, channel: string | undefined): FieldStatus {
+  if (!check.ok) {
+    return {
+      error: true,
+      text: check.problem === "unauthorized" ? "The history server turned down that token. Paste the READ_TOKEN you gave wrangler." : check.message,
+    };
+  }
+  if (!channel) return { error: false, text: "Connected. Missed chat fills in each time ZooChattr starts." };
+  return check.recorded
+    ? { error: false, text: `Connected. #${channel} is recorded, so missed chat fills in each time ZooChattr starts.` }
+    : { error: false, text: `Connected, but the logger doesn't record #${channel}. The channels it records fill in at startup.` };
+}
+
+/** The chat logger's address (settings.json) and read token (credential store; Settings can save it, not read it). */
+function HistoryServerField() {
+  const saved = useChat((s) => s.settings.historyServer);
+  const remember = useChat((s) => s.settings.rememberChatHistory);
+  const firstChannel = useChat((s) => s.settings.channels[0]);
+  const tokenStore = useChat((s) => s.appInfo?.tokenStore ?? "the credential store");
+  const [address, setAddress] = useState(saved);
+  const [token, setToken] = useState("");
+  const [hasToken, setHasToken] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<FieldStatus | null>(null);
+  useEffect(() => setAddress(saved), [saved]);
+  useEffect(() => {
+    let live = true;
+    void historyTokenSaved().then(
+      (value) => {
+        if (live) setHasToken(value);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  const dirty = !!token.trim() || parseHistoryServer(address) !== saved;
+
+  const save = async () => {
+    const server = parseHistoryServer(address);
+    if (server === null) {
+      setStatus({ error: true, text: "That isn't an https:// address. Paste the one npx wrangler deploy printed." });
+      return;
+    }
+    const typed = token.trim();
+    if (server && !typed && !hasToken) {
+      setStatus({ error: true, text: "Paste the read token too." });
+      return;
+    }
+    setBusy(true);
+    try {
+      if (typed) {
+        await saveHistoryToken(typed);
+        setHasToken(true);
+        setToken("");
+      }
+      setAddress(server);
+      if (server !== saved) chat.updateSettings({ historyServer: server });
+      if (!server) setStatus({ error: false, text: "History server off." });
+      // The saved token can't be read back here, so only a freshly pasted one is tried.
+      else if (!typed) setStatus({ error: false, text: "Saved. Missed chat fills in each time ZooChattr starts." });
+      else setStatus(describeCheck(await checkHistoryServer(server, typed, firstChannel ?? "zoochattr"), firstChannel));
+    } catch (err) {
+      setStatus({ error: true, text: `Couldn't save the token: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forget = async () => {
+    try {
+      await saveHistoryToken("");
+      setHasToken(false);
+      setStatus({ error: false, text: "Read token removed." });
+    } catch (err) {
+      setStatus({ error: true, text: `Couldn't remove the token: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  };
+
+  return (
+    <form
+      className="space-y-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <Label htmlFor="pref-history-server" className="flex flex-col items-start gap-0.5">
+        <span className="text-sm">History server</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          Your own chat logger. At startup ZooChattr fills in what was said while it was closed.
+        </span>
+      </Label>
+      <Input
+        id="pref-history-server"
+        value={address}
+        onChange={(event) => setAddress(event.target.value)}
+        placeholder="https://zoochattr-logger.you.workers.dev"
+        aria-label="History server address"
+        className="font-mono text-xs"
+        autoComplete="off"
+        spellCheck={false}
+      />
+      <div className="flex gap-2">
+        <Input
+          id="pref-history-token"
+          type="password"
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder={hasToken ? "Saved. Paste a new token to replace it" : "Read token (READ_TOKEN)"}
+          aria-label="History server read token"
+          className="font-mono text-xs"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button type="submit" variant="outline" disabled={busy || !dirty} data-testid="history-server-save">
+          Save
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {hasToken ? `Read token saved in ${tokenStore}.` : `The read token is kept in ${tokenStore}, never in settings or backups.`}
+        </span>
+        {hasToken ? (
+          <Button type="button" variant="outline" size="xs" onClick={() => void forget()}>
+            Remove token
+          </Button>
+        ) : null}
+      </div>
+      {saved && !remember ? <p className="text-xs text-muted-foreground">Turn on Remember chat history to use it.</p> : null}
+      {status ? (
+        <p className={cn("text-xs", status.error ? "text-destructive" : "text-muted-foreground")} data-testid="history-server-status">
+          {status.text}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -1027,6 +1170,9 @@ export function SettingsBody({
                 hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
                 setting="rememberChatHistory"
               />
+            </Searchable>
+            <Searchable section="Window" id="history-server">
+              <HistoryServerField />
             </Searchable>
           </div>
         </Section>

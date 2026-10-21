@@ -46,6 +46,17 @@ describe("sanitizeSettings", () => {
     expect(readBackup(JSON.stringify(makeBackup(saved)))?.spellDictionary).toEqual(["recieve", "Kappa"]);
   });
 
+  it("keeps a history server address as its https origin and drops anything else", () => {
+    expect(sanitizeSettings({}).historyServer).toBe("");
+    expect(sanitizeSettings({ historyServer: "https://zoochattr-logger.gecko.workers.dev/" }).historyServer).toBe(
+      "https://zoochattr-logger.gecko.workers.dev",
+    );
+    expect(sanitizeSettings({ historyServer: "http://zoochattr-logger.gecko.workers.dev" }).historyServer).toBe("");
+    expect(sanitizeSettings({ historyServer: 42 }).historyServer).toBe("");
+    const saved = sanitizeSettings({ historyServer: "https://zoochattr-logger.gecko.workers.dev" });
+    expect(readBackup(JSON.stringify(makeBackup(saved)))?.historyServer).toBe("https://zoochattr-logger.gecko.workers.dev");
+  });
+
   it("defaults readOnly off and accepts an explicit on", () => {
     expect(sanitizeSettings({}).readOnly).toBe(false);
     expect(sanitizeSettings({ readOnly: true }).readOnly).toBe(true);

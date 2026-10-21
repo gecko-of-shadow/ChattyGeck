@@ -243,6 +243,11 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         label: "Remember chat history",
         hint: "Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored).",
       },
+      {
+        id: "history-server",
+        label: "History server",
+        hint: "Your own chat logger. At startup ZooChattr fills in what was said while it was closed. Address and read token.",
+      },
     ],
   },
   {

@@ -112,6 +112,8 @@ export function sanitizeHistory(raw: unknown, now = Date.now()): ChatMessage[] {
 
     out.push(message);
   }
+  // Lines the history server fills in can be appended after newer live ones. Sort is stable, so ties keep file order.
+  if (out.some((message, index) => index > 0 && message.ts < out[index - 1].ts)) out.sort((a, b) => a.ts - b.ts);
   // Files can grow past the cap between startups. Keep the newest rows.
   return trimByAgeAndCap(out, now);
 }

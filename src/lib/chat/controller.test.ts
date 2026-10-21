@@ -7,6 +7,7 @@ import type { ChatMessage } from "@/lib/twitch/types";
 import type { IrcMessage } from "@/lib/irc/parser";
 
 const memory = new Map<string, string>();
+const tabMemory = new Map<string, string>();
 
 function installStorage(): void {
   vi.stubGlobal("localStorage", {
@@ -19,7 +20,39 @@ function installStorage(): void {
       return memory.size;
     },
   });
+  // Browser stand-in for the credential store (the history server's read token lives here in dev mode).
+  vi.stubGlobal("sessionStorage", {
+    getItem: (key: string) => tabMemory.get(key) ?? null,
+    setItem: (key: string, value: string) => void tabMemory.set(key, value),
+    removeItem: (key: string) => void tabMemory.delete(key),
+    clear: () => tabMemory.clear(),
+  });
 }
+
+/** A line as the history server stores it. */
+function serverLine(id: string, ts: number, text: string): string {
+  return `@id=${id};display-name=Ada;tmi-sent-ts=${ts};user-id=7 :ada!ada@ada.tmi.twitch.tv PRIVMSG #geckotown :${text}`;
+}
+
+function serverAnswer(lines: string[], status = 200): Response {
+  const error = status === 401 ? "unauthorized" : null;
+  return new Response(JSON.stringify({ messages: lines, error, error_code: error }), { status });
+}
+
+/** History on, a history server set, and its read token saved. */
+function useHistoryServer(): void {
+  useChat.setState((s) => ({ settings: { ...s.settings, historyServer: "https://logger.test" } }));
+  tabMemory.set("zoochattr.historyToken", "secret");
+}
+
+type ServerInternals = {
+  read: { join: (channel: string) => void };
+  historyWriting: Map<string, Promise<void>>;
+  restoreHistory: (channels: string[]) => Promise<void>;
+  fetchServerHistory: (channels: string[]) => Promise<unknown[]>;
+  applyServerHistory: (fills: unknown[]) => void;
+  openChannel: (name: string) => void;
+};
 
 function line(channel: string, text: string, id = `${channel}-${text}`): ChatMessage {
   return {
@@ -85,6 +118,7 @@ function putMessage(channel: string, message: ChatMessage): void {
 describe("chat controller view and history", () => {
   beforeEach(() => {
     memory.clear();
+    tabMemory.clear();
     installStorage();
     vi.stubGlobal("document", { hasFocus: () => true });
     vi.useFakeTimers();
@@ -248,6 +282,79 @@ describe("chat controller view and history", () => {
     expect(ids.filter((id) => id === "disk-1")).toHaveLength(2);
     expect(ids).toContain("live-1");
     expect(parseLog(next).filter((message) => message.id === "disk-1").at(-1)?.deleted).toBe(true);
+  });
+
+  it("fills the gap from the history server above the divider and writes it once", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    useHistoryServer();
+    const now = Date.now();
+    const saved = { ...line("geckotown", "before quitting", "saved-1"), ts: now - 10 * 60_000 };
+    memory.set("zoochattr.chat.geckotown", `${JSON.stringify(saved)}\n`);
+    const asked: URL[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      asked.push(new URL(String(input)));
+      if (new Headers(init?.headers).get("Authorization") !== "Bearer secret") return serverAnswer([], 401);
+      return serverAnswer([
+        serverLine("saved-1", saved.ts, "before quitting"),
+        serverLine("gap-1", now - 5 * 60_000, "while you were away"),
+        serverLine("gap-2", now - 4 * 60_000, "still away"),
+      ]);
+    });
+    const internal = chat as unknown as ServerInternals;
+    await internal.restoreHistory(["geckotown"]);
+    internal.applyServerHistory(await internal.fetchServerHistory(["geckotown"]));
+
+    expect(asked[0].searchParams.get("after")).toBe(String(saved.ts - 120_000));
+    const shape = (messages: ChatMessage[]) =>
+      messages.map((message) => (message.id.startsWith("hist-boundary:") ? "|" : message.kind === "system" ? "note" : message.id));
+    const messages = useChat.getState().channels.geckotown.messages;
+    expect(shape(messages)).toEqual(["saved-1", "note", "gap-1", "gap-2", "|"]);
+    expect(messages[1].text).toBe("Filled in 2 messages from your history server.");
+
+    await internal.historyWriting.get("geckotown");
+    expect(shape(parseLog(memory.get("zoochattr.chat.geckotown")))).toEqual(["saved-1", "note", "gap-1", "gap-2"]);
+
+    // Asking again finds nothing new.
+    internal.applyServerHistory(await internal.fetchServerHistory(["geckotown"]));
+    expect(shape(useChat.getState().channels.geckotown.messages)).toEqual(["saved-1", "note", "gap-1", "gap-2", "|"]);
+  });
+
+  it("joins a channel only after the history server answered, so no line arrives twice", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    useHistoryServer();
+    let answer: ((response: Response) => void) | undefined;
+    vi.stubGlobal("fetch", () => new Promise<Response>((resolve) => (answer = resolve)));
+    const internal = chat as unknown as ServerInternals;
+    const joined: string[] = [];
+    const realJoin = internal.read.join;
+    internal.read.join = (channel: string) => void joined.push(channel);
+    try {
+      internal.openChannel("geckotown");
+      await vi.waitFor(() => expect(answer).toBeDefined());
+      expect(joined).toEqual([]);
+      answer?.(serverAnswer([serverLine("gap-1", Date.now() - 1_000, "said while closed")]));
+      await vi.waitFor(() => expect(joined).toEqual(["geckotown"]));
+      expect(useChat.getState().channels.geckotown.messages.some((message) => message.id === "gap-1")).toBe(true);
+    } finally {
+      internal.read.join = realJoin;
+    }
+  });
+
+  it("still joins, and changes nothing, when the history server refuses the token", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    useHistoryServer();
+    vi.stubGlobal("fetch", async () => serverAnswer([], 401));
+    const internal = chat as unknown as ServerInternals;
+    const joined: string[] = [];
+    const realJoin = internal.read.join;
+    internal.read.join = (channel: string) => void joined.push(channel);
+    try {
+      internal.openChannel("geckotown");
+      await vi.waitFor(() => expect(joined).toEqual(["geckotown"]));
+      expect(useChat.getState().channels.geckotown.messages).toEqual([]);
+    } finally {
+      internal.read.join = realJoin;
+    }
   });
 
   it("flushes a message still waiting in the paint queue", async () => {

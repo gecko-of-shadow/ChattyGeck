@@ -30,7 +30,7 @@
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
         "img-src": "'self' data: blob: https://static-cdn.jtvnw.net https://cdn.7tv.app https://cdn.betterttv.net https://cdn.frankerfacez.com",
-        "connect-src": "ipc: http://ipc.localhost 'self' wss://irc-ws.chat.twitch.tv https://id.twitch.tv https://api.twitch.tv https://7tv.io https://api.betterttv.net https://api.frankerfacez.com"
+        "connect-src": "ipc: http://ipc.localhost 'self' wss://irc-ws.chat.twitch.tv https://id.twitch.tv https://api.twitch.tv https://7tv.io https://api.betterttv.net https://api.frankerfacez.com https://zoochattr-logger.gecko-apps.workers.dev"
       },
       "devCsp": null
     }

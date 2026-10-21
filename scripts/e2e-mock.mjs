@@ -286,9 +286,13 @@ await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => 
       const options = nav.getByRole("button", { name: `Options for #${name}` });
       if (!(await options.count())) continue;
       await options.click();
-      const show = page.getByRole("menuitem", { name: "Show in grid" });
+      // count() doesn't wait: an Escape sent before the menu mounts leaves it open over everything after.
+      const menu = page.getByRole("menu");
+      await menu.waitFor({ timeout: 3_000 });
+      const show = menu.getByRole("menuitem", { name: "Show in grid" });
       if (await show.count()) await show.click();
       else await page.keyboard.press("Escape");
+      await menu.waitFor({ state: "hidden", timeout: 3_000 });
     }
     await page.getByRole("button", { name: "Open #geckotown" }).click();
     await page.getByLabel("Chat messages").waitFor({ timeout: 5_000 });
@@ -584,6 +588,38 @@ await step("grid Tab-complete list stays visible (not clipped by the box)", asyn
   await shot("05b2-grid-tab-complete");
   await input.fill("");
   await page.getByRole("radio", { name: /focused/i }).click();
+});
+
+await step("history server fills in chat said while ZooChattr was closed, once each", async () => {
+  await page.getByRole("button", { name: "Settings" }).first().click();
+  await page.getByTestId("settings-search").fill("History server");
+  await page.getByLabel("History server address").fill(mock);
+  await page.getByLabel("History server read token").fill("mock-read-token");
+  await page.getByTestId("history-server-save").click();
+  await page.getByTestId("history-server-status").filter({ hasText: "Connected" }).waitFor({ timeout: 5_000 });
+  await shot("06d-history-server");
+  await page.keyboard.press("Escape");
+
+  // Heard live and saved here, and by the history server too: it must not come back twice.
+  await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("said before the restart"));
+  await rowsWith("said before the restart").first().waitFor({ timeout: 8_000 });
+  await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+  await page.waitForFunction(
+    () => (localStorage.getItem("zoochattr.chat.geckotown") ?? "").includes("said before the restart"),
+    null,
+    { timeout: 5_000 },
+  );
+  // Only the history server has these.
+  await mockPost("/__history?channel=geckotown&n=3&text=" + encodeURIComponent("missed while closed"));
+  await page.reload();
+  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await rowsWith("missed while closed 3").first().waitFor({ timeout: 15_000 });
+  await page.getByText("Filled in 3 messages from your history server.").waitFor({ timeout: 3_000 });
+  for (const text of ["missed while closed 1", "missed while closed 2", "missed while closed 3", "said before the restart"]) {
+    const copies = await rowsWith(text).count();
+    if (copies !== 1) throw new Error(`expected 1 row with "${text}", saw ${copies}`);
+  }
+  await shot("06e-history-filled");
 });
 
 await step("channels, view and login survive a reload", async () => {

@@ -1,4 +1,5 @@
 import { DEFAULT_SKIN, SKIN_ORDER, type Skin } from "@/lib/themes";
+import { parseHistoryServer } from "@/lib/chat/remoteHistory";
 import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
@@ -62,6 +63,11 @@ export interface Settings {
   startOnLogin: boolean;
   /** Keep ~48 hours of chat per channel in ZooChattr-data so logs survive restarts. */
   rememberChatHistory: boolean;
+  /**
+   * Your chat logger's address (an https origin), or "" for none. At startup ZooChattr asks it for the chat
+   * said while it was closed. The read token lives in the credential store, never in this file.
+   */
+  historyServer: string;
   /** Ask GitHub for a newer portable build when ZooChattr starts (and every few hours). */
   autoCheckUpdates: boolean;
   /**
@@ -214,6 +220,7 @@ export const DEFAULT_SETTINGS: Settings = {
   readOnly: false,
   startOnLogin: false,
   rememberChatHistory: true,
+  historyServer: "",
   autoCheckUpdates: true,
   confirmChannelSwitch: true,
   clientId: "",
@@ -329,6 +336,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     readOnly: bool(input.readOnly, DEFAULT_SETTINGS.readOnly),
     startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
     rememberChatHistory: bool(input.rememberChatHistory, DEFAULT_SETTINGS.rememberChatHistory),
+    historyServer: typeof input.historyServer === "string" ? (parseHistoryServer(input.historyServer) ?? "") : "",
     autoCheckUpdates: bool(input.autoCheckUpdates, DEFAULT_SETTINGS.autoCheckUpdates),
     confirmChannelSwitch: bool(input.confirmChannelSwitch, DEFAULT_SETTINGS.confirmChannelSwitch),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",

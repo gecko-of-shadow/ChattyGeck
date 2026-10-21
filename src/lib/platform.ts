@@ -17,6 +17,7 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 
 const SETTINGS_KEY = "zoochattr.settings";
 const SESSION_KEY = "zoochattr.session";
+const HISTORY_TOKEN_KEY = "zoochattr.historyToken";
 
 export async function getAppInfo(): Promise<AppInfo> {
   if (isTauri) return invoke<AppInfo>("app_info");
@@ -75,6 +76,26 @@ export async function saveSession(session: Session): Promise<void> {
 export async function clearSession(): Promise<void> {
   if (isTauri) return invoke("session_clear");
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+/** Main window only: the history server's read token. The Settings window can't read it back. */
+export async function loadHistoryToken(): Promise<string | null> {
+  if (isTauri) return invoke<string | null>("history_token_load");
+  return sessionStorage.getItem(HISTORY_TOKEN_KEY);
+}
+
+/** Keeps the read token next to the Twitch login, never in settings.json. An empty token forgets it. */
+export async function saveHistoryToken(token: string): Promise<void> {
+  const value = token.trim();
+  if (isTauri) return invoke("history_token_save", { token: value });
+  if (value) sessionStorage.setItem(HISTORY_TOKEN_KEY, value);
+  else sessionStorage.removeItem(HISTORY_TOKEN_KEY);
+}
+
+/** Whether a read token is saved (Settings shows this instead of the token). */
+export async function historyTokenSaved(): Promise<boolean> {
+  if (isTauri) return invoke<boolean>("history_token_saved");
+  return !!sessionStorage.getItem(HISTORY_TOKEN_KEY);
 }
 
 /** Whether closing the window hides ZooChattr in the tray (true) or quits it. */

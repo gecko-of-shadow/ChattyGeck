@@ -2,6 +2,16 @@ import { toast } from "sonner";
 import { config } from "@/lib/config";
 import { rememberUsers, type ActiveUser } from "@/lib/chat/activeUsers";
 import { historyBoundary, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/history";
+import {
+  HistoryServerError,
+  OVERLAP_MS,
+  fetchServerLines,
+  fillNote,
+  mergeServerMessages,
+  newestTwitchTime,
+  serverMessages,
+  type FillResult,
+} from "@/lib/chat/remoteHistory";
 import { channelOnScreen, readMarkerAfterFocus } from "@/lib/chat/visibility";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify";
@@ -60,6 +70,9 @@ export interface ActionResult {
   ok: boolean;
   error?: string;
 }
+
+/** What the history server sent for one channel: lines, null when it doesn't record that channel, or why it failed. */
+type ServerFill = { channel: string; result: FillResult | null } | { channel: string; error: unknown };
 
 const get = useChat.getState;
 const set = useChat.setState;
@@ -178,6 +191,8 @@ class ChatController {
       await this.restoreHistory(settings.channels);
       this.armHistoryFlush();
     }
+    // Ask the history server about the gap while the saved login is checked.
+    const fromServer = this.fetchServerHistory(settings.channels);
 
     const stored = await platform.loadSession().catch((err) => {
       toast.error("Couldn't read your saved Twitch login", { description: errorText(err) });
@@ -194,9 +209,9 @@ class ChatController {
       this.setSession(null);
     }
 
-    for (const channel of settings.channels) this.read.join(channel);
     this.read.start();
     if (this.session) this.startWrite();
+    void this.joinAfterFill(settings.channels, fromServer);
 
     void emoteRegistry.loadGlobal();
     if (this.session) {
@@ -261,8 +276,7 @@ class ChatController {
     for (const name of next.channels) {
       if (get().channels[name]) continue;
       set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
-      if (next.rememberChatHistory) void this.restoreHistory([name]);
-      this.read.join(name);
+      this.openChannel(name);
       if (this.session) void this.loadProfiles([name]);
     }
   }
@@ -984,8 +998,7 @@ class ChatController {
       gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
-    if (get().settings.rememberChatHistory) void this.restoreHistory([name]);
-    this.read.join(name);
+    this.openChannel(name);
     if (this.session) void this.loadProfiles([name]);
     if (gridFull) {
       toast(`Following #${name}`, {
@@ -1324,6 +1337,79 @@ class ChatController {
         }
       }),
     );
+  }
+
+  /** Saved lines, then the history server's gap, then live chat. */
+  private openChannel(name: string): void {
+    if (!get().settings.rememberChatHistory) {
+      this.read.join(name);
+      return;
+    }
+    void this.joinAfterFill([name], this.restoreHistory([name]).then(() => this.fetchServerHistory([name])));
+  }
+
+  /** Adds what the history server caught, then joins. Twitch never replays a line said before the join, so none comes twice. */
+  private async joinAfterFill(channels: string[], pending: Promise<ServerFill[]>): Promise<void> {
+    try {
+      this.applyServerHistory(await pending);
+    } finally {
+      for (const channel of channels) if (get().channels[channel]) this.read.join(channel);
+    }
+  }
+
+  /** Asks the history server (Settings → History server) for each channel's lines since the newest saved one. */
+  private async fetchServerHistory(channels: string[]): Promise<ServerFill[]> {
+    const { historyServer: server, rememberChatHistory } = get().settings;
+    if (!server || !rememberChatHistory || !channels.length) return [];
+    const token = await platform.loadHistoryToken().then(
+      (value) => value || new HistoryServerError("unauthorized", "No read token is saved on this computer."),
+      (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
+    );
+    if (token instanceof Error) return channels.map((channel) => ({ channel, error: token }));
+    return Promise.all(
+      channels.map(async (channel): Promise<ServerFill> => {
+        const newest = newestTwitchTime(get().channels[channel]?.messages ?? []);
+        try {
+          const after = newest === undefined ? undefined : newest - OVERLAP_MS;
+          return { channel, result: await fetchServerLines({ server, token, channel, after }) };
+        } catch (err) {
+          return { channel, error: err };
+        }
+      }),
+    );
+  }
+
+  /** One toast when any channel couldn't be filled in. */
+  private applyServerHistory(fills: ServerFill[]): void {
+    let problem: unknown;
+    for (const fill of fills) {
+      if ("error" in fill) problem ??= fill.error;
+      else if (fill.result) this.mergeServerLines(fill.channel, fill.result);
+    }
+    if (problem === undefined) return;
+    const tokenProblem = problem instanceof HistoryServerError && problem.problem === "unauthorized";
+    toast.warning("Couldn't fill in missed chat", {
+      description: tokenProblem ? `${errorText(problem)} Check it in Settings → Window → History server.` : errorText(problem),
+    });
+  }
+
+  private mergeServerLines(channel: string, result: FillResult): void {
+    const incoming = serverMessages(result.lines, this.session?.login).map((message) => this.withHighlight(message));
+    if (!incoming.length) return;
+    // A line still in the 80ms paint queue counts as already here.
+    this.flush();
+    let added = 0;
+    this.patchChannel(channel, (view) => {
+      const merged = mergeServerMessages(view.messages, incoming, channel, (fresh) => fillNote(channel, fresh, result.truncated));
+      added = merged.added.length;
+      return added ? { ...view, messages: this.capMessages(merged.messages) } : view;
+    });
+    if (!added) return;
+    // Write them now, before live lines pile up behind them, rather than at the next 30s flush.
+    this.historyUnsaved.delete(channel);
+    void this.appendUnsaved(channel);
+    const seeded = get().channels[channel]?.messages;
+    if (seeded) this.noteUsers(channel, seeded);
   }
 
   private scheduleHistorySave(channel: string): void {

@@ -17,6 +17,7 @@
     "allow-session-load",
     "allow-session-save",
     "allow-session-clear",
+    "allow-history-token-load",
     "allow-auth-display",
     "allow-set-close-to-tray",
     "allow-set-tray-status",
