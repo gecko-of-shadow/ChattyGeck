@@ -14,12 +14,25 @@ export interface SpellContext {
   dictionary: ReadonlySet<string>;
   /** Ignored for this session, compared case-insensitively. */
   ignored: ReadonlySet<string>;
+  /** Joined channels (logins and display names), compared case-insensitively. */
+  channelNames?: ReadonlySet<string>;
+  /** True for words lots of different chatters use (see chatWords.ts). */
+  communityWord?: (word: string) => boolean;
+  /** False when the dictionary waves every ALL-CAPS word through (Windows does), so "TEH" proves nothing. Default true. */
+  allCapsForms?: boolean;
   /** Hunspell-style correct() — true when the word is in the language dictionary. */
   correct: (word: string) => boolean;
 }
 
+/** Everything but the dictionary: what's needed to decide which words to look up. */
+export type VocabularyContext = Omit<SpellContext, "correct">;
+
 const TOKEN = /\S+/g;
 const WORD = /^[A-Za-z]+(?:'[A-Za-z]+)*$/;
+/** Punctuation around a word: "(hello!!" -> "hello". */
+const EDGES = /^[^A-Za-z']+|[^A-Za-z']+$/g;
+/** The same letter three or more times in a row: "noooo", "yesss". */
+const STRETCH = /([A-Za-z])\1{2,}/g;
 
 function has(set: ReadonlySet<string>, word: string): boolean {
   return set.has(word.toLowerCase());
@@ -34,30 +47,74 @@ export function isUrlOrDomain(token: string): boolean {
 }
 
 /**
- * Words that should be underlined. Never flags emotes, mentions, chatters,
- * a leading ! or / command, URLs, words with digits, short ALL-CAPS, single
- * letters, or the user/session dictionaries.
+ * The checkable word inside one chat token ("hello!!" -> "hello"), or "" for chat commands
+ * (!uptime, /ban), @mentions, links, anything with digits, and tokens that are not plain letters.
+ */
+export function wordOf(raw: string): string {
+  if (/^[!/@]/.test(raw) || /\d/.test(raw) || isUrlOrDomain(raw)) return "";
+  const trimmed = raw.replace(EDGES, "");
+  return WORD.test(trimmed) ? trimmed : "";
+}
+
+/**
+ * Spellings worth trying before a word is underlined: stretched letters squeezed back
+ * ("noooo" -> "noo", "no"), and for all-lowercase words the Capitalised and (when the
+ * dictionary can judge them) ALL-CAPS forms ("chinese" -> "Chinese", "nasa" -> "NASA").
+ */
+export function spellVariants(word: string, allCaps = true): string[] {
+  const forms = new Set([word, word.replace(STRETCH, "$1$1"), word.replace(STRETCH, "$1")]);
+  for (const form of [...forms]) {
+    if (form !== form.toLowerCase()) continue;
+    forms.add(form[0].toUpperCase() + form.slice(1));
+    if (allCaps) forms.add(form.toUpperCase());
+  }
+  return [...forms];
+}
+
+/** Chat vocabulary: emotes, people, channels, community words, and your own lists. */
+function inVocabulary(word: string, ctx: VocabularyContext): boolean {
+  return (
+    ctx.isEmote(word) ||
+    has(ctx.chatters, word) ||
+    has(ctx.dictionary, word) ||
+    has(ctx.ignored, word) ||
+    (ctx.channelNames !== undefined && has(ctx.channelNames, word)) ||
+    ctx.communityWord?.(word) === true
+  );
+}
+
+/** Words that need a dictionary verdict: not commands, mentions, links, digits, emotes, single letters or short ALL-CAPS. */
+function* checkable(text: string, ctx: VocabularyContext): Generator<{ word: string; start: number; forms: string[] }> {
+  for (const match of text.matchAll(TOKEN)) {
+    const raw = match[0];
+    const word = wordOf(raw);
+    if (!word || ctx.isEmote(raw)) continue;
+    if (word.length === 1) continue;
+    if (word.length <= 4 && word === word.toUpperCase() && /[A-Z]/.test(word)) continue;
+    const forms = spellVariants(word, ctx.allCapsForms !== false);
+    if (forms.some((form) => inVocabulary(form, ctx))) continue;
+    yield { word, start: (match.index ?? 0) + raw.indexOf(word), forms };
+  }
+}
+
+/** Every spelling to ask the dictionary about for this line, so one round trip answers the whole check. */
+export function spellCandidates(text: string, ctx: VocabularyContext): string[] {
+  const out = new Set<string>();
+  for (const { forms } of checkable(text, ctx)) for (const form of forms) out.add(form);
+  return [...out];
+}
+
+/**
+ * Words that should be underlined. Never flags emotes, mentions, chatters, joined
+ * channels, community words, a leading ! or / command, URLs, words with digits, short
+ * ALL-CAPS, single letters, or the user/session dictionaries. Stretched ("noooo") and
+ * lowercase ("chinese") spellings pass when their plain form does.
  */
 export function findMisspellings(text: string, ctx: SpellContext): SpellSpan[] {
   const spans: SpellSpan[] = [];
-  for (const match of text.matchAll(TOKEN)) {
-    const raw = match[0];
-    const at = match.index ?? 0;
-    // Chat commands (!uptime, /ban) are not words, including when they are the first token.
-    if (/^[!/]/.test(raw) || raw.startsWith("@")) continue;
-
-    const trimmed = raw.replace(/^[^A-Za-z']+|[^A-Za-z']+$/g, "");
-    if (!trimmed) continue;
-    const local = at + raw.indexOf(trimmed);
-    if (isUrlOrDomain(raw) || isUrlOrDomain(trimmed)) continue;
-    if (/\d/.test(raw)) continue;
-    if (ctx.isEmote(trimmed) || ctx.isEmote(raw)) continue;
-    if (has(ctx.chatters, trimmed) || has(ctx.dictionary, trimmed) || has(ctx.ignored, trimmed)) continue;
-    if (trimmed.length === 1) continue;
-    if (trimmed.length <= 4 && trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) continue;
-    if (!WORD.test(trimmed)) continue;
-    if (ctx.correct(trimmed)) continue;
-    spans.push({ start: local, end: local + trimmed.length, word: trimmed });
+  for (const { word, start, forms } of checkable(text, ctx)) {
+    if (forms.some((form) => ctx.correct(form))) continue;
+    spans.push({ start, end: start + word.length, word });
   }
   return spans;
 }
@@ -85,6 +142,17 @@ export function rankSuggestions(word: string, raw: readonly string[], limit = 5)
   });
   ranked.sort((a, b) => a.score - b.score || a.item.localeCompare(b.item));
   return spellSuggestions(word, () => ranked.map((entry) => entry.item), limit);
+}
+
+/**
+ * When a suggestion is the typed letters plus an apostrophe ("dont" -> "don't", "im" -> "I'm"),
+ * it goes first. Everything else keeps its order.
+ */
+export function preferContraction(word: string, suggestions: readonly string[]): string[] {
+  const bare = word.toLowerCase();
+  const at = suggestions.findIndex((item) => /['’]/.test(item) && item.replace(/['’]/g, "").toLowerCase() === bare);
+  if (at <= 0) return [...suggestions];
+  return [suggestions[at], ...suggestions.slice(0, at), ...suggestions.slice(at + 1)];
 }
 
 /** At most `limit` unique suggestions, in the checker's order. */
@@ -117,10 +185,54 @@ export function indexAtWidth(text: string, x: number, widthAt: (end: number) => 
   return text.length;
 }
 
-/** Replace one flagged span and put the caret just after the new word. */
-export function replaceSpellWord(text: string, span: Pick<SpellSpan, "start" | "end">, next: string): { text: string; caret: number } {
+/**
+ * Replace one flagged span. The caret goes just after the new word, or, when it was already past
+ * the old word (after the space you typed), stays that far past the new one.
+ */
+export function replaceSpellWord(
+  text: string,
+  span: Pick<SpellSpan, "start" | "end">,
+  next: string,
+  caret?: number,
+): { text: string; caret: number } {
+  const shift = next.length - (span.end - span.start);
   return {
     text: `${text.slice(0, span.start)}${next}${text.slice(span.end)}`,
-    caret: span.start + next.length,
+    caret: caret !== undefined && caret >= span.end ? caret + shift : span.start + next.length,
   };
+}
+
+/**
+ * The flagged word you just typed: the one the caret is in or at the end of, or just past
+ * by punctuation and at most one space ("teh|", "teh |", "teh,|"). Null when the spans are
+ * stale for this text or the caret has moved on to another word.
+ */
+export function spellTarget(text: string, spans: readonly SpellSpan[], caret: number): SpellSpan | null {
+  for (let i = spans.length - 1; i >= 0; i--) {
+    const span = spans[i];
+    if (caret < span.start) continue;
+    if (text.slice(span.start, span.end) !== span.word) return null;
+    if (caret <= span.end) return span;
+    return /^[^\sA-Za-z']*\s?$/.test(text.slice(span.end, caret)) ? span : null;
+  }
+  return null;
+}
+
+/** A fix you picked, kept so the very next Backspace can put the old word back. */
+export interface SpellFix {
+  before: string;
+  caretBefore: number;
+  after: string;
+  caretAfter: number;
+}
+
+/** What Backspace restores: the text before the fix, but only if nothing changed since and the caret sits where the fix left it. */
+export function undoSpellFix(
+  fix: SpellFix | null,
+  text: string,
+  selectionStart: number | null,
+  selectionEnd: number | null,
+): { text: string; caret: number } | null {
+  if (!fix || text !== fix.after || selectionStart !== fix.caretAfter || selectionEnd !== fix.caretAfter) return null;
+  return { text: fix.before, caret: fix.caretBefore };
 }

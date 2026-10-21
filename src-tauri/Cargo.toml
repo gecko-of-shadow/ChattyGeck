@@ -23,10 +23,10 @@ keyring = { version = "3", features = ["windows-native", "apple-native", "linux-
 ureq = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
-# Pinned to the copies Tauri 2.12.3 already locks. Windows-only: the context-menu filter.
+# Pinned to the copies Tauri 2.12.3 already locks. Windows-only: the context-menu filter and the spell checker.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "=0.39.1"
-windows = { version = "=0.62.2", features = ["Win32_System_Com"] }
+windows = { version = "=0.62.2", features = ["Win32_System_Com", "Win32_Globalization"] }
 
 [profile.release]
 codegen-units = 1

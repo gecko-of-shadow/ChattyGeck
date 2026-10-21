@@ -3,6 +3,8 @@ mod startup;
 mod storage;
 mod update;
 #[cfg(windows)]
+mod spell;
+#[cfg(windows)]
 mod webview_menu;
 
 use std::sync::{
@@ -243,6 +245,49 @@ fn apply_update(app: AppHandle, download_url: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Which of `words` Windows' own spell checker spells that way (Check only; see spell.rs).
+#[cfg(windows)]
+#[tauri::command]
+async fn spell_check(
+    spell: State<'_, spell::WindowsSpell>,
+    language: String,
+    words: Vec<String>,
+) -> Result<Vec<bool>, String> {
+    let spell = spell.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || spell.check(&language, words))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+/// Windows' suggestions for one misspelled word, best first (Suggest only; see spell.rs).
+#[cfg(windows)]
+#[tauri::command]
+async fn spell_suggest(
+    spell: State<'_, spell::WindowsSpell>,
+    language: String,
+    word: String,
+) -> Result<Vec<String>, String> {
+    let spell = spell.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || spell.suggest(&language, word))
+        .await
+        .map_err(|err| err.to_string())?
+}
+
+/// Other systems have no Windows spell checker; the page falls back to its own dictionary.
+#[cfg(not(windows))]
+#[tauri::command]
+fn spell_check(language: String, words: Vec<String>) -> Result<Vec<bool>, String> {
+    let _ = (language, words);
+    Err("Windows spell checking is only on Windows".into())
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn spell_suggest(language: String, word: String) -> Result<Vec<String>, String> {
+    let _ = (language, word);
+    Err("Windows spell checking is only on Windows".into())
+}
+
 fn request_quit_confirm(app: &AppHandle) {
     // Settings disables main; a dead white Settings webview would swallow Quit forever.
     force_close_settings(app);
@@ -456,6 +501,8 @@ pub fn run() {
                 allow_exit: AtomicBool::new(false),
                 exit_flush_started: AtomicBool::new(false),
             });
+            #[cfg(windows)]
+            app.manage(spell::WindowsSpell::start());
 
             let window_config = app
                 .config()
@@ -567,7 +614,9 @@ pub fn run() {
             set_launch_at_login,
             check_for_update,
             apply_update,
-            open_settings_window_cmd
+            open_settings_window_cmd,
+            spell_check,
+            spell_suggest
         ])
         .build(tauri::generate_context!())
         .expect("error while running ZooChattr")
