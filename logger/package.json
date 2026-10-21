@@ -1,0 +1,14 @@
+{
+  "name": "zoochattr-logger",
+  "private": true,
+  "type": "module",
+  "description": "Private 24-hour Twitch chat recorder for ZooChattr (Cloudflare Worker, Durable Object and D1, reading chat anonymously over IRC).",
+  "scripts": {
+    "test": "vitest run",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.3"
+  }
+}

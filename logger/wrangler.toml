@@ -1,0 +1,33 @@
+name = "zoochattr-logger"
+main = "src/worker.ts"
+compatibility_date = "2026-09-01"
+
+# Secrets are NOT kept here (this repo is public). Set them once with:
+#   npx wrangler secret put READ_TOKEN
+#   npx wrangler secret put CHANNELS    (the logins to record, comma-separated)
+
+[vars]
+# Pages allowed to call the read API from a browser engine (ZooChattr's window, then the dev UIs).
+ALLOWED_ORIGINS = "http://tauri.localhost,https://tauri.localhost,tauri://localhost,http://127.0.0.1:17420,http://127.0.0.1:17440"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "zoochattr-chat"
+database_id = "757b917d-70ca-410f-bc72-55ecf42e0948"
+
+# The one always-on object that reads the channels' chat over Twitch IRC (src/recorder.ts).
+[[durable_objects.bindings]]
+name = "RECORDER"
+class_name = "ChatRecorder"
+
+# The free plan only has SQLite-backed Durable Objects.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRecorder"]
+
+[triggers]
+# Drops anything older than 24 hours, and starts the recorder after the first deploy.
+crons = ["*/10 * * * *"]
+
+[observability]
+enabled = true
