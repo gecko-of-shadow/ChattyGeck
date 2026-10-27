@@ -141,10 +141,21 @@ export function EmoteStatusChip({
 /** "Emote status…" from a channel's right-click menu in the top strip: the same table, under its avatar. */
 export function StripEmoteStatus() {
   const channel = useUi((s) => s.emoteStatusFor);
+  // Lives in the top bar: hiding the bar (Ctrl+Shift+H) closes it for good rather than reopening it later.
+  useEffect(() => () => useUi.setState({ emoteStatusFor: null }), []);
   if (!channel) return null;
   const anchor = () => document.querySelector(`[data-strip-channel="${CSS.escape(channel)}"]`);
+  const close = (open: boolean, details: { reason: string }) => {
+    if (open) return;
+    useUi.setState({ emoteStatusFor: null });
+    // There's no trigger button to return to, so Esc puts keyboard focus back on the channel's avatar.
+    if (details.reason === "escape-key") {
+      const avatar = document.querySelector<HTMLElement>(`[data-drag-channel="${CSS.escape(channel)}"]`);
+      requestAnimationFrame(() => avatar?.focus());
+    }
+  };
   return (
-    <Popover open onOpenChange={(open) => !open && useUi.setState({ emoteStatusFor: null })}>
+    <Popover open onOpenChange={close}>
       <PopoverContent anchor={anchor} align="start" className="w-72 text-xs" data-testid="strip-emote-status">
         <EmoteStatusTable channel={channel} />
       </PopoverContent>

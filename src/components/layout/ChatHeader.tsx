@@ -32,7 +32,8 @@ export function ConnectionDot() {
   let tone: "ok" | "wait" | "bad";
   switch (read.status) {
     case "connected":
-      label = auth.status === "logged_in" ? `Live · ${auth.login}` : "Live · anonymous";
+      // "Connected", not "Live": the green dots on avatars already mean "streaming now".
+      label = auth.status === "logged_in" ? `Connected · ${auth.login}` : "Connected · anonymous";
       tone = "ok";
       break;
     case "reconnecting":
