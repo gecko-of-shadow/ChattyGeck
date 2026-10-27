@@ -26,6 +26,8 @@ const channels = (process.env.SOAK_CHANNELS ?? (mockMode ? "geckotown,lizardloun
   .split(",")
   .map((c) => c.trim())
   .filter(Boolean);
+// The grid view (2/3/4/6/9) that fits every channel; view 1 is the single-chat view.
+const gridView = [2, 3, 4, 6, 9].find((v) => v >= Math.min(9, channels.length)) ?? 9;
 const outDir = process.env.SOAK_OUT ?? "soak";
 const chromePath = defaultChromePath();
 
@@ -46,20 +48,20 @@ page.on("console", (msg) => {
 
 await page.goto(url);
 await page.evaluate(
-  (list) =>
+  ({ list, view }) =>
     localStorage.setItem(
       "zoochattr.settings",
       JSON.stringify({
         channels: list,
         gridChannels: list,
-        gridSlots: Math.min(9, list.length),
+        gridSlots: view,
         mode: "grid",
         confirmChannelSwitch: false,
         rememberChatHistory: false,
         autoCheckUpdates: false,
       }),
     ),
-  channels,
+  { list: channels, view: gridView },
 );
 await page.reload();
 if (mockMode && process.env.SOAK_HEAVY !== "0") {
@@ -93,8 +95,8 @@ while (Date.now() - started < minutes * 60_000) {
   );
   if (sample % 15 === 0) await page.screenshot({ path: path.join(outDir, `soak-${sample}m.png`) });
   // Flip views now and then, like a person would.
-  if (sample % 10 === 5) await page.getByRole("radio", { name: /focused/i }).click().catch(() => {});
-  if (sample % 10 === 0) await page.getByRole("radio", { name: /grid/i }).click().catch(() => {});
+  if (sample % 10 === 5) await page.getByTestId("view-1").click().catch(() => {});
+  if (sample % 10 === 0) await page.getByTestId(`view-${gridView}`).click().catch(() => {});
 }
 
 await page.screenshot({ path: path.join(outDir, "soak-final.png") });

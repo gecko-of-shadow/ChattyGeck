@@ -67,9 +67,9 @@ Reading chat works with no setup (anonymous, read-only). Sending needs a Twitch 
    TWITCH_CLIENT_ID=your_client_id_here
    ```
 
-   It's baked into the build, so friends who get your `.exe` can log in without any setup. You can also paste a Client ID at runtime in **Settings → Twitch account**, which overrides the built-in one.
+   It's baked into the build, so friends who get your `.exe` can log in without any setup. You can also paste a Client ID at runtime in **Settings → Account & history**, which overrides the built-in one.
 
-ZooChattr asks only for `chat:read` and `chat:edit`. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
+ZooChattr asks for `chat:read` and `chat:edit` (read and send chat) and `user:read:follows` (list the channels you follow, for the top strip). It only reads your follows; it can't follow or unfollow anyone. If you logged in before that permission was added, the strip shows "Log in again to see your Twitch follows" until you log in once more. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
 
 ### Where the login is stored
 
