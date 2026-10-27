@@ -9,9 +9,15 @@ function overlayOpen(): boolean {
   return !!document.querySelector("[role='dialog'], [role='menu'], [data-testid='tab-complete'], [data-testid='spell-menu']");
 }
 
+/** Makes the grid pane focused, then puts the caret in the shared message box once it has switched to it. */
 function focusComposer(channel: string): void {
-  const input = document.querySelector<HTMLInputElement>(`[data-composer="${CSS.escape(channel)}"]`);
-  input?.focus();
+  chat.setActivePane(channel);
+  useUi.setState({ hoveredChannel: channel });
+  requestAnimationFrame(() => {
+    const input = document.querySelector<HTMLInputElement>(`[data-composer="${CSS.escape(channel)}"]`);
+    // With "Confirm channel before typing" the box shows its "chat in #channel" button instead of the input.
+    (input ?? document.querySelector<HTMLButtonElement>("[data-testid='channel-switch-unlock']"))?.focus();
+  });
 }
 
 /** Ctrl+G, Ctrl+K, Ctrl+1..9, Ctrl+Tab, Alt+Shift+Arrow, Esc back to the grid, Ctrl+Shift+R read only, Ctrl+Shift+H hide UI. */

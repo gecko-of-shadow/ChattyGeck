@@ -83,6 +83,14 @@ export default function App() {
   const readOnly = useChat((s) => s.settings.readOnly);
   const mentions = useChat((s) => Object.values(s.channels).reduce((sum, c) => sum + c.mentions, 0));
   const loggedIn = useChat((s) => s.auth.status === "logged_in");
+  // One shared message box: Single sends to its channel, the grid to the focused pane (only while it's on screen).
+  const composerChannel = useChat((s) =>
+    s.settings.mode === "focused"
+      ? s.settings.focused
+      : s.settings.focused && s.settings.gridChannels.includes(s.settings.focused)
+        ? s.settings.focused
+        : null,
+  );
 
   useEffect(() => {
     void chat.boot();
@@ -163,8 +171,8 @@ export default function App() {
             ) : (
               <FocusedView key={focused} login={focused} />
             )}
-            {readOnly ? null : mode === "focused" && focused ? (
-              <Composer channel={focused} />
+            {readOnly ? null : composerChannel ? (
+              <Composer channel={composerChannel} />
             ) : count > 0 && !loggedIn ? (
               <LoginPrompt />
             ) : null}

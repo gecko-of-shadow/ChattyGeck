@@ -16,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import { ChatLog } from "@/components/chat/ChatLog";
-import { Composer } from "@/components/chat/Composer";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
 import {
@@ -306,7 +305,7 @@ function activate(login: string): void {
   if (useUi.getState().hoveredChannel !== login) useUi.setState({ hoveredChannel: login });
 }
 
-/** One channel's chat inside the grid: a slim header (drag to swap, double-click for Single), its log, its box. */
+/** One channel's chat inside the grid: a slim header (drag to swap, double-click for Single) and its log. The one shared message box at the bottom sends to the focused pane. */
 function ChatBox({ login }: { login: string }) {
   const view = useChat(
     useShallow((s) => {
@@ -316,7 +315,6 @@ function ChatBox({ login }: { login: string }) {
     }),
   );
   const gridChannels = useChat((s) => s.settings.gridChannels);
-  const readOnly = useChat((s) => s.settings.readOnly);
   const active = useChat((s) => s.settings.focused === login);
   const dropTarget = useUi((s) => s.dropTarget);
   const [emoteStatusOpen, setEmoteStatusOpen] = useState(false);
@@ -420,11 +418,6 @@ function ChatBox({ login }: { login: string }) {
           compactEmpty
         />
       </div>
-      {readOnly ? null : (
-        <div className="relative z-10 shrink-0 overflow-visible">
-          <Composer channel={login} compact />
-        </div>
-      )}
     </section>
   );
 }

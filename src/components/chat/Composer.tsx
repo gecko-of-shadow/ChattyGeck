@@ -64,7 +64,7 @@ function RoomChips({ channel }: { channel: string }) {
       {chips.map(({ icon: Icon, label }) => (
         <span
           key={label}
-          className="inline-flex items-center gap-1 rounded-full border border-border/80 bg-muted/60 px-2 py-0.5 text-[11px] text-muted-foreground"
+          className="inline-flex items-center gap-1 border border-border bg-surface-2 px-2 py-0.5 text-[11px] text-muted-foreground"
         >
           <Icon className="size-3" />
           {label}
@@ -78,8 +78,8 @@ function RoomChips({ channel }: { channel: string }) {
 export function LoginPrompt() {
   const booting = useChat((s) => s.auth.status === "booting");
   return (
-    <div className="border-t border-border/80 bg-card/70 px-3 py-2.5 backdrop-blur">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-primary/30 bg-primary/5 px-3 py-2">
+    <div className="border-t border-border bg-surface px-2 py-2">
+      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
         <Mascot className="size-7 shrink-0" />
         <p className="min-w-0 flex-1 text-sm text-muted-foreground">
           You're reading anonymously. Log in with Twitch to chat back.
@@ -174,7 +174,7 @@ function CompletionBar({
       data-testid="tab-complete"
       role="listbox"
       aria-label="Suggestions"
-      className="zoo-scroll fixed z-50 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border bg-popover/95 p-1 shadow-lg backdrop-blur"
+      className="zoo-scroll fixed z-50 flex max-h-56 flex-col gap-0.5 overflow-y-auto overscroll-contain border border-border bg-popover p-1"
       style={{ left: box.left, width: box.width, bottom: box.bottom }}
     >
       {completion.matches.map((match, i) => {
@@ -211,6 +211,13 @@ function CompletionBar({
   );
 }
 
+/**
+ * Drafts and sent-message history per channel, kept outside the (single, shared) message box so hiding it
+ * (Read only, an empty grid) loses nothing.
+ */
+const sharedDrafts = new Map<string, string>();
+const sharedHistories = new Map<string, string[]>();
+
 /** Message input for one channel. `compact` is the slim version used inside grid boxes. */
 export function Composer({ channel, compact = false }: { channel: string | null; compact?: boolean }) {
   const auth = useChat((s) => s.auth);
@@ -227,27 +234,39 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   const spellDictionary = useChat((s) => s.settings.spellDictionary);
   const spellLanguage = useChat((s) => s.settings.spellLanguage);
   const textSize = useChat((s) => s.settings.textSize);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => (channel ? (sharedDrafts.get(channel) ?? "") : ""));
   const [error, setError] = useState<string | null>(null);
   const [completion, setCompletion] = useState<Completion | null>(null);
   const [misspellings, setMisspellings] = useState<SpellSpan[]>([]);
   const [spellMenu, setSpellMenu] = useState<{ x: number; y: number; span: SpellSpan; suggestions: string[] } | null>(null);
   const [ignoreVersion, setIgnoreVersion] = useState(0);
-  const history = useRef<string[]>([]);
+  const history = useRef<string[]>(channel ? (sharedHistories.get(channel) ?? []).slice() : []);
   const historyIndex = useRef(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const prevChannel = useRef(channel);
   const textRef = useRef("");
-  const appliedInsert = useRef<number | null>(null);
-  const drafts = useRef(new Map<string, string>());
-  const histories = useRef(new Map<string, string[]>());
+  // An insert from before this box mounted (it unmounts in Read only) must not come back.
+  const appliedInsert = useRef<number | null>(useUi.getState().insert?.nonce ?? null);
+  const drafts = useRef(sharedDrafts);
+  const histories = useRef(sharedHistories);
   const listId = useId();
   textRef.current = text;
   const [spellArmed, setSpellArmed] = useState(false);
   const spellLanguageId: SpellLanguageId = spellLanguage === "en-US" ? "en-US" : "en-US";
 
   useEffect(() => subscribeSpellIgnore(() => setIgnoreVersion((version) => version + 1)), []);
+
+  // Keep the current channel's draft and history when the box goes away (Read only, empty grid).
+  useEffect(
+    () => () => {
+      const current = prevChannel.current;
+      if (!current) return;
+      sharedDrafts.set(current, textRef.current);
+      sharedHistories.set(current, history.current.slice());
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!spellCheck || !spellArmed || !channel) {
@@ -516,7 +535,12 @@ export function Composer({ channel, compact = false }: { channel: string | null;
         setText(decision.text);
         return;
       case "escape":
-        if (replyTo) clearReplyTarget(channel);
+        if (replyTo) {
+          clearReplyTarget(channel);
+          // Esc that cancelled a reply must not also leave the single view.
+          event.stopPropagation();
+          event.nativeEvent.stopImmediatePropagation();
+        }
         setError(null);
         return;
       default:
@@ -525,7 +549,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   };
 
   return (
-    <div className={cn("border-t border-border/80 bg-card", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
+    <div className={cn("border-t border-border bg-surface", compact ? "px-2 py-1.5" : "px-2 py-2")} data-testid="composer">
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-danger-text", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
@@ -543,7 +567,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           <Button
             type="button"
             size={compact ? "sm" : "default"}
-            className={cn("w-full shrink-0", compact ? "h-8 text-[13px]" : "h-9")}
+            className={cn("w-full shrink-0", compact ? "h-8 text-[13px]" : "h-10")}
             data-testid="channel-switch-unlock"
             title={compact ? "You switched channels. Confirm before sending." : undefined}
             onClick={() => {
@@ -644,14 +668,15 @@ export function Composer({ channel, compact = false }: { channel: string | null;
                 }, 0);
               }}
               onFocus={() => setSpellArmed(true)}
-              placeholder={`${theme.sendVerb} to #${channel} as ${auth.login}…`}
+              placeholder={`${theme.sendVerb} to #${channel}`}
+              title={`${theme.sendVerb} to #${channel} as ${auth.login}`}
               aria-label={`Message #${channel}`}
               data-composer={channel}
               aria-autocomplete={tabComplete ? "list" : undefined}
               aria-controls={completion ? listId : undefined}
               aria-expanded={tabComplete ? !!completion : undefined}
               aria-activedescendant={completion ? `${listId}-${completion.index}` : undefined}
-              className={cn("bg-card pr-12 transition-none", compact ? "h-8 text-[13px]" : "h-9 text-sm")}
+              className={cn("bg-background pr-12 transition-none", compact ? "h-8 text-[13px]" : "h-10 text-sm")}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -672,13 +697,13 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           <Button
             type="submit"
             size={compact ? "icon-sm" : "default"}
-            className={cn(!compact && "h-9 gap-1.5 px-3.5")}
+            className={cn(!compact && "h-10 gap-1.5 px-5 font-semibold")}
             disabled={!text.trim() || !connected}
             aria-label={theme.sendVerb}
             title={theme.sendVerb}
           >
             {compact ? null : <span className="hidden sm:inline">{theme.sendVerb}</span>}
-            <SendHorizontal className="size-4" />
+            <SendHorizontal className={cn("size-4", !compact && "sm:hidden")} />
           </Button>
         </form>
         </div>
