@@ -8,12 +8,10 @@ import {
   Maximize2,
   Minus,
   MoreHorizontal,
-  RefreshCw,
   RotateCw,
   Smile,
   UserRoundX,
   Users,
-  X,
 } from "lucide-react";
 import { ChatLog } from "@/components/chat/ChatLog";
 import { Mascot } from "@/components/mascots/Mascot";
@@ -22,7 +20,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -87,20 +84,8 @@ function statusText(status: ProviderStatus): string {
   }
 }
 
-export function EmoteStatusChip({
-  channel,
-  compact = false,
-  onlyWhenFailing = false,
-  open,
-  onOpenChange,
-}: {
-  channel: string;
-  compact?: boolean;
-  /** Grid panes: show the chip only as a warning, or while opened from the pane menu. */
-  onlyWhenFailing?: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-}) {
+/** Re-renders when a channel's (or the global) emotes change, and reads their load status. */
+function useEmoteStatus(channel: string) {
   const version = useChat((s) => `${s.emoteVersions[channel] ?? 0}.${s.globalEmoteVersion}`);
   const settings = useChat((s) => s.settings);
   const [, force] = useState(0);
@@ -115,10 +100,23 @@ export function EmoteStatusChip({
     const c = channelStatus?.[p];
     return sum + (c?.state === "ok" ? c.count : 0);
   }, 0);
+  return { settings, channelStatus, globalStatus, failing, total };
+}
 
-  if (onlyWhenFailing && !failing && !open) return null;
+export function EmoteStatusChip({
+  channel,
+  compact = false,
+  onlyWhenFailing = false,
+}: {
+  channel: string;
+  compact?: boolean;
+  /** Grid panes: show the chip only as a warning (the full status is on the top strip's right-click menu). */
+  onlyWhenFailing?: boolean;
+}) {
+  const { failing, total } = useEmoteStatus(channel);
+  if (onlyWhenFailing && !failing) return null;
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    <Popover>
       <PopoverTrigger
         render={
           <Button
@@ -134,38 +132,61 @@ export function EmoteStatusChip({
         {compact ? null : <span className="hidden lg:inline">{total} channel emotes</span>}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 text-xs">
-        <div className="mb-2 font-semibold">Emotes in #{channel}</div>
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-muted-foreground">
-              <th className="pb-1 font-medium">Provider</th>
-              <th className="pb-1 font-medium">Channel</th>
-              <th className="pb-1 font-medium">Global</th>
-            </tr>
-          </thead>
-          <tbody>
-            {THIRD_PARTY_PROVIDERS.map((p) => {
-              const on = isFeatureOn(settings, channel, p);
-              return (
-                <tr key={p}>
-                  <td className="py-0.5 pr-2 font-medium">{PROVIDER_LABELS[p]}</td>
-                  <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-warn")}>
-                    {!on ? "off here" : channelStatus ? statusText(channelStatus[p]) : "waiting"}
-                  </td>
-                  <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-warn")}>
-                    {!on ? "off here" : statusText(globalStatus[p])}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <p className="mt-2 text-muted-foreground">Twitch emotes always come straight from chat messages.</p>
-        <Button size="xs" variant="outline" className="mt-2 gap-1" onClick={() => chat.reloadEmotes(channel)}>
-          <RotateCw className="size-3" /> Reload emotes
-        </Button>
+        <EmoteStatusTable channel={channel} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** "Emote status…" from a channel's right-click menu in the top strip: the same table, under its avatar. */
+export function StripEmoteStatus() {
+  const channel = useUi((s) => s.emoteStatusFor);
+  if (!channel) return null;
+  const anchor = () => document.querySelector(`[data-strip-channel="${CSS.escape(channel)}"]`);
+  return (
+    <Popover open onOpenChange={(open) => !open && useUi.setState({ emoteStatusFor: null })}>
+      <PopoverContent anchor={anchor} align="start" className="w-72 text-xs" data-testid="strip-emote-status">
+        <EmoteStatusTable channel={channel} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function EmoteStatusTable({ channel }: { channel: string }) {
+  const { settings, channelStatus, globalStatus } = useEmoteStatus(channel);
+  return (
+    <>
+      <div className="mb-2 font-semibold">Emotes in #{channel}</div>
+      <table className="w-full">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="pb-1 font-medium">Provider</th>
+            <th className="pb-1 font-medium">Channel</th>
+            <th className="pb-1 font-medium">Global</th>
+          </tr>
+        </thead>
+        <tbody>
+          {THIRD_PARTY_PROVIDERS.map((p) => {
+            const on = isFeatureOn(settings, channel, p);
+            return (
+              <tr key={p}>
+                <td className="py-0.5 pr-2 font-medium">{PROVIDER_LABELS[p]}</td>
+                <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-warn")}>
+                  {!on ? "off here" : channelStatus ? statusText(channelStatus[p]) : "waiting"}
+                </td>
+                <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-warn")}>
+                  {!on ? "off here" : statusText(globalStatus[p])}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-2 text-muted-foreground">Twitch emotes always come straight from chat messages.</p>
+      <Button size="xs" variant="outline" className="mt-2 gap-1" onClick={() => chat.reloadEmotes(channel)}>
+        <RotateCw className="size-3" /> Reload emotes
+      </Button>
+    </>
   );
 }
 
@@ -322,10 +343,8 @@ function ChatBox({ login }: { login: string }) {
       return { status: channel.status, error: channel.error, displayName: channel.displayName };
     }),
   );
-  const gridChannels = useChat((s) => s.settings.gridChannels);
   const active = useChat((s) => s.settings.focused === login);
   const dropTarget = useUi((s) => s.dropTarget);
-  const [emoteStatusOpen, setEmoteStatusOpen] = useState(false);
   const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
   if (!view) return null;
 
@@ -377,7 +396,7 @@ function ChatBox({ login }: { login: string }) {
         ) : null}
         <RoomIcons login={login} />
         <span className="flex-1" />
-        <EmoteStatusChip channel={login} compact onlyWhenFailing open={emoteStatusOpen} onOpenChange={setEmoteStatusOpen} />
+        <EmoteStatusChip channel={login} compact onlyWhenFailing />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<Button variant="ghost" size="icon-xs" aria-label={`Options for #${name}`} title="More" />}
@@ -385,31 +404,16 @@ function ChatBox({ login }: { login: string }) {
             <MoreHorizontal className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
+            {/* Kept short on purpose. Emote status, Reload emotes and Leave are on the channel's right-click menu
+                in the top strip; swapping is done by dragging a header. */}
             <DropdownMenuItem onClick={() => chat.focus(login)}>
               <Maximize2 /> Open alone (view 1)
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setEmoteStatusOpen(true)}>
-              <Smile /> Emote status…
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
-              <RefreshCw /> Reload emotes
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
               <ExternalLink /> Open on twitch.tv
             </DropdownMenuItem>
-            {gridChannels
-              .filter((other) => other !== login)
-              .map((other) => (
-                <DropdownMenuItem key={other} onClick={() => chat.swapGridChannels(login, other)}>
-                  Swap with #{other}
-                </DropdownMenuItem>
-              ))}
             <DropdownMenuItem onClick={() => chat.hideFromGrid(login)}>
               <Minus /> Hide from grid
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
-              <X /> Leave #{login}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

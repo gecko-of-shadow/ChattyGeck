@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
-import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, LayoutGrid, Maximize2, Minus, Plus, RefreshCw, Settings, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, LayoutGrid, Maximize2, Minus, Plus, RefreshCw, Settings, Smile, X } from "lucide-react";
 import { toast } from "sonner";
 import geckoLogo from "@/assets/gecko-logo.png";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { openSettings, useUi } from "@/store/ui";
 import { ConnectionPill } from "./ChatHeader";
 import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
+import { StripEmoteStatus } from "./Views";
 import { ViewSwitch } from "./ViewSwitch";
 
 function countLabel(n: number): string {
@@ -82,9 +83,14 @@ function AvatarMenu({
             {onGrid ? <EyeOff /> : <LayoutGrid />} {onGrid ? "Hide from grid" : "Show in grid"}
           </DropdownMenuItem>
           {joined ? (
-            <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
-              <RefreshCw /> Reload emotes
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onClick={() => useUi.setState({ emoteStatusFor: login })}>
+                <Smile /> Emote status…
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
+                <RefreshCw /> Reload emotes
+              </DropdownMenuItem>
+            </>
           ) : null}
           <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
             <ExternalLink /> Open on twitch.tv
@@ -337,6 +343,7 @@ export function TopBar() {
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2" data-testid="top-bar">
       <img src={geckoLogo} alt="ZooChattr" title="ZooChattr" className="size-9 shrink-0" draggable={false} />
       <ChannelStrip />
+      <StripEmoteStatus />
       <ConnectionPill compact />
       <ViewSwitch />
       <Button

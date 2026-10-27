@@ -31,6 +31,8 @@ interface UiState {
   insert: { text: string; channel: string; nonce: number } | null;
   /** Message the composer will send as a Twitch reply. Stays on its channel when you look at another chat. */
   replyTo: ReplyTarget | null;
+  /** Channel whose emote status is open under its top-strip avatar (from the right-click menu). */
+  emoteStatusFor: string | null;
 }
 
 export interface ReplyTarget {
@@ -58,6 +60,7 @@ export const useUi = create<UiState>(() => ({
   liveNonce: 0,
   insert: null,
   replyTo: null,
+  emoteStatusFor: null,
 }));
 
 /** Arm a Twitch reply. Also unlocks and focuses that channel's message box. */
