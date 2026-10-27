@@ -218,8 +218,9 @@ export function LoginDialog() {
               <ShieldCheck className="mt-0.5 size-4.5 shrink-0 text-accent-text" />
               <div className="text-muted-foreground">
                 ZooChattr only asks for <code className="rounded bg-muted px-1 text-foreground">chat:read</code> and{" "}
-                <code className="rounded bg-muted px-1 text-foreground">chat:edit</code>: enough to read and send chat,
-                nothing else. Your login is stored in your system's credential store.
+                <code className="rounded bg-muted px-1 text-foreground">chat:edit</code> (read and send chat) and{" "}
+                <code className="rounded bg-muted px-1 text-foreground">user:read:follows</code> (show the channels you
+                follow in the top strip), nothing else. Your login is stored in your system's credential store.
               </div>
             </div>
             {error ? (

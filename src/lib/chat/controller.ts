@@ -23,7 +23,9 @@ import { refreshSession, revokeToken, validateToken, type Session } from "@/lib/
 import {
   HelixUnauthorizedError,
   fetchChannelBadges,
+  fetchFollowedChannels,
   fetchGlobalBadges,
+  fetchLiveStreams,
   fetchUsers,
   publicBadge,
   type BadgeImage,
@@ -48,6 +50,7 @@ import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
 import { replyParentMsgId, replySnippet } from "@/lib/twitch/reply";
+import { FOLLOWS_REFRESH_MS, LIVE_POLL_MS, hasFollowsScope, sameLive, type FollowView } from "@/lib/follows";
 
 /** System lines addressed to this pseudo-channel show up in every view. */
 export const ALL_CHANNELS = "*";
@@ -145,6 +148,16 @@ class ChatController {
   private historyWriting = new Map<string, Promise<void>>();
   private exitFlushListening = false;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+  /** Live dots / follows refresh; paused while the window is hidden. */
+  private liveTimer: ReturnType<typeof setInterval> | null = null;
+  private livePollSoon: ReturnType<typeof setTimeout> | null = null;
+  private liveCheckedAt = 0;
+  private followsFetchedAt = 0;
+  /** Bumped on each login change; answers from before it are dropped. */
+  private followsGeneration = 0;
+  /** Whose follows are in the store (to clear them when another account logs in). */
+  private followsUser: string | null = null;
+  private pollAuthRetryAt = 0;
 
   constructor() {
     this.read = new IrcConnection({
@@ -220,6 +233,10 @@ class ChatController {
       void this.loadGlobalBadges();
       void this.loadProfiles(settings.channels);
     }
+    this.armFollows();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) this.onVisible();
+    });
 
     window.addEventListener("online", () => {
       this.read.retryNow();
@@ -297,6 +314,7 @@ class ChatController {
       if (session) {
         this.setSession(session, true);
         this.startWrite();
+        this.armFollows();
       }
     }
   }
@@ -458,6 +476,7 @@ class ChatController {
     for (const channel of Object.values(get().channels)) {
       if (channel.roomId) void this.loadChannelBadges(channel.login, channel.roomId);
     }
+    this.armFollows();
     toast.success(`Logged in as ${session.login}`, { description: "Your messages go out as you now." });
   }
 
@@ -475,6 +494,7 @@ class ChatController {
     }
     if (!session) return;
     this.setSession(null);
+    this.armFollows();
     this.stopWrite();
     for (const pending of this.pendingSends) clearTimeout(pending.timer);
     this.pendingSends = [];
@@ -977,7 +997,8 @@ class ChatController {
 
   // ---------------------------------------------------------------- channels & view
 
-  addChannel(input: string): ActionResult & { channel?: string } {
+  /** `toGrid: false`: only follow it (a drag onto a pane places it itself), so no grid slot and no "grid is full" note. */
+  addChannel(input: string, { toGrid = true }: { toGrid?: boolean } = {}): ActionResult & { channel?: string } {
     const name = normalizeChannelName(input);
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
     if (this.settingsUiOnly) {
@@ -995,16 +1016,19 @@ class ChatController {
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
-    const gridFull = get().settings.gridChannels.length >= this.gridCap();
+    const gridFull = toGrid && get().settings.gridChannels.length >= this.gridCap();
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
-      gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+      gridChannels: !toGrid || gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
     this.openChannel(name);
-    if (this.session) void this.loadProfiles([name]);
+    if (this.session) {
+      void this.loadProfiles([name]);
+      this.queueLivePoll();
+    }
     if (gridFull) {
-      toast(`Following #${name}`, {
+      toast(`Added #${name}`, {
         description: `Grid is full (${this.gridCap()}). It's in the top strip: hide a pane to make room, or open it alone anytime.`,
       });
     }
@@ -1674,6 +1698,150 @@ class ChatController {
       }
     } catch (err) {
       if (err instanceof HelixUnauthorizedError) void this.recoverAuth();
+    }
+  }
+
+  // ---------------------------------------------------------------- follows and live dots
+
+  /** Starts (logged in) or stops (logged out) the follow list and live-dot checks. Called on every login change. */
+  private armFollows(): void {
+    if (this.liveTimer) clearInterval(this.liveTimer);
+    if (this.livePollSoon) clearTimeout(this.livePollSoon);
+    this.liveTimer = null;
+    this.livePollSoon = null;
+    this.followsFetchedAt = 0;
+    // Answers to requests started before this login change are dropped (a token refresh doesn't count).
+    this.followsGeneration++;
+    const userId = this.session && !this.settingsUiOnly ? this.session.userId : null;
+    if (!userId) {
+      this.followsUser = null;
+      set({ follows: {}, followsState: "off", live: null });
+      return;
+    }
+    // Another account: don't show the previous one's follows or dots while the new ones load.
+    if (this.followsUser !== userId) set({ follows: {}, live: null });
+    this.followsUser = userId;
+    set({ followsState: "off" });
+    void this.refreshFollows();
+    this.liveTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (Date.now() - this.followsFetchedAt > FOLLOWS_REFRESH_MS) void this.refreshFollows();
+      else void this.pollLive();
+    }, LIVE_POLL_MS);
+  }
+
+  /** Back from the tray or a minimised window: catch up on what went stale while hidden. */
+  private onVisible(): void {
+    if (!this.session || !this.liveTimer) return;
+    if (Date.now() - this.followsFetchedAt > FOLLOWS_REFRESH_MS) void this.refreshFollows();
+    else if (Date.now() - this.liveCheckedAt > LIVE_POLL_MS) void this.pollLive();
+  }
+
+  /**
+   * Twitch said 401 to a follows or live check. Refresh the token quietly (chat stays connected); only when that
+   * fails does the usual recovery (log out) run. At most once per 10 minutes so a persistent 401 can't loop.
+   */
+  private async onHelixPollUnauthorized(): Promise<void> {
+    if (Date.now() - this.pollAuthRetryAt < 10 * 60_000) return;
+    this.pollAuthRetryAt = Date.now();
+    let next: Session | null | undefined;
+    try {
+      next = await this.refreshOnce();
+    } catch {
+      next = undefined;
+    }
+    if (next === null) await this.recoverAuth();
+  }
+
+  /** A channel was just added: show its live dot without waiting a whole poll. */
+  private queueLivePoll(): void {
+    if (this.livePollSoon) clearTimeout(this.livePollSoon);
+    this.livePollSoon = setTimeout(() => {
+      this.livePollSoon = null;
+      void this.pollLive();
+    }, 1_500);
+  }
+
+  private async refreshFollows(): Promise<void> {
+    const generation = this.followsGeneration;
+    // A token that's about to expire is refreshed first, so the check itself doesn't hit a 401.
+    const session = await this.pollSession();
+    if (!session || generation !== this.followsGeneration) return;
+    // Logged in before ZooChattr asked for this permission: the strip offers a fresh login instead.
+    if (!hasFollowsScope(session.scopes)) {
+      this.followsFetchedAt = Date.now();
+      set({ follows: {}, followsState: "needs-login" });
+      await this.pollLive();
+      return;
+    }
+    let unauthorized = false;
+    try {
+      const list = await fetchFollowedChannels(session);
+      if (generation !== this.followsGeneration) return;
+      // Stamped only on success: a failed fetch (offline, timeout) is tried again on the next poll, not in 15 minutes.
+      this.followsFetchedAt = Date.now();
+      const before = get().follows;
+      const follows: Record<string, FollowView> = {};
+      for (const f of list) {
+        follows[f.login] = { displayName: f.displayName, followedAt: f.followedAt, avatarUrl: before[f.login]?.avatarUrl };
+      }
+      set({ follows, followsState: "ok" });
+      // Pictures for every follow (kept across refreshes), so one you Leave keeps its picture in the strip.
+      const missing = list.map((f) => f.login).filter((login) => !follows[login].avatarUrl);
+      if (missing.length) void this.loadFollowPictures(session, missing, generation);
+    } catch (err) {
+      unauthorized = err instanceof HelixUnauthorizedError;
+      // Failed (offline, timeout, 401): try the follow list again in 5 minutes; live dots keep updating meanwhile.
+      if (generation === this.followsGeneration) this.followsFetchedAt = Date.now() - FOLLOWS_REFRESH_MS + 5 * 60_000;
+    }
+    // A 401 to a request made before a logout or login switch says nothing about the current login.
+    if (unauthorized && generation === this.followsGeneration && this.session) await this.onHelixPollUnauthorized();
+    await this.pollLive();
+  }
+
+  /** The login for a background check: refreshed when close to expiry, but a check never logs out a login that can't refresh. */
+  private async pollSession(): Promise<Session | null> {
+    if (!this.session) return null;
+    if (!this.session.refreshToken) return this.session;
+    return this.freshSession();
+  }
+
+  private async loadFollowPictures(session: Session, logins: string[], generation: number): Promise<void> {
+    try {
+      const users = await fetchUsers(session, logins);
+      if (generation !== this.followsGeneration) return;
+      set((s) => {
+        const follows = { ...s.follows };
+        for (const user of users) {
+          if (follows[user.login]) follows[user.login] = { ...follows[user.login], avatarUrl: user.avatarUrl };
+        }
+        return { follows };
+      });
+    } catch {
+      // Letter avatars stay; the next follow refresh tries again.
+    }
+  }
+
+  /** Viewer counts for every channel in the strip. Skipped while the window is hidden (tray or minimised). */
+  private async pollLive(): Promise<void> {
+    if (!this.session || document.hidden) return;
+    const generation = this.followsGeneration;
+    const session = await this.pollSession();
+    if (!session || generation !== this.followsGeneration) return;
+    const logins = [...new Set([...get().settings.channels, ...Object.keys(get().follows)])];
+    this.liveCheckedAt = Date.now();
+    if (!logins.length) {
+      if (!sameLive(get().live, {})) set({ live: {} });
+      return;
+    }
+    try {
+      const live = await fetchLiveStreams(session, logins);
+      if (generation !== this.followsGeneration) return;
+      if (!sameLive(get().live, live)) set({ live });
+    } catch (err) {
+      if (err instanceof HelixUnauthorizedError && generation === this.followsGeneration && this.session) {
+        await this.onHelixPollUnauthorized();
+      }
     }
   }
 }

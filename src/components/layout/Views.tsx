@@ -28,6 +28,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chat } from "@/lib/chat/controller";
 import { emoteRegistry } from "@/lib/emotes/registry";
+import { liveLabel } from "@/lib/follows";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/lib/emotes/types";
 import { GRID_EDGE, GRID_GAP, layoutViewGrid, viewColumns, viewForSlots } from "@/lib/gridLayout";
 import { openExternal } from "@/lib/platform";
@@ -250,13 +251,20 @@ function SingleHeader({ login }: { login: string }) {
       return channel ? { displayName: channel.displayName, status: channel.status } : null;
     }),
   );
+  const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
   if (!view) return null;
   return (
     <div className="flex h-10 shrink-0 items-center gap-2 border-b-2 border-accent-2 bg-surface px-3" data-testid="single-header">
       <ChannelAvatar login={login} className="size-6" />
       <h2 className="truncate text-sm font-semibold">#{view.displayName ?? login}</h2>
-      <span className="truncate text-xs text-muted-foreground">
-        {view.status === "joined" ? "Connected" : view.status === "joining" ? "Joining…" : "Couldn't join"}
+      <span className="truncate text-xs text-muted-foreground" data-testid="single-status">
+        {view.status === "joining"
+          ? "Joining…"
+          : view.status === "error"
+            ? "Couldn't join"
+            : viewers === null
+              ? "Connected"
+              : liveLabel(viewers)}
       </span>
       <span className="flex-1" />
       <EmoteStatusChip channel={login} />
@@ -318,10 +326,13 @@ function ChatBox({ login }: { login: string }) {
   const active = useChat((s) => s.settings.focused === login);
   const dropTarget = useUi((s) => s.dropTarget);
   const [emoteStatusOpen, setEmoteStatusOpen] = useState(false);
+  const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
   if (!view) return null;
 
   const name = view.displayName ?? login;
-  const status = view.status === "joined" ? null : view.status === "joining" ? "joining…" : "couldn't join";
+  // Joined: "N watching" / "offline" once live status is known (logged in); otherwise the join state.
+  const status =
+    view.status === "joining" ? "joining…" : view.status === "error" ? "couldn't join" : viewers === null ? null : liveLabel(viewers);
 
   return (
     <section
@@ -356,7 +367,11 @@ function ChatBox({ login }: { login: string }) {
       >
         <h2 className="min-w-0 truncate text-[13px] font-semibold">#{name}</h2>
         {status ? (
-          <span className={cn("shrink-0 text-xs", view.status === "error" ? "text-danger-text" : "text-muted-foreground")} title={view.error}>
+          <span
+            className={cn("shrink-0 text-xs", view.status === "error" ? "text-danger-text" : "text-muted-foreground")}
+            title={view.error}
+            data-testid={`grid-status-${login}`}
+          >
             {status}
           </span>
         ) : null}

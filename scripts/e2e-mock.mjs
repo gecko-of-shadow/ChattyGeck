@@ -89,6 +89,10 @@ const messageBox = async (scope, channel) => {
 };
 
 await mockPost("/__unfail-emotes");
+// Live status is read at login and then every 90 s, so set it up front.
+await mockPost("/__live?channel=geckotown&viewers=1234");
+await mockPost("/__offline?channel=lizardlounge");
+await mockPost("/__new-scopes");
 await page.goto(url);
 await page.evaluate(() => {
   localStorage.clear();
@@ -173,6 +177,21 @@ await step("device-code login", async () => {
   await page.getByText("GECKO123").waitFor({ timeout: 5_000 });
   await shot("04-login-code");
   await canChat();
+});
+
+await step("Twitch follows join the strip with live dots and viewer counts", async () => {
+  // Followed on mock Twitch but never added in the app: shown, not joined.
+  const follow = page.locator('[data-drag-channel="chameleoncafe"]');
+  await follow.waitFor({ timeout: 10_000 });
+  if (!/chat not open/.test((await follow.getAttribute("aria-label")) ?? "")) throw new Error("follow-only avatar label");
+  await page.locator('[data-strip-channel="geckotown"] [data-live-dot]').waitFor({ timeout: 10_000 });
+  const label = (await avatar("geckotown").getAttribute("aria-label")) ?? "";
+  if (!label.includes("live, 1,234 watching")) throw new Error(`live label: "${label}"`);
+  if (await page.locator('[data-strip-channel="lizardlounge"] [data-live-dot]').count()) throw new Error("offline channel has a live dot");
+  await page.getByTestId("single-status").filter({ hasText: "1,234 watching" }).waitFor({ timeout: 5_000 });
+  const channels = await page.evaluate(() => JSON.parse(localStorage.getItem("zoochattr.settings") || "{}").channels);
+  if (channels.includes("chameleoncafe")) throw new Error("a follow was joined without asking");
+  await shot("04c-follows");
 });
 
 await step("channel switch blocks send until unlock", async () => {
@@ -763,6 +782,26 @@ await step("log out falls back to anonymous reading", async () => {
   await page.getByText("Not logged in").waitFor({ timeout: 5_000 });
   await closeSettings();
   await page.getByText("You're reading anonymously").waitFor({ timeout: 5_000 });
+  if (await page.locator("[data-live-dot]").count()) throw new Error("live dots shown while logged out");
+});
+
+await step("an older login without the follows permission asks to log in again", async () => {
+  await mockPost("/__old-scopes");
+  try {
+    await page.getByRole("button", { name: "Log in with Twitch" }).first().click();
+    await page.getByRole("button", { name: "Get a login code" }).click();
+    const chip = page.getByTestId("follows-login");
+    await chip.waitFor({ timeout: 15_000 });
+    if (await page.locator('[data-drag-channel="chameleoncafe"]').count()) throw new Error("follows shown without the permission");
+    await shot("07b-follows-relogin");
+    await mockPost("/__new-scopes");
+    await chip.click();
+    await page.getByRole("button", { name: "Get a login code" }).click();
+    await chip.waitFor({ state: "detached", timeout: 15_000 });
+    await page.locator('[data-drag-channel="chameleoncafe"]').waitFor({ timeout: 10_000 });
+  } finally {
+    await mockPost("/__new-scopes");
+  }
 });
 
 await step("small window: the strip still reaches every channel", async () => {

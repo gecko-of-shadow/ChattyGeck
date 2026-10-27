@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, LayoutGrid, Maximize2, Minus, Plus, RefreshCw, Settings, X } from "lucide-react";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chat } from "@/lib/chat/controller";
+import { liveLabel, mergeStrip, stripMoveOffset } from "@/lib/follows";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -30,8 +31,43 @@ function showOrHide(login: string, onGrid: boolean): void {
   if (!result.ok) toast.error(result.error ?? "Couldn't show it in the grid");
 }
 
-/** Everything the old sidebar's ⋯ menu did, on right-click (or the Menu key) on an avatar. */
-function AvatarMenu({ login, onGrid, index, count }: { login: string; onGrid: boolean; index: number; count: number }) {
+/** A Twitch follow that isn't in the app yet joins chat first (it lands in the grid when there's room). */
+function addFollow(login: string): boolean {
+  const result = chat.addChannel(login);
+  if (!result.ok) toast.error(result.error ?? `Couldn't open #${login}`);
+  return result.ok;
+}
+
+function openAlone(login: string, joined: boolean): void {
+  if (!joined && !addFollow(login)) return;
+  chat.focus(login);
+}
+
+function plusOrMinus(login: string, joined: boolean, onGrid: boolean): void {
+  // addChannel puts it in the grid, or says the grid is full.
+  if (!joined) addFollow(login);
+  else showOrHide(login, onGrid);
+}
+
+/**
+ * Everything the old sidebar's ⋯ menu did, on right-click (or the Menu key) on an avatar. A follow that isn't joined
+ * only offers opening it; Move left/right only for channels whose place you choose (follows go by follow date).
+ */
+function AvatarMenu({
+  login,
+  joined,
+  onGrid,
+  moveLeft,
+  moveRight,
+  movable,
+}: {
+  login: string;
+  joined: boolean;
+  onGrid: boolean;
+  moveLeft: number | null;
+  moveRight: number | null;
+  movable: boolean;
+}) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Positioner className="isolate z-50 outline-none">
@@ -39,36 +75,57 @@ function AvatarMenu({ login, onGrid, index, count }: { login: string; onGrid: bo
           data-slot="dropdown-menu-content"
           className="z-50 min-w-52 overflow-hidden border border-border bg-popover p-1 text-popover-foreground shadow-md outline-none"
         >
-          <DropdownMenuItem onClick={() => chat.focus(login)}>
+          <DropdownMenuItem onClick={() => openAlone(login, joined)}>
             <Maximize2 /> Open alone (view 1)
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => showOrHide(login, onGrid)}>
+          <DropdownMenuItem onClick={() => plusOrMinus(login, joined, onGrid)}>
             {onGrid ? <EyeOff /> : <LayoutGrid />} {onGrid ? "Hide from grid" : "Show in grid"}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
-            <RefreshCw /> Reload emotes
-          </DropdownMenuItem>
+          {joined ? (
+            <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
+              <RefreshCw /> Reload emotes
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={() => void openExternal(`https://www.twitch.tv/${login}`)}>
             <ExternalLink /> Open on twitch.tv
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={index <= 0} onClick={() => chat.moveChannel(login, -1)}>
-            <ArrowLeft /> Move left
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={index >= count - 1} onClick={() => chat.moveChannel(login, 1)}>
-            <ArrowRight /> Move right
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
-            <X /> Leave #{login}
-          </DropdownMenuItem>
+          {movable ? (
+            <>
+              <DropdownMenuItem disabled={moveLeft === null} onClick={() => moveLeft !== null && chat.moveChannel(login, moveLeft)}>
+                <ArrowLeft /> Move left
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={moveRight === null} onClick={() => moveRight !== null && chat.moveChannel(login, moveRight)}>
+                <ArrowRight /> Move right
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {joined ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
+                <X /> Leave #{login}
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </ContextMenuPrimitive.Popup>
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
   );
 }
 
-/** One followed channel: round avatar, teal ring when in the grid, +/− badge, mention or unread count. */
-function StripAvatar({ login }: { login: string }) {
+/**
+ * One channel in the strip (added in the app, followed on Twitch, or both): round avatar, teal ring when in the grid,
+ * +/− badge, mention or unread count, green dot while live.
+ */
+function StripAvatar({
+  login,
+  moveLeft,
+  moveRight,
+}: {
+  login: string;
+  moveLeft: number | null;
+  moveRight: number | null;
+}) {
   const view = useChat(
     useShallow((s) => {
       const channel = s.channels[login];
@@ -82,21 +139,24 @@ function StripAvatar({ login }: { login: string }) {
       };
     }),
   );
+  const followName = useChat((s) => s.follows[login]?.displayName);
+  const followed = followName !== undefined;
+  const joined = useChat((s) => s.settings.channels.includes(login));
   const onGrid = useChat((s) => s.settings.gridChannels.includes(login));
   const active = useChat((s) => s.settings.mode === "focused" && s.settings.focused === login);
-  const index = useChat((s) => s.settings.channels.indexOf(login));
-  const count = useChat((s) => s.settings.channels.length);
-  if (!view) return null;
+  // undefined: offline; null: not known (logged out, no dots).
+  const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
+  if (!view && !followed) return null;
 
-  const name = view.displayName ?? login;
-  const status = view.status === "joined" ? null : view.status === "joining" ? "joining" : `couldn't join: ${view.error ?? "error"}`;
-  const activity =
-    view.mentions > 0
-      ? `${view.mentions} mention${view.mentions === 1 ? "" : "s"}`
-      : view.unread > 0
-        ? `${view.unread} unread`
-        : null;
-  const label = [`#${name}`, onGrid ? "in the grid" : null, status, activity].filter(Boolean).join(", ");
+  const name = view?.displayName ?? followName ?? login;
+  const status = !view || view.status === "joined" ? null : view.status === "joining" ? "joining" : `couldn't join: ${view.error ?? "error"}`;
+  const mentions = view?.mentions ?? 0;
+  const unread = view?.unread ?? 0;
+  const activity = mentions > 0 ? `${mentions} mention${mentions === 1 ? "" : "s"}` : unread > 0 ? `${unread} unread` : null;
+  const liveText = viewers === null ? null : viewers === undefined ? "offline" : `live, ${liveLabel(viewers)}`;
+  const label = [`#${name}`, liveText, onGrid ? "in the grid" : null, joined ? null : "followed on Twitch, chat not open", status, activity]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <li className="relative shrink-0" data-strip-channel={login}>
@@ -109,7 +169,7 @@ function StripAvatar({ login }: { login: string }) {
           <button
             type="button"
             data-drag-channel={login}
-            onClick={() => chat.focus(login)}
+            onClick={() => openAlone(login, joined)}
             aria-label={label}
             aria-current={active ? "page" : undefined}
             title={`${label}\nClick: open alone · Right-click: more · Drag onto a pane to put it there`}
@@ -123,22 +183,30 @@ function StripAvatar({ login }: { login: string }) {
               login={login}
               className={cn(
                 "size-9",
-                view.status !== "joined" && "grayscale",
+                view && view.status !== "joined" && "grayscale",
               )}
             />
           </button>
-          {view.mentions > 0 || view.unread > 0 ? (
+          {mentions > 0 || unread > 0 ? (
             <span
               aria-hidden
               className={cn(
                 "zc-badge pointer-events-none absolute -top-1 -right-1.5 grid h-4 min-w-4 place-items-center rounded-full border border-surface px-1 text-[10px] leading-none font-bold tabular-nums",
-                view.mentions > 0 ? "bg-primary text-primary-foreground" : "bg-badge text-badge-ink",
+                mentions > 0 ? "bg-primary text-primary-foreground" : "bg-badge text-badge-ink",
               )}
             >
-              {view.mentions > 0 ? `@${countLabel(view.mentions)}` : countLabel(view.unread)}
+              {mentions > 0 ? `@${countLabel(mentions)}` : countLabel(unread)}
             </span>
           ) : null}
-          {view.status === "error" ? (
+          {viewers !== null && viewers !== undefined ? (
+            // Live: a small green dot at the bottom-left (half the +/− badge), outlined so it reads on every theme.
+            <span
+              aria-hidden
+              data-live-dot
+              className="zc-live-dot pointer-events-none absolute bottom-0 left-0 size-1.5 rounded-full bg-live ring-[1.5px] ring-surface"
+            />
+          ) : null}
+          {view?.status === "error" ? (
             <span
               aria-hidden
               className="zc-badge pointer-events-none absolute -top-1 -left-1 grid size-3.5 place-items-center rounded-full border border-surface bg-destructive text-[9px] leading-none font-bold text-destructive-foreground"
@@ -148,7 +216,7 @@ function StripAvatar({ login }: { login: string }) {
           ) : null}
           <button
             type="button"
-            onClick={() => showOrHide(login, onGrid)}
+            onClick={() => plusOrMinus(login, joined, onGrid)}
             aria-label={onGrid ? `Hide #${name} from the grid` : `Show #${name} in the grid`}
             title={onGrid ? `Hide #${name} from the grid` : `Show #${name} in the grid`}
             className="zc-badge absolute -right-0.5 -bottom-0.5 grid size-3 place-items-center rounded-full border border-surface bg-badge text-badge-ink outline-none hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring"
@@ -156,8 +224,34 @@ function StripAvatar({ login }: { login: string }) {
             {onGrid ? <Minus className="size-2" strokeWidth={3.5} /> : <Plus className="size-2" strokeWidth={3.5} />}
           </button>
         </ContextMenuPrimitive.Trigger>
-        <AvatarMenu login={login} onGrid={onGrid} index={index} count={count} />
+        <AvatarMenu
+          login={login}
+          joined={joined}
+          onGrid={onGrid}
+          movable={joined && !followed}
+          moveLeft={moveLeft}
+          moveRight={moveRight}
+        />
       </ContextMenuPrimitive.Root>
+    </li>
+  );
+}
+
+/** Logged in before ZooChattr asked to read follows: one click to log in again (until then the strip is the app list). */
+function FollowsLoginChip() {
+  const needed = useChat((s) => s.followsState === "needs-login");
+  if (!needed) return null;
+  return (
+    <li className="shrink-0">
+      <Button
+        variant="outline"
+        size="xs"
+        data-testid="follows-login"
+        onClick={() => useUi.setState({ loginOpen: true })}
+        title="ZooChattr can now show the channels you follow on Twitch. That needs one more Twitch permission, so log in once more."
+      >
+        Log in again to see your Twitch follows
+      </Button>
     </li>
   );
 }
@@ -189,9 +283,12 @@ function AddTile() {
   );
 }
 
-/** The followed channels, sideways scrolling, with the add tile at the end. */
+/** Channels added in the app plus Twitch follows (newest first), sideways scrolling, with the add tile at the end. */
 function ChannelStrip() {
-  const order = useChat((s) => s.settings.channels);
+  const channels = useChat((s) => s.settings.channels);
+  const follows = useChat((s) => s.follows);
+  const order = useMemo(() => mergeStrip(channels, follows), [channels, follows]);
+  const movable = (login: string) => channels.includes(login) && !(login in follows);
   return (
     <nav
       aria-label="Channels"
@@ -203,8 +300,15 @@ function ChannelStrip() {
       }}
     >
       <ul className="flex w-max items-center gap-3 p-2">
+        {/* First, so it's seen even with a long strip or a narrow window. */}
+        <FollowsLoginChip />
         {order.map((login) => (
-          <StripAvatar key={login} login={login} />
+          <StripAvatar
+            key={login}
+            login={login}
+            moveLeft={stripMoveOffset(order, channels, movable, login, -1)}
+            moveRight={stripMoveOffset(order, channels, movable, login, 1)}
+          />
         ))}
         <AddTile />
       </ul>

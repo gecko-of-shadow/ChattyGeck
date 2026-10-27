@@ -38,7 +38,8 @@ import { openSettings, useUi } from "@/store/ui";
 import { beginChannelDrag } from "./gridDrag";
 
 export function ChannelAvatar({ login, className }: { login: string; className?: string }) {
-  const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl);
+  // Joined channels carry their picture; Twitch follows that aren't joined have theirs in the follow list.
+  const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl ?? s.follows[login]?.avatarUrl);
   const skin = useResolvedSkin();
   if (avatarUrl) {
     // Not draggable: the browser's own image drag would swallow the pointer-up of a strip-avatar-to-pane drag.

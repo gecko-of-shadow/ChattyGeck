@@ -85,6 +85,59 @@ export async function fetchUsers(session: Session, logins: string[]): Promise<Tw
   return users;
 }
 
+export interface FollowedChannel {
+  id: string;
+  login: string;
+  displayName: string;
+  /** ISO date. */
+  followedAt: string;
+}
+
+/** Most follows we read (5 pages). Someone following more sees the newest ones. */
+export const MAX_FOLLOWS = 500;
+
+/** The channels this user follows, newest first (needs the user:read:follows permission). */
+export async function fetchFollowedChannels(session: Session): Promise<FollowedChannel[]> {
+  const follows: FollowedChannel[] = [];
+  let cursor: string | undefined;
+  do {
+    const after = cursor ? `&after=${encodeURIComponent(cursor)}` : "";
+    const body = await helix<{
+      data: { broadcaster_id: string; broadcaster_login: string; broadcaster_name: string; followed_at: string }[];
+      pagination?: { cursor?: string };
+    }>(session, `/channels/followed?user_id=${encodeURIComponent(session.userId)}&first=100${after}`);
+    follows.push(
+      ...body.data.map((f) => ({
+        id: f.broadcaster_id,
+        login: f.broadcaster_login,
+        displayName: f.broadcaster_name,
+        followedAt: f.followed_at,
+      })),
+    );
+    cursor = body.data.length ? body.pagination?.cursor : undefined;
+  } while (cursor && follows.length < MAX_FOLLOWS);
+  return follows.slice(0, MAX_FOLLOWS);
+}
+
+/** Viewer counts of the channels that are live right now (by login, 100 per call). Offline ones are left out. */
+export async function fetchLiveStreams(session: Session, logins: string[]): Promise<Record<string, number>> {
+  const live: Record<string, number> = {};
+  for (let i = 0; i < logins.length; i += 100) {
+    const query = logins
+      .slice(i, i + 100)
+      .map((login) => `user_login=${encodeURIComponent(login)}`)
+      .join("&");
+    const body = await helix<{ data: { user_login: string; viewer_count: number; type: string }[] }>(
+      session,
+      `/streams?${query}&first=100`,
+    );
+    for (const stream of body.data) {
+      if (stream.type === "live") live[stream.user_login.toLowerCase()] = stream.viewer_count;
+    }
+  }
+  return live;
+}
+
 /**
  * Badges that work without logging in (Helix needs a token). These are Twitch's public
  * badge images for the global roles people care about in chat.

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { ConnectionDetail, ConnectionStatus } from "@/lib/irc/connection";
+import type { FollowView } from "@/lib/follows";
 import type { AppInfo } from "@/lib/platform";
 import type { ChatMessage, RoomState, UserState } from "@/lib/twitch/types";
 import { DEFAULT_SETTINGS, type Settings } from "./settings";
@@ -49,6 +50,15 @@ export interface ChatState {
   emoteVersions: Record<string, number>;
   globalEmoteVersion: number;
   badgeVersion: number;
+  /**
+   * Channels the logged-in user follows on Twitch, by login. Only shown in the top strip: chat joins only the
+   * channels in settings.channels. Not saved; fetched again each launch.
+   */
+  follows: Record<string, FollowView>;
+  /** "needs-login": logged in before the follows permission existed, so the strip asks to log in again. */
+  followsState: "off" | "needs-login" | "ok";
+  /** Viewer counts of channels that are live (app list and follows); missing = offline. Null = not known (logged out). */
+  live: Record<string, number> | null;
 }
 
 export const useChat = create<ChatState>(() => ({
@@ -63,6 +73,9 @@ export const useChat = create<ChatState>(() => ({
   emoteVersions: {},
   globalEmoteVersion: 0,
   badgeVersion: 0,
+  follows: {},
+  followsState: "off",
+  live: null,
 }));
 
 export function newChannelView(login: string): ChannelView {

@@ -1,4 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import { toast } from "sonner";
 import { chat } from "@/lib/chat/controller";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
@@ -62,6 +63,15 @@ export function beginChannelDrag(event: ReactPointerEvent | ReactMouseEvent, log
     if (!dragging) return;
     ev.preventDefault();
     window.addEventListener("click", (click) => click.stopPropagation(), { capture: true, once: true });
+    // A Twitch follow that isn't in the app yet: add it (joins its chat) before placing it.
+    if (kind === "sidebar" && !useChat.getState().settings.channels.includes(login)) {
+      // Dropped on a pane it takes that pane's place (below), so it isn't also put in a free slot.
+      const added = chat.addChannel(login, { toGrid: !slot });
+      if (!added.ok) {
+        toast.error(added.error ?? `Couldn't open #${login}`);
+        return;
+      }
+    }
     const mode = useChat.getState().settings.mode;
     if (kind === "sidebar" && mode === "focused") {
       chat.focus(login);

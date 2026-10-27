@@ -797,6 +797,10 @@ html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
     forced-color-adjust: none;
     border: 1px solid CanvasText;
   }
+  /* The live dot's ring follows the system background instead of the app's surface colour. */
+  .zc-live-dot {
+    box-shadow: 0 0 0 1px Canvas;
+  }
   .chat-row[data-mention="true"] {
     border-left: 3px solid Highlight;
   }

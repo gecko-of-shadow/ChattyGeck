@@ -14,21 +14,40 @@ const IRC_PORT = Number(process.env.MOCK_IRC_PORT ?? 17422);
 const HTTP_PORT = Number(process.env.MOCK_HTTP_PORT ?? 17423);
 const USER = { login: "geckotester", id: "424242", displayName: "GeckoTester" };
 const CLIENT_ID = "mock-client-id";
-const SCOPES = ["chat:read", "chat:edit"];
+const SCOPES = ["chat:read", "chat:edit", "user:read:follows"];
+/** What a new login is granted. POST /__old-scopes makes logins look like they predate user:read:follows. */
+let grantScopes = SCOPES;
 
 const tokens = new Map(); // access token -> expiry
+const tokenScopes = new Map(); // access or refresh token -> scopes
 const refreshTokens = new Set();
 let tokenCounter = 0;
 let pollsBeforeApproval = 2;
 
-function issueTokens() {
+function issueTokens(scopes = grantScopes) {
   tokenCounter++;
   const access = `mock-access-${tokenCounter}`;
   const refresh = `mock-refresh-${tokenCounter}`;
   tokens.set(access, Date.now() + 4 * 3600_000);
   refreshTokens.add(refresh);
-  return { access_token: access, refresh_token: refresh, expires_in: 14400, scope: SCOPES, token_type: "bearer" };
+  tokenScopes.set(access, scopes);
+  tokenScopes.set(refresh, scopes);
+  return { access_token: access, refresh_token: refresh, expires_in: 14400, scope: scopes, token_type: "bearer" };
 }
+
+/** Channels geckotester follows on mock Twitch (newest last here; Twitch answers newest first). */
+const FOLLOWS = [
+  { login: "skinkstation", followed_at: "2025-06-01T12:00:00Z" },
+  { login: "geckotown", followed_at: "2026-01-02T12:00:00Z" },
+  { login: "lizardlounge", followed_at: "2026-03-01T12:00:00Z" },
+  { login: "iguanaisland", followed_at: "2026-09-10T12:00:00Z" },
+  { login: "chameleoncafe", followed_at: "2026-10-20T12:00:00Z" },
+];
+/** login -> viewer count of channels that are live. POST /__live and /__offline change it. */
+const live = new Map([
+  ["geckotown", 1234],
+  ["iguanaisland", 87],
+]);
 
 function json(res, status, body) {
   res.writeHead(status, {
@@ -202,7 +221,8 @@ const httpServer = http.createServer(async (req, res) => {
       if (body.get("grant_type") === "refresh_token") {
         const refresh = body.get("refresh_token");
         if (!refreshTokens.delete(refresh)) return json(res, 400, { status: 400, message: "Invalid refresh token" });
-        return json(res, 200, issueTokens());
+        // A refreshed token keeps the permissions of the login it came from.
+        return json(res, 200, issueTokens(tokenScopes.get(refresh) ?? grantScopes));
       }
       if (pollsBeforeApproval-- > 0) return json(res, 400, { status: 400, message: "authorization_pending" });
       return json(res, 200, issueTokens());
@@ -213,7 +233,7 @@ const httpServer = http.createServer(async (req, res) => {
         client_id: CLIENT_ID,
         login: USER.login,
         user_id: USER.id,
-        scopes: SCOPES,
+        scopes: tokenScopes.get(bearer) ?? SCOPES,
         expires_in: Math.round((tokens.get(bearer) - Date.now()) / 1000),
       });
     case "POST /oauth2/revoke": {
@@ -234,6 +254,46 @@ const httpServer = http.createServer(async (req, res) => {
           display_name: login[0].toUpperCase() + login.slice(1),
           profile_image_url: avatar(login),
         })),
+      });
+    }
+    case "GET /helix/channels/followed": {
+      if (!tokenValid) return json(res, 401, { status: 401 });
+      if (!(tokenScopes.get(bearer) ?? []).includes("user:read:follows")) {
+        return json(res, 401, { error: "Unauthorized", status: 401, message: "Missing scope: user:read:follows" });
+      }
+      if (url.searchParams.get("user_id") !== USER.id) return json(res, 400, { status: 400, message: "user_id must match the token" });
+      // Newest first, paged (first=, after= cursor) like Twitch.
+      const all = [...FOLLOWS].reverse();
+      const first = Math.min(100, Math.max(1, Number(url.searchParams.get("first") ?? 20)));
+      const start = Number(url.searchParams.get("after") ?? 0) || 0;
+      const page = all.slice(start, start + first);
+      return json(res, 200, {
+        total: all.length,
+        data: page.map((f) => ({
+          broadcaster_id: roomId(f.login),
+          broadcaster_login: f.login,
+          broadcaster_name: f.login[0].toUpperCase() + f.login.slice(1),
+          followed_at: f.followed_at,
+        })),
+        pagination: start + first < all.length ? { cursor: String(start + first) } : {},
+      });
+    }
+    case "GET /helix/streams": {
+      if (!tokenValid) return json(res, 401, { status: 401 });
+      const logins = url.searchParams.getAll("user_login").slice(0, 100);
+      return json(res, 200, {
+        data: logins
+          .filter((login) => live.has(login))
+          .map((login) => ({
+            id: `stream-${login}`,
+            user_id: roomId(login),
+            user_login: login,
+            user_name: login[0].toUpperCase() + login.slice(1),
+            type: "live",
+            viewer_count: live.get(login),
+            started_at: new Date(Date.now() - 3_600_000).toISOString(),
+          })),
+        pagination: {},
       });
     }
     case "GET /helix/chat/badges/global":
@@ -325,6 +385,21 @@ const httpServer = http.createServer(async (req, res) => {
     case "POST /__expire":
       tokens.clear();
       return json(res, 200, { ok: true });
+    case "POST /__live": {
+      const channel = url.searchParams.get("channel") ?? "";
+      live.set(channel, Math.max(0, Number(url.searchParams.get("viewers") ?? 100)));
+      return json(res, 200, { live: Object.fromEntries(live) });
+    }
+    case "POST /__offline":
+      live.delete(url.searchParams.get("channel") ?? "");
+      return json(res, 200, { live: Object.fromEntries(live) });
+    case "POST /__old-scopes":
+      // Next logins look like they predate the follows permission (for the "Log in again" chip).
+      grantScopes = ["chat:read", "chat:edit"];
+      return json(res, 200, { scopes: grantScopes });
+    case "POST /__new-scopes":
+      grantScopes = SCOPES;
+      return json(res, 200, { scopes: grantScopes });
     case "GET /__sent":
       return json(res, 200, { messages: sentMessages });
     case "POST /__sent/reset":
