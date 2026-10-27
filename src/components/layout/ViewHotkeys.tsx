@@ -14,7 +14,7 @@ function focusComposer(channel: string): void {
   input?.focus();
 }
 
-/** Ctrl+G, Ctrl+K, Ctrl+1..9, Ctrl+Tab, Alt+Shift+Arrow, and Esc back to the grid. */
+/** Ctrl+G, Ctrl+K, Ctrl+1..9, Ctrl+Tab, Alt+Shift+Arrow, Esc back to the grid, Ctrl+Shift+R read only, Ctrl+Shift+H hide UI. */
 export function ViewHotkeys() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -44,6 +44,25 @@ export function ViewHotkeys() {
           event.preventDefault();
           chat.setMode("grid");
         }
+        return;
+      }
+
+      if (shortcut.type === "read-only" || shortcut.type === "hide-ui") {
+        // Always swallow these (Ctrl+Shift+R is the browser's hard reload), even with a menu open.
+        event.preventDefault();
+        if (overlayOpen()) return;
+        const s = useChat.getState().settings;
+        const on = shortcut.type === "read-only" ? !s.readOnly : !s.chromeHidden;
+        chat.updateSettings(shortcut.type === "read-only" ? { readOnly: on } : { chromeHidden: on });
+        const text =
+          shortcut.type === "read-only"
+            ? on
+              ? "Read only on: message box hidden"
+              : "Read only off"
+            : on
+              ? "Top strip hidden. Ctrl+Shift+H shows it again"
+              : "Top strip shown";
+        useUi.setState((u) => ({ liveMessage: text, liveNonce: u.liveNonce + 1 }));
         return;
       }
 

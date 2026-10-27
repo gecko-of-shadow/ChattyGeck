@@ -36,7 +36,7 @@ export interface Settings {
   channels: string[];
   /**
    * Subset of `channels` shown as boxes in Grid view (at most {@link MAX_GRID_SLOTS}).
-   * Other followed channels stay in the sidebar until you pin them or open Focused.
+   * Other followed channels stay in the top strip until you pin them or open Single.
    */
   gridChannels: string[];
   /** How many boxes the grid may hold (1–{@link MAX_GRID_SLOTS}). Older files omit this and stay at 4. */
@@ -62,7 +62,7 @@ export interface Settings {
   zebra: boolean;
   /** Closing the window hides ZooChattr in the system tray instead of quitting. */
   closeToTray: boolean;
-  /** Hide the sidebar and top bar so the chat boxes fill the window (toggle from the header). */
+  /** Hide the top strip so the chat boxes fill the window (Ctrl+Shift+H, or the floating Show UI button). */
   chromeHidden: boolean;
   /**
    * Watch-only: hide composers, emote/send controls, and channel-switch confirms on every pane.

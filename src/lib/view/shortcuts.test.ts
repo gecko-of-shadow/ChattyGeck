@@ -6,6 +6,14 @@ function press(overrides: Partial<ShortcutEvent>): ShortcutEvent {
 }
 
 describe("viewShortcut", () => {
+  it("maps Ctrl+Shift+R to read only and Ctrl+Shift+H to hiding the top strip", () => {
+    expect(viewShortcut(press({ key: "R", ctrlKey: true, shiftKey: true }))).toEqual({ type: "read-only" });
+    expect(viewShortcut(press({ key: "H", ctrlKey: true, shiftKey: true }))).toEqual({ type: "hide-ui" });
+    // Plain Ctrl+R / Ctrl+H stay with whatever the system does.
+    expect(viewShortcut(press({ key: "r", ctrlKey: true }))).toBeNull();
+    expect(viewShortcut(press({ key: "h", ctrlKey: true }))).toBeNull();
+  });
+
   it("maps the view keys", () => {
     expect(viewShortcut(press({ key: "g", ctrlKey: true }))).toEqual({ type: "toggle-mode" });
     expect(viewShortcut(press({ key: "k", metaKey: true }))).toEqual({ type: "quick-switch" });

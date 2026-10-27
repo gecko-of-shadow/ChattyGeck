@@ -44,6 +44,38 @@ export function channelColor(channel: string): string {
   return CHANNEL_TAG_COLORS[hashString(channel) % CHANNEL_TAG_COLORS.length];
 }
 
+/** Letter avatars sit on an 18% tint of their own colour over the panel colour (see ChannelAvatar). */
+export const TAG_TINT = 0.18;
+
+const tagCache = new Map<string, string>();
+
+/**
+ * A channel's avatar letter colour for the theme showing now: its tag colour, nudged toward the theme's text colour
+ * until the letter reads at 4.5:1 on its own tinted disc.
+ */
+export function readableTagColor(channel: string, skin: ConcreteSkin): string {
+  const base = channelColor(channel);
+  const key = `${skin}|${base}`;
+  const cached = tagCache.get(key);
+  if (cached) return cached;
+  const t = THEME_TOKENS[skin];
+  const text = hexToRgb(t.text)!;
+  const surface = hexToRgb(t.surface)!;
+  let rgb = mix(hexToRgb(base)!, text, WARM_BLEND[skin] ?? 0);
+  const readable = (c: [number, number, number]) => contrastRatio(toHex(c), tagDisc(c, surface)) >= MIN_NAME_CONTRAST;
+  for (let step = 0; step < 20 && !readable(rgb); step++) rgb = mix(rgb, text, 0.1);
+  const result = readable(rgb) ? toHex(rgb) : t.text;
+  tagCache.set(key, result);
+  return result;
+}
+
+/** The disc behind an avatar letter: `color-mix(in srgb, letter 18%, surface)`. */
+export function tagDisc(letter: [number, number, number] | string, surface: [number, number, number] | string): string {
+  const l = typeof letter === "string" ? hexToRgb(letter)! : letter;
+  const s = typeof surface === "string" ? hexToRgb(surface)! : surface;
+  return toHex(mix(s, l, TAG_TINT));
+}
+
 function hexToRgb(hex: string): [number, number, number] | null {
   const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!match) return null;

@@ -202,7 +202,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "shortcuts",
         label: "Keyboard shortcuts",
-        hint: "Ctrl+G grid and single. Ctrl+K switch channel. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc.",
+        hint: "Ctrl+G grid and single. Ctrl+K switch or add a channel. Menu key or Shift+F10 on an avatar. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc. Ctrl+Shift+R read only. Ctrl+Shift+H hide the top strip.",
       },
       {
         id: "confirm-channel",
@@ -212,7 +212,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "read-only",
         label: "Read only",
-        hint: "Hide the message box on every pane so you can watch without accidentally chatting. Toggle from the top bar too.",
+        hint: "Hide the message box on every pane so you can watch without accidentally chatting. Ctrl+Shift+R also switches it.",
       },
       {
         id: "history",

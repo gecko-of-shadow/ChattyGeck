@@ -1005,7 +1005,7 @@ class ChatController {
     if (this.session) void this.loadProfiles([name]);
     if (gridFull) {
       toast(`Following #${name}`, {
-        description: `Grid is full (${this.gridCap()}). It's tucked in the sidebar — Show in grid or open Single anytime.`,
+        description: `Grid is full (${this.gridCap()}). It's in the top strip — press + on it or open it alone anytime.`,
       });
     }
     return { ok: true, channel: name };

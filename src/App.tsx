@@ -1,14 +1,14 @@
 import { useEffect } from "react";
-import { PanelLeftOpen, X } from "lucide-react";
+import { PanelLeftOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Composer, LoginPrompt } from "@/components/chat/Composer";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
 import { Mascot } from "@/components/mascots/Mascot";
-import { ChatHeader, ConnectionBanner } from "@/components/layout/ChatHeader";
+import { TopBar } from "@/components/layout/ChannelStrip";
+import { ConnectionBanner } from "@/components/layout/ChatHeader";
 import { QuickSwitcher } from "@/components/layout/QuickSwitcher";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { ViewHotkeys } from "@/components/layout/ViewHotkeys";
 import { EmptyState, FocusedView, GridView } from "@/components/layout/Views";
 import { Button } from "@/components/ui/button";
@@ -31,30 +31,7 @@ function BootScreen() {
   );
 }
 
-function MobileNav() {
-  const open = useUi((s) => s.navOpen);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && useUi.setState({ navOpen: false });
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-  if (!open) return null;
-  const close = () => useUi.setState({ navOpen: false });
-  return (
-    <div className="fixed inset-0 z-40 min-[900px]:hidden">
-      <button type="button" aria-label="Close channel list" className="absolute inset-0 bg-background/80 backdrop-blur-[2px]" onClick={close} />
-      <div className="absolute inset-y-0 left-0 w-[min(18rem,85vw)] shadow-2xl animate-in slide-in-from-left duration-200">
-        <Sidebar onNavigate={close} />
-        <Button variant="ghost" size="icon-sm" className="absolute top-3 right-2" onClick={close} aria-label="Close">
-          <X className="size-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Floating controls when the sidebar and top bar are hidden. */
+/** Floating controls while the top strip is hidden (Ctrl+Shift+H). */
 function ChromeReveal() {
   const readOnly = useChat((s) => s.settings.readOnly);
   return (
@@ -66,7 +43,7 @@ function ChromeReveal() {
         className="gap-1.5 shadow-lg"
         data-testid="show-chrome"
         onClick={() => chat.updateSettings({ chromeHidden: false })}
-        title="Show sidebar and top bar"
+        title="Show the top strip (Ctrl+Shift+H)"
       >
         <PanelLeftOpen className="size-3.5" />
         Show UI
@@ -79,7 +56,7 @@ function ChromeReveal() {
         data-testid="read-only-toggle"
         aria-pressed={readOnly}
         onClick={() => chat.updateSettings({ readOnly: !readOnly })}
-        title={readOnly ? "Read only on — click to show the message box again" : "Read only — hide the message box"}
+        title={readOnly ? "Read only on — click to show the message box again (Ctrl+Shift+R)" : "Read only — hide the message box (Ctrl+Shift+R)"}
       >
         {readOnly ? "Reading" : "Read only"}
       </Button>
@@ -176,14 +153,8 @@ export default function App() {
         <BootScreen />
       ) : (
         <div className="relative flex h-full">
-          {chromeHidden ? null : (
-            <div className="hidden w-64 shrink-0 min-[900px]:block lg:w-72">
-              <Sidebar />
-            </div>
-          )}
-          {chromeHidden ? null : <MobileNav />}
           <main className="relative flex min-w-0 flex-1 flex-col">
-            {chromeHidden ? <ChromeReveal /> : <ChatHeader />}
+            {chromeHidden ? <ChromeReveal /> : <TopBar />}
             {chromeHidden ? null : <ConnectionBanner />}
             {count === 0 ? (
               <EmptyState />

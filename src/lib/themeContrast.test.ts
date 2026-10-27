@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readableNameColor, rowBackgrounds } from "./colors";
+import { readableNameColor, readableTagColor, rowBackgrounds, tagDisc } from "./colors";
 import { CONTRAST_CHECKS, contrastRatio, THEME_TOKENS, TOKEN_NAMES } from "./themeTokens";
 import { CONCRETE_SKINS } from "./themes";
 
@@ -104,6 +104,32 @@ describe("derived colours in index.css", () => {
       for (const surface of ["bg", "surface", "surface-2"] as const) check(skin, `switch track on ${surface}`, t.muted, t[surface], 3);
     }
     expect(failures).toEqual([]);
+  });
+});
+
+describe("avatar letters and strip badges", () => {
+  // Enough names to hit every one of the 10 tag colours.
+  const names = Array.from({ length: 60 }, (_, i) => `channel${i}`);
+
+  it("letter avatars read at 4.5:1 on their own disc in every theme", () => {
+    const failures: string[] = [];
+    for (const skin of CONCRETE_SKINS) {
+      const surface = THEME_TOKENS[skin].surface;
+      for (const name of names) {
+        const letter = readableTagColor(name, skin);
+        const r = contrastRatio(letter, tagDisc(letter, surface));
+        if (r < 4.5) failures.push(`${skin} ${name}: ${r.toFixed(2)}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it("unread numbers (small text on the badge) read at 4.5:1", () => {
+    for (const skin of CONCRETE_SKINS) {
+      const t = THEME_TOKENS[skin];
+      expect(contrastRatio(t["badge-ink"], t.badge), skin).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(t["on-danger"], t.danger), skin).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 

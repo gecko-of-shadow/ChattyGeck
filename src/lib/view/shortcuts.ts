@@ -4,7 +4,9 @@ export type ViewShortcut =
   | { type: "slot"; index: number }
   | { type: "cycle"; direction: 1 | -1 }
   | { type: "move-box"; direction: 1 | -1 }
-  | { type: "escape" };
+  | { type: "escape" }
+  | { type: "read-only" }
+  | { type: "hide-ui" };
 
 export interface ShortcutEvent {
   key: string;
@@ -14,13 +16,16 @@ export interface ShortcutEvent {
   altKey: boolean;
 }
 
-/** Keyboard shortcuts for grid / single view. Ctrl and Cmd are the same. */
+/** Keyboard shortcuts for grid / single view, read only and hiding the top strip. Ctrl and Cmd are the same. */
 export function viewShortcut(event: ShortcutEvent): ViewShortcut | null {
   const mod = event.ctrlKey || event.metaKey;
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
   if (mod && !event.altKey && !event.shiftKey && key === "g") return { type: "toggle-mode" };
   if (mod && !event.altKey && !event.shiftKey && key === "k") return { type: "quick-switch" };
+  // Their top-bar buttons went away in the redesign (Bran's choice: hotkeys, listed in Settings).
+  if (mod && !event.altKey && event.shiftKey && key === "r") return { type: "read-only" };
+  if (mod && !event.altKey && event.shiftKey && key === "h") return { type: "hide-ui" };
   if (mod && !event.altKey && !event.shiftKey && /^[1-9]$/.test(key)) return { type: "slot", index: Number(key) - 1 };
   if (mod && !event.altKey && key === "Tab") return { type: "cycle", direction: event.shiftKey ? -1 : 1 };
   if (!mod && event.altKey && event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {

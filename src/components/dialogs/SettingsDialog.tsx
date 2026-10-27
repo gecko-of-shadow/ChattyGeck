@@ -1142,7 +1142,7 @@ export function SettingsBody({
             </Searchable>
             <Searchable section="Window" id="shortcuts">
               <p className="text-xs leading-relaxed text-muted-foreground">
-                Ctrl+G switches Grid and Single. Ctrl+K finds a channel (Enter opens it, Alt+Enter puts it in the active grid slot). Ctrl+1 through Ctrl+9 jump to a slot. Ctrl+Tab and Ctrl+Shift+Tab move between chats in Single. Alt+Shift+Left and Alt+Shift+Right move a box. Esc returns to the grid. Drag a box header to swap, or drag a sidebar channel onto a box to replace it.
+                Ctrl+G switches Grid and Single. Ctrl+K finds a channel (Enter opens it, Alt+Enter puts it in the active grid slot) or adds a new one. Ctrl+1 through Ctrl+9 jump to a slot. Ctrl+Tab and Ctrl+Shift+Tab move between chats in Single. Alt+Shift+Left and Alt+Shift+Right move a box. Esc returns to the grid. Ctrl+Shift+R turns Read only on and off. Ctrl+Shift+H hides or shows the top strip. Drag a box header to swap, or drag a channel avatar from the top strip onto a box to replace it. Right-click an avatar (or press the Menu key / Shift+F10 on it) for more.
               </p>
             </Searchable>
             <Searchable section="Window" id="confirm-channel">
@@ -1157,7 +1157,7 @@ export function SettingsBody({
               <ToggleRow
                 id="pref-read-only"
                 label="Read only"
-                hint="Hide the message box on every pane so you can watch without accidentally chatting. Toggle from the top bar too."
+                hint="Hide the message box on every pane so you can watch without accidentally chatting. Ctrl+Shift+R also switches it."
                 setting="readOnly"
               />
             </Searchable>

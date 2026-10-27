@@ -28,10 +28,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
-import { channelColor } from "@/lib/colors";
+import { readableTagColor, TAG_TINT } from "@/lib/colors";
 import { openExternal } from "@/lib/platform";
 import { viewForSlots } from "@/lib/gridLayout";
-import { useTheme } from "@/lib/useTheme";
+import { useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
@@ -39,15 +39,17 @@ import { beginChannelDrag } from "./gridDrag";
 
 export function ChannelAvatar({ login, className }: { login: string; className?: string }) {
   const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl);
-  const color = channelColor(login);
+  const skin = useResolvedSkin();
   if (avatarUrl) {
     return <img src={avatarUrl} alt="" className={cn("size-7 shrink-0 rounded-full object-cover", className)} />;
   }
+  // Letter colour is nudged per theme to read at 4.5:1 on its disc (tested in themeContrast.test.ts).
+  const color = readableTagColor(login, skin);
   return (
     <span
       aria-hidden
       className={cn("grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold uppercase", className)}
-      style={{ color, backgroundColor: `color-mix(in oklab, ${color} 18%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 35%, transparent)` }}
+      style={{ color, backgroundColor: `color-mix(in srgb, ${color} ${TAG_TINT * 100}%, var(--zc-surface))` }}
     >
       {login[0]}
     </span>

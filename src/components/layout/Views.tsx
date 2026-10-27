@@ -48,7 +48,7 @@ export function EmptyState() {
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Follow Twitch channels — up to {gridSlots} sit on this grid. Add more to keep watching from the sidebar, then pin
+            Follow Twitch channels — up to {gridSlots} sit on this grid. Add more to keep them in the top strip, then pin
             them here or open one in Single.
           </p>
         </div>
@@ -228,10 +228,37 @@ function ChannelLog({
   );
 }
 
+/** Header of the single view (view 1): the channel, its join status and emote status. */
+function SingleHeader({ login }: { login: string }) {
+  const view = useChat(
+    useShallow((s) => {
+      const channel = s.channels[login];
+      return channel ? { displayName: channel.displayName, status: channel.status } : null;
+    }),
+  );
+  if (!view) return null;
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b-2 border-accent-2 bg-surface px-3" data-testid="single-header">
+      <ChannelAvatar login={login} className="size-6" />
+      <h2 className="truncate text-sm font-semibold">#{view.displayName ?? login}</h2>
+      <span className="truncate text-xs text-muted-foreground">
+        {view.status === "joined" ? "Connected" : view.status === "joining" ? "Joining…" : "Couldn't join"}
+      </span>
+      <span className="flex-1" />
+      <EmoteStatusChip channel={login} />
+    </div>
+  );
+}
+
 export function FocusedView({ login }: { login: string }) {
   const exists = useChat((s) => s.channels[login] != null);
   if (!exists) return null;
-  return <ChannelLog login={login} viewKey={`focused:${login}`} label="Chat messages" />;
+  return (
+    <>
+      <SingleHeader login={login} />
+      <ChannelLog login={login} viewKey={`focused:${login}`} label="Chat messages" />
+    </>
+  );
 }
 
 function RoomIcons({ login }: { login: string }) {
@@ -418,7 +445,7 @@ export function GridView() {
           <h2 className="text-lg font-bold">Nothing on the grid</h2>
           <p className="text-sm text-muted-foreground">
             {following === 0
-              ? "Add a channel from the sidebar to start."
+              ? "Add a channel with the + at the end of the top strip to start."
               : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (this view has ${view} panes) or open one in Single.`}
           </p>
           {parked > 0 ? (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { BookOpen, LayoutGrid, Menu, PanelLeftClose, RotateCw, Settings, WifiOff } from "lucide-react";
+import { BookOpen, LayoutGrid, LoaderCircle, Menu, PanelLeftClose, RotateCw, Settings, Wifi, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
@@ -22,7 +22,7 @@ function useCountdown(targetMs: number | null): number {
   return targetMs === null ? 0 : Math.max(0, Math.ceil((targetMs - now) / 1000));
 }
 
-function ConnectionPill() {
+export function ConnectionPill({ compact = false }: { compact?: boolean }) {
   const read = useChat((s) => s.read);
   const auth = useChat((s) => s.auth);
   const retryAt = read.status === "reconnecting" && read.detail.retryInMs ? read.since + read.detail.retryInMs : null;
@@ -50,6 +50,27 @@ function ConnectionPill() {
     default:
       label = "Connecting…";
       tone = "wait";
+  }
+
+  if (compact) {
+    // Small status icon by the gear; the words are in the tooltip and for screen readers.
+    const Icon = tone === "ok" ? Wifi : tone === "wait" ? LoaderCircle : WifiOff;
+    return (
+      <span
+        role="status"
+        title={read.detail.reason ? `${label} · ${read.detail.reason}` : label}
+        data-testid="connection-status"
+        className={cn(
+          "grid size-8 shrink-0 place-items-center border border-border",
+          tone === "ok" && "text-live",
+          tone === "wait" && "text-warn",
+          tone === "bad" && "text-danger-text",
+        )}
+      >
+        <Icon className={cn("size-4", tone === "wait" && "motion-safe:animate-spin")} aria-hidden />
+        <span className="sr-only">{label}</span>
+      </span>
+    );
   }
 
   return (
