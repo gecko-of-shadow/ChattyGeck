@@ -24,6 +24,8 @@ fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ executablePath: chromePath, headless: true });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 const page = await context.newPage();
+// Fail a broken step in seconds, not Playwright's default 30 s per click.
+page.setDefaultTimeout(10_000);
 context.on("page", (popup) => popup.close());
 const pageErrors = [];
 page.on("pageerror", (err) => pageErrors.push(String(err)));
@@ -41,10 +43,41 @@ async function step(name, fn) {
 }
 const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
 const addChannel = async (name) => {
-  const input = page.getByLabel("Channel name or twitch.tv link").first();
+  let input = page.getByLabel("Channel name or twitch.tv link").first();
+  // Once a channel exists, the add box lives behind the "+" tile at the end of the strip.
+  if (!(await input.isVisible().catch(() => false))) {
+    await page.getByTestId("add-channel-tile").click();
+    input = page.getByLabel("Channel name or twitch.tv link").first();
+  }
   await input.fill(name);
   await input.press("Enter");
 };
+/** A channel's round avatar in the top strip (click = open it alone in view 1). */
+const avatar = (name) => page.locator(`[data-drag-channel="${name}"]`);
+/** View switch: 1 = single, 2/3/4/6/9 = grid. */
+const view = (n) => page.getByTestId(`view-${n}`).click();
+const showInGrid = async (name) => {
+  const show = page.getByRole("button", { name: `Show #${name} in the grid` });
+  if (await show.count()) await show.click();
+};
+/** Opens Settings (gear) at a section unless it is already open there. */
+const openSettings = async (section) => {
+  const panel = page.getByTestId("settings-panel");
+  if (!(await panel.count())) await page.getByTestId("settings-gear").click();
+  await panel.waitFor({ timeout: 3_000 });
+  if (section) {
+    const escaped = section.replace(/[&]/g, "\\$&");
+    await panel.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: new RegExp(`^${escaped}`) }).click();
+  }
+  return panel;
+};
+const closeSettings = async () => {
+  await page.keyboard.press("Escape");
+  await page.getByTestId("settings-panel").waitFor({ state: "detached", timeout: 3_000 });
+};
+/** Logged in and the message box (or its "chat in #x" unlock) is showing instead of the login prompt. */
+const canChat = () =>
+  page.locator("[data-composer], [data-testid='channel-switch-unlock']").first().waitFor({ timeout: 15_000 });
 const mockPost = (p) => fetch(`${mock}${p}`, { method: "POST" });
 const rowsWith = (text) => page.locator(".chat-row", { hasText: text });
 /** Confirm-before-typing hides the box until this click. No-op when that setting is off. */
@@ -83,11 +116,15 @@ await step("reject an invalid channel name", async () => {
 
 await step("join a second channel", async () => {
   await addChannel("lizardlounge");
-  await page.getByRole("button", { name: "Open #lizardlounge" }).waitFor();
+  await avatar("lizardlounge").waitFor();
+  // The add box stays open after a bad name; close it.
+  await page.keyboard.press("Escape");
 });
 
 await step("grid shows each channel in its own box", async () => {
-  await page.getByRole("radio", { name: /grid/i }).click();
+  await view(2);
+  await showInGrid("geckotown");
+  await showInGrid("lizardlounge");
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
   await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 20_000 });
   // Log panes must have real height — zero-height absolute ChatLog looks like "composer only".
@@ -97,48 +134,45 @@ await step("grid shows each channel in its own box", async () => {
 });
 
 await step("grid still shows messages after visiting focused view", async () => {
-  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await avatar("geckotown").click();
   await page.getByLabel("Chat messages").locator(".chat-row").first().waitFor({ timeout: 10_000 });
-  await page.getByRole("radio", { name: /grid/i }).click();
+  await view(2);
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
   await page.getByRole("region", { name: "#lizardlounge chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
 });
 
 await step("off-grid channel counts unread while the grid is showing", async () => {
-  await page.getByRole("radio", { name: /grid/i }).click();
+  await view(2);
   const box = page.getByRole("region", { name: "#geckotown chat" });
   await box.getByRole("button", { name: "Options for #geckotown" }).click();
   await page.getByRole("menuitem", { name: "Hide from grid" }).click();
   await mockPost("/__burst?channel=geckotown&n=2");
-  const nav = page.getByRole("navigation", { name: "Channels" });
-  const item = nav.locator(".group", { has: page.getByRole("button", { name: "Open #geckotown" }) });
-  await item.locator('[title$="unread"]').waitFor({ timeout: 5_000 });
-  await nav.getByRole("button", { name: "Options for #geckotown" }).click();
-  await page.getByRole("menuitem", { name: "Show in grid" }).click();
+  await page.locator('[data-drag-channel="geckotown"][aria-label*="unread"]').waitFor({ timeout: 5_000 });
+  await showInGrid("geckotown");
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
 });
 
 await step("focused view counts unread on other channels", async () => {
-  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await avatar("geckotown").click();
   await mockPost("/__burst?channel=lizardlounge&n=3");
-  await page.locator('[title$="unread"]').first().waitFor({ timeout: 5_000 });
+  await page.locator('[data-drag-channel="lizardlounge"][aria-label*="unread"]').waitFor({ timeout: 5_000 });
   await shot("03-focused-unread");
 });
 
 await step("returning to a channel marks where you left off", async () => {
-  await page.getByRole("button", { name: "Open #lizardlounge" }).click();
+  await avatar("lizardlounge").click();
   await mockPost("/__burst?channel=geckotown&n=3");
   await page.waitForTimeout(1_000);
-  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await avatar("geckotown").click();
   await page.getByText("New since you left").waitFor({ timeout: 3_000 });
 });
 
 await step("device-code login", async () => {
-  await page.getByRole("button", { name: /^Log in$/ }).click();
+  await page.getByRole("button", { name: "Log in with Twitch" }).first().click();
   await page.getByRole("button", { name: "Get a login code" }).click();
   await page.getByText("GECKO123").waitFor({ timeout: 5_000 });
   await shot("04-login-code");
-  await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
+  await canChat();
 });
 
 await step("channel switch blocks send until unlock", async () => {
@@ -278,27 +312,15 @@ await step("spell check underlines misspellings and skips emotes", async () => {
   await input.fill("");
 });
 
-await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => {
+await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and strip replace", async () => {
   const backToGecko = async () => {
     await page.keyboard.press("Escape").catch(() => {});
-    const nav = page.getByRole("navigation", { name: "Channels" });
-    for (const name of ["lizardlounge", "geckotown"]) {
-      const options = nav.getByRole("button", { name: `Options for #${name}` });
-      if (!(await options.count())) continue;
-      await options.click();
-      // count() doesn't wait: an Escape sent before the menu mounts leaves it open over everything after.
-      const menu = page.getByRole("menu");
-      await menu.waitFor({ timeout: 3_000 });
-      const show = menu.getByRole("menuitem", { name: "Show in grid" });
-      if (await show.count()) await show.click();
-      else await page.keyboard.press("Escape");
-      await menu.waitFor({ state: "hidden", timeout: 3_000 });
-    }
-    await page.getByRole("button", { name: "Open #geckotown" }).click();
+    for (const name of ["lizardlounge", "geckotown"]) await showInGrid(name);
+    await avatar("geckotown").click();
     await page.getByLabel("Chat messages").waitFor({ timeout: 5_000 });
   };
   try {
-  await page.getByRole("radio", { name: /grid/i }).click();
+  await view(2);
   const orderOf = () =>
     page.locator("[data-grid-channel]").evaluateAll((els) => els.map((el) => el.getAttribute("data-grid-channel")));
   const before = await orderOf();
@@ -326,12 +348,15 @@ await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => 
     throw new Error(`drag did not swap: before ${before.join(",")} after ${swapped.join(",")} live "${live}"`);
   }
 
-  const firstBox = page.locator(`[data-grid-channel="${swapped[0]}"]`);
-  const firstUnlock = firstBox.getByTestId("channel-switch-unlock");
-  if (await firstUnlock.count()) await firstUnlock.click();
+  // One shared message box: Ctrl+1 makes the first pane the focused one and puts the caret in the box
+  // (or on its "chat in #x" button while Confirm channel before typing is on).
   await page.keyboard.press("Control+1");
-  const active = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
-  if (active !== `Message #${swapped[0]}`) throw new Error(`Ctrl+1 focused ${active}`);
+  await page.waitForTimeout(200);
+  const active = await page.evaluate(() => {
+    const el = document.activeElement;
+    return el?.getAttribute("data-composer") ?? el?.textContent?.trim() ?? null;
+  });
+  if (active !== swapped[0] && active !== `chat in #${swapped[0]}`) throw new Error(`Ctrl+1 focused ${active}`);
 
   await page.keyboard.press("Control+k");
   const quick = page.getByTestId("quick-switch");
@@ -345,20 +370,24 @@ await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and sidebar replace", async () => 
 
   await page.getByRole("region", { name: "#lizardlounge chat" }).getByRole("button", { name: "Options for #lizardlounge" }).click();
   await page.getByRole("menuitem", { name: "Hide from grid" }).click();
-  const side = page.getByRole("button", { name: "Open #lizardlounge" });
-  const sideBox = await side.boundingBox();
+  await page.getByRole("menu").waitFor({ state: "hidden", timeout: 3_000 });
+  await page.waitForTimeout(200);
+  const sideBox = await avatar("lizardlounge").boundingBox();
   const host = page.locator("[data-grid-channel]").first();
   const hostName = await host.getAttribute("data-grid-channel");
   const hostHeader = page.getByTestId(`grid-header-${hostName}`);
   const hostBox = await hostHeader.boundingBox();
-  if (!sideBox || !hostBox || !hostName) throw new Error("missing sidebar drag target");
+  if (!sideBox || !hostBox || !hostName) throw new Error("missing strip drag target");
   await page.mouse.move(sideBox.x + sideBox.width / 2, sideBox.y + sideBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(hostBox.x + hostBox.width / 2, hostBox.y + hostBox.height / 2, { steps: 20 });
   await page.mouse.up();
   await page.waitForTimeout(300);
   const afterDrop = await orderOf();
-  if (!afterDrop.includes("lizardlounge")) throw new Error(`sidebar drop missed: ${afterDrop.join(",")}`);
+  if (!afterDrop.includes("lizardlounge")) {
+    const mode = await page.evaluate(() => JSON.parse(localStorage.getItem("zoochattr.settings") || "{}").mode);
+    throw new Error(`strip drop missed: ${afterDrop.join(",")} (mode ${mode}, from ${JSON.stringify(sideBox)} to ${hostName} ${JSON.stringify(hostBox)})`);
+  }
   } finally {
     await backToGecko();
   }
@@ -369,6 +398,7 @@ await step("emote menu inserts emotes and remembers favourites", async () => {
   await page.getByTestId("emote-picker-button").first().click();
   const picker = page.getByTestId("emote-picker");
   await picker.waitFor({ timeout: 3_000 });
+  await picker.getByRole("tab", { name: "Channel" }).click();
   await picker.locator('[data-emote-tile="geckoWave"]').waitFor({ timeout: 5_000 });
   await shot("05d-emote-menu");
   await picker.getByLabel("Search emotes").fill("catJ");
@@ -378,8 +408,10 @@ await step("emote menu inserts emotes and remembers favourites", async () => {
   await input.fill("");
   await page.getByTestId("emote-picker-button").first().click();
   await picker.waitFor({ timeout: 3_000 });
+  await picker.getByLabel("Search emotes").fill("peepo");
   await picker.locator('[data-emote-tile="peepoHappy"]').click({ button: "right" });
-  await picker.getByRole("tab", { name: "★" }).click();
+  await picker.getByLabel("Search emotes").fill("");
+  await picker.getByRole("tab", { name: "Favourites" }).click();
   await picker.locator('[data-emote-tile="peepoHappy"]').waitFor({ timeout: 3_000 });
   if (await picker.locator('[data-emote-tile="catJAM"]').count()) throw new Error("non-favourite shown on the favourites tab");
   await shot("05e-favourites");
@@ -395,23 +427,23 @@ await step("deleted messages stay readable, faded and crossed out", async () => 
 });
 
 await step("highlight words count as mentions", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Chat & mentions");
   const box = page.locator("#pref-highlight");
   await box.fill("giveaway");
   await box.press("Control+Enter");
-  await page.keyboard.press("Escape");
+  await closeSettings();
   await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("big GIVEAWAY tonight folks"));
   await page.locator('.chat-row[data-mention="true"]', { hasText: "GIVEAWAY tonight" }).waitFor({ timeout: 8_000 });
 });
 
 await step("mention sound chimes once per cooldown for any open chat", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Chat & mentions");
   await page.locator('label[for="pref-mention-sound"]').click();
   const cooldown = page.getByLabel("Mention sound cooldown in seconds");
   await cooldown.fill("1");
   await cooldown.press("Enter");
   await page.getByRole("button", { name: "Play mention sound" }).click();
-  await page.keyboard.press("Escape");
+  await closeSettings();
   const chimes = () => page.evaluate(() => window.__zoochattrStats().mentionChimes);
   const afterPreview = await chimes();
   if (afterPreview < 1) throw new Error("Play did not start a chime");
@@ -432,40 +464,50 @@ await step("mention sound chimes once per cooldown for any open chat", async () 
 });
 
 await step("text size, emote size and sources apply straight away", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Appearance");
   await page.getByRole("radio", { name: "Huge" }).click();
+  await openSettings("Emotes");
   await page.getByRole("radio", { name: "2×" }).click();
   const vars = await page.evaluate(() => {
     const el = document.querySelector(".chat-log");
     return [el?.style.getPropertyValue("--chat-font"), el?.style.getPropertyValue("--emote-scale")];
   });
   if (vars[0] !== "20px" || vars[1] !== "2") throw new Error(`css vars are ${JSON.stringify(vars)}`);
+  await openSettings("Appearance");
   const px = page.getByLabel("Text size in pixels");
   await px.fill("16");
   await px.press("Enter");
   const font = await page.evaluate(() => document.querySelector(".chat-log")?.style.getPropertyValue("--chat-font"));
   if (font !== "16px") throw new Error(`custom px gave ${font}`);
+  await openSettings("Emotes");
   await shot("06b-settings-emotes");
   await page.locator('label[for="pref-provider-7tv"]').click();
-  await page.keyboard.press("Escape");
+  await closeSettings();
   const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
   await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
   await row.getByText("geckoWave peepoHappy").waitFor({ timeout: 5_000 });
   await row.locator('img[alt="LilZ"]').waitFor({ timeout: 2_000 });
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Emotes");
   await page.locator('label[for="pref-provider-7tv"]').click();
-  await page.getByRole("radio", { name: "Medium" }).click();
   await page.getByRole("radio", { name: "1×" }).click();
-  await page.keyboard.press("Escape");
+  await openSettings("Appearance");
+  await page.getByRole("radio", { name: "Medium" }).click();
+  await closeSettings();
   await row.locator('img[alt="geckoWave"]').waitFor({ timeout: 5_000 });
 });
 
 await step("settings back up, reset and restore", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Appearance");
   const px = page.getByLabel("Text size in pixels");
+  const pxIs = (value) =>
+    page.waitForFunction((v) => {
+      const el = document.querySelector('[aria-label="Text size in pixels"]');
+      return el instanceof HTMLInputElement && el.value === v;
+    }, value, { timeout: 3_000 });
   await px.fill("17");
   await px.press("Enter");
   await px.blur();
+  await openSettings("About & data");
   const downloading = page.waitForEvent("download", { timeout: 5_000 });
   await page.getByRole("button", { name: "Back up" }).click();
   const file = await (await downloading).path();
@@ -477,37 +519,34 @@ await step("settings back up, reset and restore", async () => {
   await page.getByRole("button", { name: "Really reset?", exact: true }).waitFor({ timeout: 3_000 });
   await reset.click();
   await page.getByText("Settings reset").waitFor({ timeout: 3_000 });
-  await page.waitForFunction(() => {
-    const el = document.querySelector('[aria-label="Text size in pixels"]');
-    return el instanceof HTMLInputElement && el.value === "13.5";
-  }, { timeout: 3_000 });
+  await openSettings("Appearance");
+  await pxIs("13.5");
+  await openSettings("About & data");
   await page.locator('input[type="file"]').setInputFiles(file);
   await page.getByText("Settings restored").waitFor({ timeout: 3_000 });
-  await page.waitForFunction(() => {
-    const el = document.querySelector('[aria-label="Text size in pixels"]');
-    return el instanceof HTMLInputElement && el.value === "17";
-  }, { timeout: 3_000 });
+  await openSettings("Appearance");
+  await pxIs("17");
   await px.fill("13.5");
   await px.press("Enter");
   await px.blur();
-  await page.keyboard.press("Escape");
+  await closeSettings();
 });
 
 await step("per-channel overrides turn a source off in one channel only", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  const panel = await openSettings("Per channel");
   await page.getByLabel("Channel for feature overrides").fill("geckotown");
-  await page.getByRole("button", { name: "Add" }).click();
+  await panel.getByRole("button", { name: "Add", exact: true }).click();
   await page.getByTestId("channel-override-geckotown").waitFor({ timeout: 3_000 });
   await page.locator('label[for="override-geckotown-7tv"]').click();
-  await page.keyboard.press("Escape");
+  await closeSettings();
   const row = page.locator(".chat-row", { has: page.locator('img[alt="LilZ"]') }).last();
   await row.locator('img[alt="geckoWave"]').waitFor({ state: "detached", timeout: 5_000 });
   await row.getByText("geckoWave").waitFor({ timeout: 5_000 });
   await row.locator('img[alt="LilZ"]').waitFor({ timeout: 2_000 });
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Per channel");
   await page.locator('label[for="override-geckotown-7tv"]').click();
-  await page.getByRole("button", { name: "Remove" }).click();
-  await page.keyboard.press("Escape");
+  await page.getByTestId("channel-override-geckotown").getByRole("button", { name: "Remove" }).click();
+  await closeSettings();
   await row.locator('img[alt="geckoWave"]').waitFor({ timeout: 5_000 });
 });
 
@@ -517,14 +556,14 @@ await step("Problems lists a failed emote download", async () => {
   await page.getByRole("button", { name: "Reload emotes" }).click();
   await page.waitForTimeout(1_000);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Emotes");
   const list = page.getByTestId("problems-list");
   await list.waitFor({ timeout: 5_000 });
   await list.getByText(/7TV/).first().waitFor({ timeout: 3_000 });
   await shot("06c-problems");
   await page.getByRole("button", { name: "Clear the list" }).click();
   await page.getByText("No problems so far.").waitFor({ timeout: 3_000 });
-  await page.keyboard.press("Escape");
+  await closeSettings();
   await mockPost("/__unfail-emotes");
   await page.getByRole("button", { name: "Emotes in #geckotown" }).first().click();
   await page.getByRole("button", { name: "Reload emotes" }).click();
@@ -541,7 +580,8 @@ await step("scrolling up pauses the feed; the toe-pad button sticks back to live
   const box = await log.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -600);
-  const pill = page.getByRole("button", { name: /Stick to live chat/ });
+  // Plain "Back to live chat" on Crested; the gecko-flavoured "Stick to live chat" on other themes.
+  const pill = page.getByRole("button", { name: /(Stick|Back) to live chat/ });
   await pill.waitFor({ timeout: 5_000 });
   await page.waitForTimeout(3_000);
   await shot("05a-paused");
@@ -549,18 +589,19 @@ await step("scrolling up pauses the feed; the toe-pad button sticks back to live
   await pill.waitFor({ state: "detached", timeout: 3_000 });
 });
 
-await step("grid boxes each have their own message input", async () => {
-  await page.getByRole("radio", { name: /grid/i }).click();
+await step("the shared message box sends to the focused grid pane", async () => {
+  await view(2);
   const box = page.getByRole("region", { name: "#lizardlounge chat" });
-  // Multi view uses the same channel-switch confirm as focused — unlock this pane first.
-  const unlock = box.getByTestId("channel-switch-unlock");
+  // Clicking a pane makes it the focused one; the box then asks to confirm the new channel.
+  await page.getByTestId("grid-header-lizardlounge").click();
+  const unlock = page.getByTestId("channel-switch-unlock");
   await unlock.waitFor({ timeout: 5_000 });
   if ((await unlock.innerText()).trim() !== "chat in #lizardlounge") {
     throw new Error(`grid unlock text: "${await unlock.innerText()}"`);
   }
   await shot("05b-grid-channel-ack");
   await unlock.click();
-  const input = box.getByLabel("Message #lizardlounge");
+  const input = page.getByLabel("Message #lizardlounge");
   await input.fill("hello from the lizardlounge box");
   await input.press("Enter");
   await box.locator(".chat-row", { hasText: "hello from the lizardlounge box" }).first().waitFor({ timeout: 8_000 });
@@ -569,15 +610,15 @@ await step("grid boxes each have their own message input", async () => {
     .locator(".chat-row", { hasText: "hello from the lizardlounge box" })
     .count();
   if (elsewhere) throw new Error("message showed up in the wrong box");
-  // The other pane stays locked until confirmed.
-  await page.getByRole("region", { name: "#geckotown chat" }).getByTestId("channel-switch-ack").waitFor({ timeout: 3_000 });
+  // Switching to the other pane locks the box again until confirmed.
+  await page.getByTestId("grid-header-geckotown").click();
+  await page.getByTestId("channel-switch-ack").waitFor({ timeout: 3_000 });
   await shot("05b-grid-send");
 });
 
 await step("grid Tab-complete list stays visible (not clipped by the box)", async () => {
-  const box = page.getByRole("region", { name: "#geckotown chat" });
-  await box.getByTestId("channel-switch-unlock").click();
-  const input = box.getByLabel("Message #geckotown");
+  await page.getByTestId("channel-switch-unlock").click();
+  const input = page.getByLabel("Message #geckotown");
   await input.fill("geck");
   await input.press("Tab");
   const list = page.getByTestId("tab-complete");
@@ -587,18 +628,18 @@ await step("grid Tab-complete list stays visible (not clipped by the box)", asyn
   await list.locator("img").first().waitFor({ state: "visible", timeout: 3_000 });
   await shot("05b2-grid-tab-complete");
   await input.fill("");
-  await page.getByRole("radio", { name: /focused/i }).click();
+  await view(1);
 });
 
 await step("history server fills in chat said while ZooChattr was closed, once each", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings();
   await page.getByTestId("settings-search").fill("History server");
   await page.getByLabel("History server address").fill(mock);
   await page.getByLabel("History server read token").fill("mock-read-token");
   await page.getByTestId("history-server-save").click();
   await page.getByTestId("history-server-status").filter({ hasText: "Connected" }).waitFor({ timeout: 5_000 });
   await shot("06d-history-server");
-  await page.keyboard.press("Escape");
+  await closeSettings();
 
   // Heard live and saved here, and by the history server too: it must not come back twice.
   await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("said before the restart"));
@@ -612,7 +653,7 @@ await step("history server fills in chat said while ZooChattr was closed, once e
   // Only the history server has these.
   await mockPost("/__history?channel=geckotown&n=3&text=" + encodeURIComponent("missed while closed"));
   await page.reload();
-  await page.getByRole("button", { name: "Open #geckotown" }).click();
+  await avatar("geckotown").click();
   await rowsWith("missed while closed 3").first().waitFor({ timeout: 15_000 });
   await page.getByText("Filled in 3 messages from your history server.").waitFor({ timeout: 3_000 });
   for (const text of ["missed while closed 1", "missed while closed 2", "missed while closed 3", "said before the restart"]) {
@@ -624,8 +665,8 @@ await step("history server fills in chat said while ZooChattr was closed, once e
 
 await step("channels, view and login survive a reload", async () => {
   await page.reload();
-  await page.getByRole("button", { name: "Open #lizardlounge" }).waitFor({ timeout: 10_000 });
-  await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
+  await avatar("lizardlounge").waitFor({ timeout: 10_000 });
+  await canChat();
 });
 
 await step("reconnects after the connection drops", async () => {
@@ -640,7 +681,7 @@ await step("refreshes an expired token and keeps chatting", async () => {
   await mockPost("/__expire");
   await mockPost("/__drop");
   await page.getByText("Reconnected.").nth(1).waitFor({ timeout: 25_000 });
-  await page.getByText("Logged in · can chat").waitFor({ timeout: 15_000 });
+  await canChat();
   // Reload cleared the in-memory send ack — confirm the target again before typing.
   const unlock = page.getByTestId("channel-switch-unlock");
   if (await unlock.count()) await unlock.click();
@@ -651,7 +692,7 @@ await step("refreshes an expired token and keeps chatting", async () => {
 });
 
 await step("animal themes", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Appearance");
   for (const [name, id] of [
     ["Penguin", "penguin"],
     ["Sea turtle", "turtle"],
@@ -663,11 +704,11 @@ await step("animal themes", async () => {
     await shot(`07-theme-${id}`);
   }
   await page.getByRole("button", { name: /Crested gecko/ }).click();
-  await page.keyboard.press("Escape");
+  await closeSettings();
 });
 
 await step("appearance themes", async () => {
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings("Appearance");
   const search = page.getByTestId("settings-search");
   await search.fill("Light");
   await page.getByRole("button", { name: /^Light/ }).click();
@@ -688,50 +729,48 @@ await step("appearance themes", async () => {
 
   await search.fill("");
   await page.getByRole("button", { name: /Crested gecko/ }).click();
-  await page.keyboard.press("Escape");
+  await closeSettings();
 });
 
-await step("read only hides composers", async () => {
-  const headerToggle = page.getByTestId("read-only-toggle").first();
-  await headerToggle.click();
-  await page.waitForFunction(
-    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "true",
-    null,
-    { timeout: 3_000 },
-  );
+await step("read only hides the message box (Ctrl+Shift+R and Settings)", async () => {
+  const boxShown = () => page.locator('input[placeholder*=" to #"]').or(page.getByTestId("channel-switch-unlock")).first();
+  await boxShown().waitFor({ timeout: 5_000 });
+  await page.keyboard.press("Control+Shift+R");
+  await page.getByTestId("composer").waitFor({ state: "detached", timeout: 3_000 });
   if (await page.getByTestId("channel-switch-ack").count()) {
     throw new Error("channel confirm still visible in read only");
   }
   if (await page.locator('input[placeholder*=" to #"]').count()) {
     throw new Error("composer still visible in read only");
   }
-  await page.getByRole("button", { name: "Settings" }).first().click();
+  await openSettings();
   await page.getByTestId("settings-search").fill("Read only");
   await page.locator("#pref-read-only").waitFor({ timeout: 3_000 });
+  const readOnlySwitch = page.getByRole("switch", { name: /^Read only/ });
+  if ((await readOnlySwitch.getAttribute("aria-checked")) !== "true") {
+    throw new Error("Settings row doesn't show read only as on");
+  }
   await page.locator('label[for="pref-read-only"]').click();
-  await page.keyboard.press("Escape");
-  await page.locator('input[placeholder*=" to #"]').or(page.getByTestId("channel-switch-unlock")).first().waitFor({
-    timeout: 5_000,
-  });
-  await page.waitForFunction(
-    () => document.querySelector('[data-testid="read-only-toggle"]')?.getAttribute("aria-pressed") === "false",
-    null,
-    { timeout: 3_000 },
-  );
+  await page.getByTestId("settings-search").fill("");
+  await closeSettings();
+  await boxShown().waitFor({ timeout: 5_000 });
   await shot("07-read-only-off");
 });
 
 await step("log out falls back to anonymous reading", async () => {
-  await page.getByRole("button", { name: "Log out" }).first().click();
-  await page.getByText("Anonymous lurker").waitFor({ timeout: 5_000 });
+  await openSettings("Account & history");
+  await page.getByRole("button", { name: "Log out" }).click();
+  await page.getByText("Not logged in").waitFor({ timeout: 5_000 });
+  await closeSettings();
   await page.getByText("You're reading anonymously").waitFor({ timeout: 5_000 });
 });
 
-await step("small window layout uses a channel drawer", async () => {
+await step("small window: the strip still reaches every channel", async () => {
   await page.setViewportSize({ width: 420, height: 760 });
-  await page.getByRole("button", { name: "Open channel list" }).click();
-  await page.getByRole("button", { name: "Open #lizardlounge" }).last().click();
+  await avatar("lizardlounge").click();
   await page.getByText("#Lizardlounge").first().waitFor({ timeout: 5_000 });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (overflow > 0) throw new Error(`page scrolls sideways by ${overflow}px`);
   await shot("08-small-window");
 });
 
