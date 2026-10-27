@@ -117,7 +117,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "mention-sound",
         label: "Mention sound",
-        hint: "A short chime when your name, a reply to you, or a highlight word shows up in any open chat. Cooldown.",
+        hint: "A short chime when your name, a reply to you, or a highlight word shows up in any open chat. When on: cooldown and a Play preview.",
       },
       {
         id: "confirm-channel",
@@ -132,7 +132,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "spell",
         label: "Spell check",
-        hint: "Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off. Language dictionary.",
+        hint: "Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off. When on: language and your dictionary.",
         choices: ["English (US)"],
       },
     ],

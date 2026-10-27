@@ -114,7 +114,7 @@ function AvatarMenu({
 }
 
 /**
- * One channel in the strip (added in the app, followed on Twitch, or both): round avatar, teal ring when in the grid,
+ * One channel in the strip (added in the app, followed on Twitch, or both): round avatar, teal ring when on screen,
  * +/− badge, mention or unread count, green dot while live.
  */
 // Memoized and fed by the strip (which knows joined / in-grid from one Set each), so a chat flush only redraws the
@@ -148,6 +148,8 @@ const StripAvatar = memo(function StripAvatar({
   const followName = useChat((s) => s.follows[login]?.displayName);
   const followed = followName !== undefined;
   const active = useChat((s) => s.settings.mode === "focused" && s.settings.focused === login);
+  // The teal ring marks what's on screen: the panes in a grid view, the one channel in view 1 (as view1.png, Bran's choice).
+  const ringed = useChat((s) => (s.settings.mode === "focused" ? s.settings.focused === login : onGrid));
   // undefined: offline; null: not known (logged out, no dots).
   const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
   if (!view && !followed) return null;
@@ -179,8 +181,8 @@ const StripAvatar = memo(function StripAvatar({
             title={`${label}\nClick: open alone · Right-click: more · Drag onto a pane to put it there`}
             className={cn(
               "block rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-surface",
-              // In-grid ring as an outline: separate from the focus ring (gap between them) and kept by Windows contrast themes.
-              onGrid && "outline-2 outline-offset-1 outline-solid outline-accent-2",
+              // On-screen ring as an outline: separate from the focus ring (gap between them) and kept by Windows contrast themes.
+              ringed && "outline-2 outline-offset-1 outline-solid outline-accent-2",
             )}
           >
             <ChannelAvatar

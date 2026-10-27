@@ -18,6 +18,8 @@
     "allow-session-save",
     "allow-session-clear",
     "allow-history-token-load",
+    "allow-history-token-save",
+    "allow-history-token-saved",
     "allow-auth-display",
     "allow-set-close-to-tray",
     "allow-set-tray-status",

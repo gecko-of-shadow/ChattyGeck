@@ -187,7 +187,7 @@ function SpellCheckRows() {
       <ToggleRow
         id="pref-spell"
         label="Spell check"
-        hint="Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off."
+        hint="Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off. When on: language and your dictionary."
         setting="spellCheck"
       />
       {enabled ? (
@@ -227,7 +227,7 @@ function MentionSoundRow() {
       <ToggleRow
         id="pref-mention-sound"
         label="Mention sound"
-        hint="A short chime when your name, a reply to you, or a highlight word shows up in any open chat."
+        hint="A short chime when your name, a reply to you, or a highlight word shows up in any open chat. When on: cooldown and a Play preview."
         setting="mentionSound"
       />
       {enabled ? (
@@ -481,7 +481,7 @@ function HistoryServerField() {
       setAddress(server);
       if (server !== saved) chat.updateSettings({ historyServer: server });
       if (!server) setStatus({ error: false, text: "History server off." });
-      // The saved token can't be read back here, so only a freshly pasted one is tried.
+      // Only a freshly pasted token is tested; a saved one is never shown or sent anywhere but the history server at startup.
       else if (!typed) setStatus({ error: false, text: "Saved. Missed chat fills in each time ZooChattr starts." });
       else setStatus(describeCheck(await checkHistoryServer(server, typed, firstChannel ?? "zoochattr"), firstChannel));
     } catch (err) {
