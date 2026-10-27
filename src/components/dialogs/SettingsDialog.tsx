@@ -31,7 +31,7 @@ import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
 import { historyTokenSaved, isTauri, openExternal, saveHistoryToken } from "@/lib/platform";
 import { SETTINGS_SEARCH_CATALOG, settingsSearchHelpers, type SettingsSearchHelpers } from "@/lib/settingsSearch";
-import { applyUpdate, fetchLatestRelease, isNewerVersion, type UpdateInfo } from "@/lib/updates";
+import { applyUpdate, fetchLatestRelease, isNewerVersion, updateErrorText, type UpdateInfo } from "@/lib/updates";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -906,7 +906,8 @@ function UpdateRow() {
       }
       await applyUpdate(latest.downloadUrl);
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Couldn't install the update.");
+      // Includes "This update didn't pass its safety check. Nothing was changed." (Releases button is right here).
+      setStatus(updateErrorText(err));
       setBusy(null);
     }
   };
@@ -949,6 +950,7 @@ function UpdateRow() {
           <p className="text-[11px] text-muted-foreground">
             {autoCheck ? "Auto-check is on. " : "Auto-check is off — use Check now anytime. "}
             Updates replace only ZooChattr.exe. Your <code className="font-mono">ZooChattr-data</code> folder (channels, chat history, settings) stays put.
+            An update installs only from ZooChattr's GitHub releases, and only when its fingerprint (SHA-256) matches.
           </p>
         </div>
       </Searchable>

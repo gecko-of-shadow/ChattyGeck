@@ -253,8 +253,12 @@ fn check_for_update() -> Result<Option<update::UpdateInfo>, String> {
 }
 
 /// Downloads the portable zip, swaps only the exe (ZooChattr-data stays), then restarts.
+/// Only a ZooChattr-portable zip from this repo's GitHub releases whose SHA-256 matches its published fingerprint.
 #[tauri::command]
 fn apply_update(app: AppHandle, download_url: String) -> Result<(), String> {
+    if update::trusted_release_zip(&download_url).is_none() {
+        return Err(update::SAFETY_CHECK_FAILED.to_string());
+    }
     update::apply_update(&download_url)?;
     // Helper script waits for this process to exit, then launches the new exe.
     app.exit(0);

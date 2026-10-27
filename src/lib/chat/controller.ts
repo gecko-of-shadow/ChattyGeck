@@ -18,7 +18,7 @@ import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify"
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
-import { applyUpdate, fetchLatestRelease, isNewerVersion } from "@/lib/updates";
+import { fetchLatestRelease, installUpdate, isNewerVersion } from "@/lib/updates";
 import { refreshSession, revokeToken, validateToken, type Session } from "@/lib/twitch/auth";
 import {
   HelixUnauthorizedError,
@@ -1608,11 +1608,7 @@ class ChatController {
         duration: 20_000,
         action: {
           label: "Install",
-          onClick: () => {
-            void applyUpdate(info.downloadUrl).catch((err) => {
-              toast.error("Couldn't install the update", { description: errorText(err) });
-            });
-          },
+          onClick: () => installUpdate(info.downloadUrl),
         },
       });
     } catch {
@@ -1641,11 +1637,7 @@ class ChatController {
         duration: 20_000,
         action: {
           label: "Install",
-          onClick: () => {
-            void applyUpdate(info.downloadUrl).catch((err) => {
-              toast.error("Couldn't install the update", { description: errorText(err) });
-            });
-          },
+          onClick: () => installUpdate(info.downloadUrl),
         },
       });
     } catch (err) {

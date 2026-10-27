@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { PanelLeftOpen } from "lucide-react";
-import { toast } from "sonner";
 import { Composer, LoginPrompt } from "@/components/chat/Composer";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
@@ -17,7 +16,7 @@ import { chat } from "@/lib/chat/controller";
 import { setTrayStatus } from "@/lib/platform";
 import { applySkinToDocument } from "@/lib/themes";
 import { useRememberThemeForBoot, useResolvedSkin, useTheme } from "@/lib/useTheme";
-import { applyUpdate } from "@/lib/updates";
+import { installUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
 
@@ -135,11 +134,7 @@ export default function App() {
         await listen<{ downloadUrl?: string }>("install-update-requested", (event) => {
           const downloadUrl = event.payload?.downloadUrl;
           if (!downloadUrl) return;
-          void applyUpdate(downloadUrl).catch((err) => {
-            toast.error("Couldn't install the update", {
-              description: err instanceof Error ? err.message : String(err),
-            });
-          });
+          installUpdate(downloadUrl);
         }),
       );
       // Tray "Settings…" — Rust shows the main window, we open the Settings panel in it.

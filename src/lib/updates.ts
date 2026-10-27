@@ -1,4 +1,27 @@
-import { isTauri } from "./platform";
+import { toast } from "sonner";
+import { isTauri, openExternal } from "./platform";
+
+export const RELEASES_URL = "https://github.com/gecko-of-shadow/ZooChattr/releases";
+/** Same text as SAFETY_CHECK_FAILED in src-tauri/src/update.rs. */
+export const SAFETY_CHECK_FAILED = "This update didn't pass its safety check. Nothing was changed.";
+
+/**
+ * Same rule as trusted_release_zip in src-tauri/src/update.rs (Rust checks again before installing): only a
+ * ZooChattr-portable zip in this repo's GitHub releases.
+ */
+export function isTrustedReleaseUrl(url: string): boolean {
+  const match = /^https:\/\/github\.com\/gecko-of-shadow\/ZooChattr\/releases\/download\/([A-Za-z0-9._+-]+)\/(ZooChattr-portable-[A-Za-z0-9._+-]+\.zip)$/.exec(url);
+  if (!match) return false;
+  const [, tag, name] = match;
+  return tag !== "." && tag !== ".." && name !== "ZooChattr-portable-.zip";
+}
+
+/** Rust sends errors as plain strings; show the real reason either way. */
+export function updateErrorText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string" && err.trim()) return err;
+  return "Couldn't install the update.";
+}
 
 export interface UpdateInfo {
   /** Latest release tag, e.g. "v0.4.0". */
@@ -66,8 +89,20 @@ export async function fetchLatestRelease(): Promise<UpdateInfo | null> {
 /** Downloads the portable zip and swaps in the new exe, keeping ZooChattr-data. Restarts the app. */
 export async function applyUpdate(downloadUrl: string): Promise<void> {
   if (!isTauri) throw new Error("Updates only install from the desktop app.");
+  if (!isTrustedReleaseUrl(downloadUrl)) throw new Error(SAFETY_CHECK_FAILED);
   const { chat } = await import("@/lib/chat/controller");
   await chat.flushSavedHistory();
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("apply_update", { downloadUrl });
+}
+
+/** Install from a toast or event: on failure, say why and offer the Releases page for a manual download. */
+export function installUpdate(downloadUrl: string): void {
+  void applyUpdate(downloadUrl).catch((err) => {
+    toast.error("Couldn't install the update", {
+      description: updateErrorText(err),
+      duration: 20_000,
+      action: { label: "Releases", onClick: () => void openExternal(RELEASES_URL) },
+    });
+  });
 }
