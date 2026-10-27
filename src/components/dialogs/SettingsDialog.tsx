@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindow,
   Check,
@@ -9,15 +9,16 @@ import {
   Palette,
   RefreshCw,
   RotateCcw,
+  Search,
   Smile,
   TriangleAlert,
   Type,
   Upload,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Mascot } from "@/components/mascots/Mascot";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -29,13 +30,13 @@ import { problemLog, type EmoteProblem } from "@/lib/emotes/problems";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
 import { historyTokenSaved, isTauri, openExternal, saveHistoryToken } from "@/lib/platform";
-import { settingsSearchHelpers, type SettingsSearchHelpers } from "@/lib/settingsSearch";
+import { SETTINGS_SEARCH_CATALOG, settingsSearchHelpers, type SettingsSearchHelpers } from "@/lib/settingsSearch";
 import { applyUpdate, fetchLatestRelease, isNewerVersion, type UpdateInfo } from "@/lib/updates";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { ViewSwitch } from "@/components/layout/ViewSwitch";
-import { SKIN_ORDER, THEMES } from "@/lib/themes";
+import { CONCRETE_SKINS, SKIN_ORDER, THEMES, type ConcreteSkin, type Skin } from "@/lib/themes";
 import { useTheme } from "@/lib/useTheme";
 import {
   CHANNEL_FEATURES,
@@ -66,17 +67,43 @@ function useSettingsSearch(): SettingsSearchHelpers {
   return useContext(SettingsSearchContext);
 }
 
+/** False when one section shows on its own (the section list already names it): its heading is for screen readers only. */
+const SectionTitlesContext = createContext(true);
+
 function Section({ icon: Icon, title, children }: { icon: typeof Palette; title: string; children: React.ReactNode }) {
   const { sectionVisible } = useSettingsSearch();
+  const showTitle = useContext(SectionTitlesContext);
   if (!sectionVisible(title)) return null;
   return (
-    <section className="space-y-2.5">
-      <h3 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+    <section className="space-y-2.5" aria-label={title}>
+      <h3
+        className={cn(
+          "flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase",
+          !showTitle && "sr-only",
+        )}
+      >
         <Icon className="size-3.5" /> {title}
       </h3>
       {children}
     </section>
   );
+}
+
+/** A sub-heading inside a section (as in the mockups). Hidden when search hides every row under it. */
+function Group({ section, ids, title, children }: { section: string; ids: string[]; title: string; children: React.ReactNode }) {
+  const { rowVisible } = useSettingsSearch();
+  if (!ids.some((id) => rowVisible(section, id))) return null;
+  return (
+    <div className="space-y-3">
+      <h4 className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+/** Two columns once the settings area is wide enough (container query), one column otherwise. */
+function Columns({ children }: { children: React.ReactNode }) {
+  return <div className="grid gap-x-8 gap-y-6 @3xl:grid-cols-2">{children}</div>;
 }
 
 /** Hide a settings control when search does not match; never changes its value. */
@@ -147,7 +174,7 @@ function GridSlotsRow() {
           How many chats show at once; 1 is a single chat. The same switch as at the top right.
         </span>
       </div>
-      <ViewSwitch />
+      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the top)" />
     </div>
   );
 }
@@ -548,7 +575,9 @@ function EmotesSection() {
 
   return (
     <Section icon={Smile} title="Emotes">
-      <div className="space-y-3">
+      <Columns>
+      <div className="space-y-6">
+      <Group section="Emotes" ids={["sources"]} title="Sources">
         <Searchable section="Emotes" id="sources">
           <div className="space-y-2">
             <span className="text-sm">Emote sources</span>
@@ -573,6 +602,8 @@ function EmotesSection() {
             <p className="text-xs text-muted-foreground">Twitch's own emotes always show. Switch a source off and its emotes turn back into plain words.</p>
           </div>
         </Searchable>
+      </Group>
+      <Group section="Emotes" ids={["size", "anim", "overlays"]} title="Look">
         <Searchable section="Emotes" id="size">
           <Choice<EmoteSize>
             label="Emote size"
@@ -600,6 +631,10 @@ function EmotesSection() {
         <Searchable section="Emotes" id="overlays">
           <ToggleRow id="pref-overlays" label="Overlay emotes" hint="Zero-width emotes stack on top of the one before them" setting="overlayEmotes" />
         </Searchable>
+      </Group>
+      </div>
+      <div className="space-y-6">
+      <Group section="Emotes" ids={["preview", "tab", "picker"]} title="Typing and picker">
         <Searchable section="Emotes" id="preview">
           <ToggleRow id="pref-preview" label="Preview on hover" hint="Point at an emote to see it big with its name and source" setting="emotePreview" />
         </Searchable>
@@ -609,6 +644,8 @@ function EmotesSection() {
         <Searchable section="Emotes" id="picker">
           <ToggleRow id="pref-picker" label="Emote menu" hint="The smiley button next to Send" setting="emotePicker" />
         </Searchable>
+      </Group>
+      <Group section="Emotes" ids={["remember", "blocked", "problems"]} title="Saved lists">
         <Searchable section="Emotes" id="remember">
           <div className="space-y-1.5">
             <ToggleRow
@@ -645,7 +682,10 @@ function EmotesSection() {
             setting="blockedEmotes"
           />
         </Searchable>
+        <ProblemsRow />
+      </Group>
       </div>
+      </Columns>
     </Section>
   );
 }
@@ -709,9 +749,10 @@ function ChannelOverridesSection() {
             </Button>
           </form>
           {error ? <p className="text-xs text-danger-text">{error}</p> : null}
-          {joined.length && names.length === 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {joined.map((channel) => (
+          {joined.some((channel) => !names.includes(channel)) ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Quick add:</span>
+              {joined.filter((channel) => !names.includes(channel)).map((channel) => (
                 <Button key={channel} type="button" variant="outline" size="xs" onClick={() => add(channel)}>
                   #{channel}
                 </Button>
@@ -771,14 +812,19 @@ function ChannelOverridesSection() {
   );
 }
 
-function ProblemsSection() {
+/** The emote download problem log, as a row at the end of Emotes. */
+function ProblemsRow() {
   const [problems, setProblems] = useState<EmoteProblem[]>(() => problemLog.list());
   useEffect(() => problemLog.subscribe(() => setProblems(problemLog.list())), []);
 
   return (
-    <Section icon={TriangleAlert} title="Problems">
-      <Searchable section="Problems" id="problems">
+      <Searchable section="Emotes" id="problems">
         <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm">
+            <TriangleAlert className="size-4 text-muted-foreground" aria-hidden />
+            Emote problems
+            <span className="text-xs text-muted-foreground">{problems.length ? `${problems.length} failed` : "none"}</span>
+          </div>
           <p className="text-xs text-muted-foreground">
             When a 7TV, BetterTTV or FrankerFaceZ download fails, the last 20 times are listed here so you can see why emotes went quiet.
           </p>
@@ -809,7 +855,6 @@ function ProblemsSection() {
           )}
         </div>
       </Searchable>
-    </Section>
   );
 }
 
@@ -820,10 +865,9 @@ function UpdateRow() {
   const [busy, setBusy] = useState<"check" | "install" | null>(null);
   const [latest, setLatest] = useState<UpdateInfo | null>(null);
   const [status, setStatus] = useState<string>("");
-  const showAuto = rowVisible("Storage", "auto-updates");
-  const showCheck = rowVisible("Storage", "check-now");
-  const showClear = rowVisible("Storage", "clear-history");
-  if (!showAuto && !showCheck && !showClear) return null;
+  const showAuto = rowVisible("About & data", "auto-updates");
+  const showCheck = rowVisible("About & data", "check-now");
+  if (!showAuto && !showCheck) return null;
 
   const check = async () => {
     setBusy("check");
@@ -870,8 +914,8 @@ function UpdateRow() {
   const newer = latest && version && version !== "dev" && isNewerVersion(latest.version, version);
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/70 bg-muted/30 p-3">
-      <Searchable section="Storage" id="auto-updates">
+    <div className="space-y-2">
+      <Searchable section="About & data" id="auto-updates">
         <ToggleRow
           id="pref-auto-updates"
           label="Check for updates automatically"
@@ -879,7 +923,7 @@ function UpdateRow() {
           setting="autoCheckUpdates"
         />
       </Searchable>
-      <Searchable section="Storage" id="check-now">
+      <Searchable section="About & data" id="check-now">
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void check()} data-testid="check-updates">
@@ -908,18 +952,42 @@ function UpdateRow() {
           </p>
         </div>
       </Searchable>
-      <Searchable section="Storage" id="clear-history">
+    </div>
+  );
+}
+
+function ClearHistoryRow() {
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => {
+    if (!confirm) return;
+    const timer = setTimeout(() => setConfirm(false), 4_000);
+    return () => clearTimeout(timer);
+  }, [confirm]);
+  return (
+    <Searchable section="Account & history" id="clear-history">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-sm">Clear saved chat history</span>
+          <span className="text-xs text-muted-foreground">Deletes the chat saved on this PC for every channel. Click twice to confirm.</span>
+        </div>
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant={confirm ? "destructive" : "outline"}
           data-testid="clear-chat-history"
-          onClick={() => void chat.clearSavedHistory()}
+          onClick={() => {
+            if (!confirm) {
+              setConfirm(true);
+              return;
+            }
+            setConfirm(false);
+            void chat.clearSavedHistory();
+          }}
         >
-          Clear saved chat history
+          {confirm ? "Really clear?" : "Clear history…"}
         </Button>
-      </Searchable>
-    </div>
+      </div>
+    </Searchable>
   );
 }
 
@@ -972,15 +1040,33 @@ function BackupRow() {
   };
 
   return (
-    <Searchable section="Storage" id="backup">
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-1.5">
+    <Searchable section="About & data" id="backup">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm">Back up settings</span>
+            <span className="text-xs text-muted-foreground">
+              Saves zoochattr-settings-(date).json: preferences, favourites and channel list. Never includes your login or token.
+            </span>
+          </div>
           <Button variant="outline" size="sm" onClick={download}>
             <Download /> Back up
           </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm">Restore from file</span>
+            <span className="text-xs text-muted-foreground">Loads a backup; channels in it are added. Your login stays as it is.</span>
+          </div>
           <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
-            <Upload /> Restore from file
+            <Upload /> Restore…
           </Button>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm">Reset settings</span>
+            <span className="text-xs text-muted-foreground">Keeps your channels and login. Click twice to confirm.</span>
+          </div>
           <Button
             variant={confirmReset ? "destructive" : "outline"}
             size="sm"
@@ -995,282 +1081,545 @@ function BackupRow() {
               toast("Settings reset", { description: "Everything but your channels and login is back to the defaults." });
             }}
           >
-            <RotateCcw /> {confirmReset ? "Really reset?" : "Reset"}
+            <RotateCcw /> {confirmReset ? "Really reset?" : "Reset…"}
           </Button>
-          <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void onFile(event)} aria-hidden />
         </div>
-        <p className="text-xs text-muted-foreground">
-          Backups hold your preferences, favourites and channel list as plain JSON. Your Twitch login is never included.
-        </p>
+        <input ref={fileInput} type="file" accept="application/json,.json" className="hidden" onChange={(event) => void onFile(event)} aria-hidden />
       </div>
     </Searchable>
   );
 }
 
-/** Shared settings sections (dialog in the browser, full window on desktop). */
+/** One theme card: the button keeps the active theme (its focus ring and outline read on this panel), the inner panel shows the card's own theme. */
+function ThemeCard({ id }: { id: Skin }) {
+  const skin = useChat((s) => s.settings.skin);
+  const autoLight = useChat((s) => s.settings.autoLightSkin);
+  const autoDark = useChat((s) => s.settings.autoDarkSkin);
+  const option = THEMES[id];
+  return (
+    <Searchable section="Appearance" id={id}>
+      <button
+        type="button"
+        onClick={() => chat.updateSettings({ skin: id })}
+        aria-pressed={skin === id}
+        aria-label={`${option.name}: ${option.tag}`}
+        className={cn(
+          "relative block w-full border p-0 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          skin === id ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground",
+        )}
+      >
+        <span data-skin={id === "auto" ? undefined : id} className="zoo-texture flex w-full flex-col items-start gap-1.5 p-2.5">
+          {option.kind === "animal" ? (
+            <Mascot skin={id} className="size-8" anim={skin === id ? "idle" : "none"} />
+          ) : id === "auto" ? (
+            // Auto: its light choice next to its dark choice.
+            <span className="grid size-8 grid-cols-2 overflow-hidden border border-border" aria-hidden>
+              <span data-skin={autoLight} className="grid grid-rows-2 bg-background">
+                <span />
+                <span className="bg-primary" />
+              </span>
+              <span data-skin={autoDark} className="grid grid-rows-2 bg-background">
+                <span />
+                <span className="bg-primary" />
+              </span>
+            </span>
+          ) : (
+            <span className="grid size-8 grid-cols-2 grid-rows-2 overflow-hidden border border-border" aria-hidden>
+              <span className="bg-background" />
+              <span className="bg-primary" />
+              <span className="bg-accent-2" />
+              <span className="bg-card" />
+            </span>
+          )}
+          <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
+          <span className="text-[11px] leading-snug text-muted-foreground">{option.tag}</span>
+        </span>
+        {skin === id ? (
+          <span className="absolute top-2 right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground" aria-hidden>
+            <Check className="size-3" />
+          </span>
+        ) : null}
+      </button>
+    </Searchable>
+  );
+}
+
+/** Auto's two choices: which theme to use while Windows is light, and while it is dark. */
+function AutoChoicesRow() {
+  const light = useChat((s) => s.settings.autoLightSkin);
+  const dark = useChat((s) => s.settings.autoDarkSkin);
+  const select = (value: ConcreteSkin, onChange: (skin: ConcreteSkin) => void, label: string) => (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value as ConcreteSkin)}
+      className="h-8 border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {CONCRETE_SKINS.map((id) => (
+        <option key={id} value={id}>
+          {THEMES[id].name}
+        </option>
+      ))}
+    </select>
+  );
+  return (
+    <Searchable section="Appearance" id="auto-choices">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>Auto: when Windows is light use</span>
+        {select(light, (skin) => chat.updateSettings({ autoLightSkin: skin }), "Auto theme while Windows is light")}
+        <span>· when dark use</span>
+        {select(dark, (skin) => chat.updateSettings({ autoDarkSkin: skin }), "Auto theme while Windows is dark")}
+        <span>· switches live</span>
+      </div>
+    </Searchable>
+  );
+}
+
+const THEME_GROUPS: { group: "theme" | "animal" | "access"; label: string }[] = [
+  { group: "theme", label: "Theme" },
+  { group: "animal", label: "Animal themes" },
+  { group: "access", label: "Colorblind and accessibility" },
+];
+
+function ThemePicker() {
+  const { rowVisible } = useSettingsSearch();
+  return (
+    <div className="space-y-4">
+      {THEME_GROUPS.map(({ group, label }) => {
+        const ids = SKIN_ORDER.filter((id) => THEMES[id].group === group);
+        const anyVisible = ids.some((id) => rowVisible("Appearance", id)) || (group === "theme" && rowVisible("Appearance", "auto-choices"));
+        if (!anyVisible) return null;
+        return (
+          <div key={group} className="space-y-2">
+            <h4 className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">{label}</h4>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-2">
+              {ids.map((id) => (
+                <ThemeCard key={id} id={id} />
+              ))}
+            </div>
+            {group === "theme" ? <AutoChoicesRow /> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AccountRow({ onRequestLogin }: { onRequestLogin: () => void }) {
+  const auth = useChat((s) => s.auth);
+  const write = useChat((s) => s.write?.status);
+  return (
+    <Searchable section="Account & history" id="login">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-sm">
+            {auth.status === "logged_in" ? (
+              <>
+                Logged in as <b className="text-foreground">{auth.login}</b>
+                {auth.remembered ? "" : " (this login won't be remembered after you quit)"}
+              </>
+            ) : (
+              "Not logged in"
+            )}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {auth.status === "logged_in"
+              ? write === "connected"
+                ? "Can read and send chat"
+                : "Connecting your account to chat…"
+              : "You can read any channel anonymously."}
+          </span>
+        </div>
+        {auth.status === "logged_in" ? (
+          <Button variant="destructive" size="sm" onClick={() => void chat.logout()}>
+            Log out
+          </Button>
+        ) : (
+          <Button size="sm" onClick={onRequestLogin} disabled={auth.status === "booting"}>
+            Log in with Twitch
+          </Button>
+        )}
+      </div>
+    </Searchable>
+  );
+}
+
+function AboutRow() {
+  const appInfo = useChat((s) => s.appInfo);
+  return (
+    <Searchable section="About & data" id="paths">
+      <div className="space-y-1.5">
+        <h4 className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">This copy of ZooChattr</h4>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+          <dt className="text-muted-foreground">Mode</dt>
+          <dd>
+            {appInfo?.portable
+              ? "Portable (data lives next to ZooChattr)"
+              : appInfo?.platform === "browser"
+                ? "Browser dev mode"
+                : "Per-user app data folder"}
+          </dd>
+          <dt className="text-muted-foreground">Settings folder</dt>
+          <dd className="font-mono break-all">{appInfo?.dataDir ?? "…"}</dd>
+          <dt className="text-muted-foreground">Login store</dt>
+          <dd>{appInfo?.tokenStore ?? "…"}</dd>
+          <dt className="text-muted-foreground">Version</dt>
+          <dd>ZooChattr {appInfo?.version ?? ""}</dd>
+        </dl>
+      </div>
+    </Searchable>
+  );
+}
+
+/** Settings sections (the 7 approved ones). With `activeSection`, only that one shows unless searching. */
 export function SettingsBody({
   onRequestLogin,
   searchQuery = "",
+  activeSection,
 }: {
   onRequestLogin: () => void;
   searchQuery?: string;
+  activeSection?: string;
 }) {
-  const skin = useChat((s) => s.settings.skin);
-  const appInfo = useChat((s) => s.appInfo);
-  const auth = useChat((s) => s.auth);
   const search = useMemo(() => settingsSearchHelpers(searchQuery), [searchQuery]);
+  const searching = searchQuery.trim() !== "";
+  const show = (title: string) => !activeSection || searching || activeSection === title;
 
   return (
     <SettingsSearchContext.Provider value={search}>
-      <div className="space-y-6">
+      <SectionTitlesContext.Provider value={!activeSection || searching}>
+      <div className="space-y-8">
         {!search.hasMatches ? (
           <p className="text-sm text-muted-foreground" data-testid="settings-search-empty">
             No settings match
           </p>
         ) : null}
 
-        <Section icon={Palette} title="Theme">
-          <div className="grid grid-cols-2 gap-2">
-            {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
-              <Searchable key={option.id} section="Theme" id={option.id}>
-                {/* The button keeps the active theme (its focus ring and selected outline must read on this dialog);
-                    the inner panel shows the card's own theme. */}
-                <button
-                  type="button"
-                  onClick={() => chat.updateSettings({ skin: option.id })}
-                  aria-pressed={skin === option.id}
-                  className={cn(
-                    "relative block w-full border p-0 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    skin === option.id ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground",
-                  )}
-                >
-                  <span data-skin={option.id} className="zoo-texture flex w-full flex-col items-start gap-1.5 p-2.5">
-                  {option.kind === "animal" ? (
-                    <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
-                  ) : (
-                    <span
-                      className="grid size-9 grid-cols-2 grid-rows-2 overflow-hidden rounded-lg border border-border/70"
-                      aria-hidden
-                    >
-                      <span className="bg-background" />
-                      <span className="bg-primary" />
-                      <span className="bg-accent-2" />
-                      <span className="bg-card" />
-                    </span>
-                  )}
-                  <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
-                  <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
-                  </span>
-                  {skin === option.id ? (
-                    <span className="absolute top-2 right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
-                      <Check className="size-3" />
-                    </span>
-                  ) : null}
-                </button>
-              </Searchable>
-            ))}
-          </div>
-        </Section>
+        {show("Appearance") ? (
+          <Section icon={Palette} title="Appearance">
+            <div className="space-y-6">
+              <ThemePicker />
+              <Group section="Appearance" ids={["text-size", "timestamps", "24h", "badges", "zebra"]} title="Text and rows">
+                <Searchable section="Appearance" id="text-size">
+                  <TextSizeRow />
+                </Searchable>
+                <div className="grid gap-x-8 gap-y-3 @3xl:grid-cols-2">
+                  <Searchable section="Appearance" id="timestamps">
+                    <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
+                  </Searchable>
+                  <Searchable section="Appearance" id="24h">
+                    <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
+                  </Searchable>
+                  <Searchable section="Appearance" id="badges">
+                    <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
+                  </Searchable>
+                  <Searchable section="Appearance" id="zebra">
+                    <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
+                  </Searchable>
+                </div>
+              </Group>
+            </div>
+          </Section>
+        ) : null}
 
-        <Section icon={Type} title="Chat display">
-          <div className="space-y-3">
-            <Searchable section="Chat display" id="text-size">
-              <TextSizeRow />
-            </Searchable>
-            <Searchable section="Chat display" id="timestamps">
-              <ToggleRow id="pref-ts" label="Timestamps" setting="showTimestamps" />
-            </Searchable>
-            <Searchable section="Chat display" id="24h">
-              <ToggleRow id="pref-24h" label="24-hour clock" setting="use24h" />
-            </Searchable>
-            <Searchable section="Chat display" id="badges">
-              <ToggleRow id="pref-badges" label="Badges" hint="Mod, VIP, sub and other chat badges" setting="showBadges" />
-            </Searchable>
-            <Searchable section="Chat display" id="zebra">
-              <ToggleRow id="pref-zebra" label="Striped rows" hint="Shade every other line" setting="zebra" />
-            </Searchable>
-            <Searchable section="Chat display" id="deleted">
-              <ToggleRow
-                id="pref-deleted"
-                label="Show deleted messages"
-                hint="Keep what a mod removed readable, faded and crossed out, instead of hiding it"
-                setting="showDeleted"
-              />
-            </Searchable>
-            <Searchable section="Chat display" id="highlight">
-              <WordListField
-                id="pref-highlight"
-                label="Highlight words"
-                hint="Besides your own name, messages with these words light up and count as mentions."
-                placeholder={"giveaway\nmy_nickname"}
-                setting="highlightWords"
-              />
-            </Searchable>
-            <Searchable section="Chat display" id="mention-sound">
-              <MentionSoundRow />
-            </Searchable>
-            <Searchable section="Chat display" id="spell">
-              <SpellCheckRows />
-            </Searchable>
-          </div>
-        </Section>
-
-        <EmotesSection />
-
-        <ChannelOverridesSection />
-
-        <Section icon={AppWindow} title="Window">
-          <div className="space-y-3">
-            <Searchable section="Window" id="tray">
-              <ToggleRow
-                id="pref-tray"
-                label="Close to tray"
-                hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit — you'll get a confirmation first."
-                setting="closeToTray"
-              />
-            </Searchable>
-            <Searchable section="Window" id="startup">
-              <ToggleRow
-                id="pref-startup"
-                label="Start with Windows"
-                hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
-                setting="startOnLogin"
-              />
-            </Searchable>
-            <Searchable section="Window" id="grid-slots">
-              <GridSlotsRow />
-            </Searchable>
-            <Searchable section="Window" id="shortcuts">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Ctrl+G switches Grid and Single. Ctrl+K finds a channel (Enter opens it, Alt+Enter puts it in the active grid slot) or adds a new one. Ctrl+1 through Ctrl+9 jump to a slot. Ctrl+Tab and Ctrl+Shift+Tab move between chats in Single. Alt+Shift+Left and Alt+Shift+Right move a box. Esc returns to the grid. Ctrl+Shift+R turns Read only on and off. Ctrl+Shift+H hides or shows the top strip. Drag a box header to swap, or drag a channel avatar from the top strip onto a box to replace it. Right-click an avatar (or press the Menu key / Shift+F10 on it) for more.
-              </p>
-            </Searchable>
-            <Searchable section="Window" id="confirm-channel">
-              <ToggleRow
-                id="pref-confirm-channel"
-                label="Confirm channel before typing"
-                hint="Each message box stays locked until you confirm the channel, so you don’t send in the wrong room when several chats are open."
-                setting="confirmChannelSwitch"
-              />
-            </Searchable>
-            <Searchable section="Window" id="read-only">
-              <ToggleRow
-                id="pref-read-only"
-                label="Read only"
-                hint="Hide the message box on every pane so you can watch without accidentally chatting. Ctrl+Shift+R also switches it."
-                setting="readOnly"
-              />
-            </Searchable>
-            <Searchable section="Window" id="history">
-              <ToggleRow
-                id="pref-chat-history"
-                label="Remember chat history"
-                hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
-                setting="rememberChatHistory"
-              />
-            </Searchable>
-            <Searchable section="Window" id="history-server">
-              <HistoryServerField />
-            </Searchable>
-          </div>
-        </Section>
-
-        <Section icon={KeyRound} title="Twitch account">
-          <div className="space-y-3">
-            <Searchable section="Twitch account" id="login">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  {auth.status === "logged_in" ? (
-                    <>
-                      Logged in as <b className="text-foreground">{auth.login}</b>
-                      {auth.remembered ? "" : " (this login won't be remembered after you quit)"}.
-                    </>
-                  ) : (
-                    "Not logged in. You can read any channel anonymously."
-                  )}
-                </p>
-                {auth.status === "logged_in" ? (
-                  <Button variant="outline" size="sm" onClick={() => void chat.logout()}>
-                    Log out
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={onRequestLogin}>
-                    Log in with Twitch
-                  </Button>
-                )}
+        {show("Chat & mentions") ? (
+          <Section icon={Type} title="Chat & mentions">
+            <Columns>
+              <div className="space-y-6">
+                <Group section="Chat & mentions" ids={["deleted", "highlight"]} title="Messages">
+                  <Searchable section="Chat & mentions" id="deleted">
+                    <ToggleRow
+                      id="pref-deleted"
+                      label="Show deleted messages"
+                      hint="Keep what a mod removed readable, faded and crossed out, instead of hiding it"
+                      setting="showDeleted"
+                    />
+                  </Searchable>
+                  <Searchable section="Chat & mentions" id="highlight">
+                    <WordListField
+                      id="pref-highlight"
+                      label="Highlight words"
+                      hint="Besides your own name, messages with these words light up and count as mentions."
+                      placeholder={"giveaway\nmy_nickname"}
+                      setting="highlightWords"
+                    />
+                  </Searchable>
+                </Group>
+                <Group section="Chat & mentions" ids={["mention-sound"]} title="Mention sound">
+                  <Searchable section="Chat & mentions" id="mention-sound">
+                    <MentionSoundRow />
+                  </Searchable>
+                </Group>
               </div>
-            </Searchable>
-            <Searchable section="Twitch account" id="client-id">
-              <ClientIdField />
-            </Searchable>
-          </div>
-        </Section>
+              <div className="space-y-6">
+                <Group section="Chat & mentions" ids={["confirm-channel", "read-only"]} title="Sending">
+                  <Searchable section="Chat & mentions" id="confirm-channel">
+                    <ToggleRow
+                      id="pref-confirm-channel"
+                      label="Confirm channel before typing"
+                      hint="The message box stays locked until you confirm the channel, so you don’t send in the wrong room when several chats are open."
+                      setting="confirmChannelSwitch"
+                    />
+                  </Searchable>
+                  <Searchable section="Chat & mentions" id="read-only">
+                    <ToggleRow
+                      id="pref-read-only"
+                      label="Read only"
+                      hint="Hide the message box so you can watch without accidentally chatting. Ctrl+Shift+R also switches it."
+                      setting="readOnly"
+                    />
+                  </Searchable>
+                </Group>
+                <Group section="Chat & mentions" ids={["spell"]} title="Spell check">
+                  <Searchable section="Chat & mentions" id="spell">
+                    <SpellCheckRows />
+                  </Searchable>
+                </Group>
+              </div>
+            </Columns>
+          </Section>
+        ) : null}
 
-        <Section icon={FolderOpen} title="Storage">
-          <div className="space-y-3">
-            <Searchable section="Storage" id="paths">
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-                <dt className="text-muted-foreground">Mode</dt>
-                <dd>
-                  {appInfo?.portable
-                    ? "Portable (data lives next to ZooChattr)"
-                    : appInfo?.platform === "browser"
-                      ? "Browser dev mode"
-                      : "Per-user app data folder"}
-                </dd>
-                <dt className="text-muted-foreground">Settings</dt>
-                <dd className="font-mono break-all">{appInfo?.dataDir ?? "…"}</dd>
-                <dt className="text-muted-foreground">Login</dt>
-                <dd>{appInfo?.tokenStore ?? "…"}</dd>
-                <dt className="text-muted-foreground">Version</dt>
-                <dd>ZooChattr {appInfo?.version ?? ""}</dd>
-              </dl>
-            </Searchable>
-            <UpdateRow />
-            <BackupRow />
-          </div>
-        </Section>
+        {show("Emotes") ? <EmotesSection /> : null}
 
-        <ProblemsSection />
+        {show("Per channel") ? <ChannelOverridesSection /> : null}
+
+        {show("Window & startup") ? (
+          <Section icon={AppWindow} title="Window & startup">
+            <div className="space-y-6">
+              <Group section="Window & startup" ids={["tray", "startup"]} title="Window">
+                <Searchable section="Window & startup" id="tray">
+                  <ToggleRow
+                    id="pref-tray"
+                    label="Close to tray"
+                    hint="Closing the window keeps ZooChattr running in the system tray, so your chats stay connected. Right-click the tray icon and choose Quit to exit — you'll get a confirmation first."
+                    setting="closeToTray"
+                  />
+                </Searchable>
+                <Searchable section="Window & startup" id="startup">
+                  <ToggleRow
+                    id="pref-startup"
+                    label="Start with Windows"
+                    hint="Open ZooChattr when you sign in to Windows. Uses a shortcut in your Startup folder."
+                    setting="startOnLogin"
+                  />
+                </Searchable>
+              </Group>
+              <Group section="Window & startup" ids={["grid-slots"]} title="Grid">
+                <Searchable section="Window & startup" id="grid-slots">
+                  <GridSlotsRow />
+                </Searchable>
+              </Group>
+              <Searchable section="Window & startup" id="shortcuts">
+                <ShortcutsReference />
+              </Searchable>
+            </div>
+          </Section>
+        ) : null}
+
+        {show("Account & history") ? (
+          <Section icon={KeyRound} title="Account & history">
+            <div className="space-y-6">
+              <Group section="Account & history" ids={["login", "client-id"]} title="Twitch account">
+                <AccountRow onRequestLogin={onRequestLogin} />
+                <Searchable section="Account & history" id="client-id">
+                  <ClientIdField />
+                </Searchable>
+              </Group>
+              <Group section="Account & history" ids={["history", "history-server", "clear-history"]} title="Chat history">
+                <Searchable section="Account & history" id="history">
+                  <ToggleRow
+                    id="pref-chat-history"
+                    label="Remember chat history"
+                    hint="Keeps about 48 hours of messages per channel in ZooChattr-data so logs come back after you quit. Turn off to stop saving (and wipe what's stored)."
+                    setting="rememberChatHistory"
+                  />
+                </Searchable>
+                <Searchable section="Account & history" id="history-server">
+                  <HistoryServerField />
+                </Searchable>
+                <ClearHistoryRow />
+              </Group>
+            </div>
+          </Section>
+        ) : null}
+
+        {show("About & data") ? (
+          <Section icon={FolderOpen} title="About & data">
+            <div className="space-y-6">
+              <Group section="About & data" ids={["auto-updates", "check-now"]} title="Updates">
+                <UpdateRow />
+              </Group>
+              <AboutRow />
+              <Group section="About & data" ids={["backup"]} title="Your data">
+                <BackupRow />
+              </Group>
+            </div>
+          </Section>
+        ) : null}
       </div>
+      </SectionTitlesContext.Provider>
     </SettingsSearchContext.Provider>
   );
 }
 
-/** Browser / e2e: modal dialog. Desktop uses the Settings popout window instead. */
+const SHORTCUTS: [string, string][] = [
+  ["Ctrl+G", "Grid ↔ single chat"],
+  ["Ctrl+K", "Find or add a channel"],
+  ["Ctrl+1 … Ctrl+9", "Jump to a grid pane"],
+  ["Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous chat (single)"],
+  ["Alt+Enter (in Ctrl+K)", "Put the channel in a grid pane"],
+  ["Alt+Shift+← / →", "Move a grid pane"],
+  ["Esc", "Close / back to the grid"],
+  ["Tab / Shift+Tab", "Finish an emote or name"],
+  ["↑ / ↓", "Sent-message history"],
+  ["Enter", "Send"],
+  ["Shift+Enter", "Don't send yet"],
+  ["Ctrl+Enter", "Save a word list"],
+  ["Ctrl+Shift+R", "Read only on / off"],
+  ["Ctrl+Shift+H", "Hide / show the top strip"],
+  ["Menu key / Shift+F10", "Channel menu on an avatar"],
+  ["Drag a header", "Swap grid panes"],
+  ["Double-click a header", "Open the chat alone"],
+  ["Drag an avatar", "Put a channel in a pane"],
+  ["Right-click an emote", "Favourite it (emote panel)"],
+];
+
+function ShortcutsReference() {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">Keyboard shortcuts</h4>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs sm:grid-cols-[auto_1fr_auto_1fr]">
+        {SHORTCUTS.map(([keys, what]) => (
+          <Fragment key={keys}>
+            <dt>
+              <kbd className="border border-border bg-background px-1.5 py-0.5 font-sans text-[11px]">{keys}</kbd>
+            </dt>
+            <dd className="text-muted-foreground">{what}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * Settings as a panel inside the main window (Bran's choice): search on top, the 7 sections with counts on the
+ * left, the section on the right. Opens from the gear and from the tray's Settings…; Esc or ✕ closes it.
+ */
 export function SettingsDialog() {
   const open = useUi((s) => s.settingsOpen);
   const [searchQuery, setSearchQuery] = useState("");
+  const [active, setActive] = useState(SETTINGS_SEARCH_CATALOG[0].title);
+  const search = useMemo(() => settingsSearchHelpers(searchQuery), [searchQuery]);
+  const searching = searchQuery.trim() !== "";
+  const close = () => useUi.setState({ settingsOpen: false });
 
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!open) setSearchQuery("");
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    setSearchQuery("");
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    // Closed from inside the panel (Esc or ✕): focus was lost with it, so it goes back to the gear.
+    if (document.activeElement === document.body || document.activeElement === null) {
+      document.querySelector<HTMLButtonElement>("[data-testid='settings-gear']")?.focus();
+    }
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // A menu, popover or the login dialog inside Settings closes first.
+      if (document.querySelector("[role='menu'], [role='listbox'], [data-slot='popover-content'], [data-slot='dialog-content']")) return;
+      event.preventDefault();
+      // Text fields save on blur; blur first so a half-typed edit isn't lost when the panel goes away.
+      (document.activeElement as HTMLElement | null)?.blur();
+      close();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(next) => useUi.setState({ settingsOpen: next })}>
-      <DialogContent className="flex h-[min(88vh,760px)] max-h-[min(88vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-        <DialogHeader className="sticky top-0 z-20 shrink-0 space-y-3 border-b border-border/70 bg-background/95 px-4 pt-4 pr-12 pb-3 backdrop-blur">
-          <div className="space-y-1">
-            <DialogTitle className="text-lg">Settings</DialogTitle>
-            <DialogDescription>Saved automatically to this ZooChattr folder.</DialogDescription>
-          </div>
+    <aside
+      role="dialog"
+      aria-modal="false"
+      aria-label="Settings"
+      data-testid="settings-panel"
+      className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-surface md:w-[min(64rem,66%)]"
+    >
+      <header className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2">
+        <h2 className="w-40 shrink-0 text-lg font-semibold max-md:hidden">Settings</h2>
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            autoFocus
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search settings…"
+            placeholder="Search all settings"
             aria-label="Search settings"
             data-testid="settings-search"
-            className="h-8"
+            className="h-9 pl-8"
           />
-        </DialogHeader>
-
-        <div className="zoo-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+        </div>
+        <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close settings" title="Close (Esc)">
+          <X className="size-4" />
+        </Button>
+      </header>
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
+        <nav aria-label="Settings sections" className="flex shrink-0 flex-col border-border max-md:flex-row max-md:overflow-x-auto max-md:border-b md:w-52 md:border-r">
+          <ul className="flex md:flex-col">
+            {SETTINGS_SEARCH_CATALOG.map((section) => {
+              const current = !searching && active === section.title;
+              const matches = !searching || search.sectionVisible(section.title);
+              return (
+                <li key={section.title}>
+                  <button
+                    type="button"
+                    aria-current={current ? "true" : undefined}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setActive(section.title);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      // A real left border (not a shadow) so Windows contrast themes keep the bar.
+                      current
+                        ? "border-l-[3px] border-primary bg-surface-2 pl-[13px] font-semibold text-foreground"
+                        : "pl-4 text-foreground hover:bg-accent hover:[--muted-foreground:color-mix(in_srgb,var(--zc-muted)_50%,var(--zc-text))]",
+                      !matches && "text-muted-foreground",
+                    )}
+                  >
+                    <span>
+                      {section.title}
+                      {!matches ? <span className="ml-1.5 text-[11px]">· no match</span> : null}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {section.count}
+                      <span className="sr-only"> settings</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-auto px-4 py-3 text-xs text-muted-foreground max-md:hidden">Also opens from the tray icon → Settings</p>
+        </nav>
+        <div className="zoo-scroll @container min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
           <SettingsBody
             searchQuery={searchQuery}
+            activeSection={active}
             onRequestLogin={() => useUi.setState({ settingsOpen: false, loginOpen: true })}
           />
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </aside>
   );
 }

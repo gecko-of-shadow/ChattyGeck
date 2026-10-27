@@ -803,4 +803,15 @@ html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
   .chat-row[data-highlighted="true"] {
     border-left: 3px dashed Highlight;
   }
+  /* Chosen view, theme card or option: background fills vanish in contrast themes, so mark it with an outline. */
+  [role="radio"][aria-checked="true"],
+  [aria-pressed="true"],
+  [data-testid="settings-gear"][aria-expanded="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* The current Settings section keeps its bar in the system highlight colour. */
+  nav [aria-current="true"] {
+    border-left-color: Highlight;
+  }
 }

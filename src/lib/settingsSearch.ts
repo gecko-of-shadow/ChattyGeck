@@ -12,6 +12,8 @@ export interface SettingsSearchRow {
 
 export interface SettingsSearchSection {
   title: string;
+  /** How many settings the section holds (shown next to it in the Settings list). */
+  count?: number;
   rows: SettingsSearchRow[];
 }
 
@@ -76,13 +78,16 @@ export function anySectionMatches(sections: SettingsSearchSection[], query: stri
  */
 export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
   {
-    title: "Theme",
-    // Built from the theme list so a new theme can't be missing from search.
-    rows: SKIN_ORDER.map((id) => ({ id, label: THEMES[id].name, hint: `${THEMES[id].tag}. ${THEMES[id].blurb}` })),
-  },
-  {
-    title: "Chat display",
+    title: "Appearance",
+    count: 6,
     rows: [
+      // Built from the theme list so a new theme can't be missing from search.
+      ...SKIN_ORDER.map((id) => ({ id, label: THEMES[id].name, hint: `Theme. ${THEMES[id].tag}. ${THEMES[id].blurb}` })),
+      {
+        id: "auto-choices",
+        label: "Auto theme",
+        hint: "When Windows is light use one theme, when dark use another. Follows Windows light and dark mode.",
+      },
       {
         id: "text-size",
         label: "Text size",
@@ -93,6 +98,12 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       { id: "24h", label: "24-hour clock" },
       { id: "badges", label: "Badges", hint: "Mod, VIP, sub and other chat badges" },
       { id: "zebra", label: "Striped rows", hint: "Shade every other line" },
+    ],
+  },
+  {
+    title: "Chat & mentions",
+    count: 9,
+    rows: [
       {
         id: "deleted",
         label: "Show deleted messages",
@@ -109,15 +120,26 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         hint: "A short chime when your name, a reply to you, or a highlight word shows up in any open chat. Cooldown.",
       },
       {
+        id: "confirm-channel",
+        label: "Confirm channel before typing",
+        hint: "The message box stays locked until you confirm the channel, so you don't send in the wrong room when several chats are open.",
+      },
+      {
+        id: "read-only",
+        label: "Read only",
+        hint: "Hide the message box so you can watch without accidentally chatting. Ctrl+Shift+R also switches it.",
+      },
+      {
         id: "spell",
         label: "Spell check",
-        hint: "Wavy underlines in the message box. Emotes, names, commands and links are skipped. Language dictionary.",
+        hint: "Wavy underlines in the message box. Emotes, names, commands and links are left alone. Edge's checker stays off. Language dictionary.",
         choices: ["English (US)"],
       },
     ],
   },
   {
     title: "Emotes",
+    count: 11,
     rows: [
       {
         id: "sources",
@@ -157,10 +179,16 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         label: "Blocked emotes",
         hint: "Names that should stay plain text. One per line (spaces and commas work too).",
       },
+      {
+        id: "problems",
+        label: "Emote problems",
+        hint: "When a 7TV, BetterTTV or FrankerFaceZ download fails, the last 20 times are listed here so you can see why emotes went quiet.",
+      },
     ],
   },
   {
     title: "Per channel",
+    count: 1,
     rows: [
       {
         id: "overrides",
@@ -181,7 +209,8 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
     ],
   },
   {
-    title: "Window",
+    title: "Window & startup",
+    count: 3,
     rows: [
       {
         id: "tray",
@@ -202,17 +231,23 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "shortcuts",
         label: "Keyboard shortcuts",
-        hint: "Ctrl+G grid and single. Ctrl+K switch or add a channel. Menu key or Shift+F10 on an avatar. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc. Ctrl+Shift+R read only. Ctrl+Shift+H hide the top strip.",
+        hint: "Ctrl+G grid and single. Ctrl+K switch or add a channel. Menu key or Shift+F10 on an avatar. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc. Ctrl+Shift+R read only. Ctrl+Shift+H hide the top strip. Ctrl+Enter saves a word list.",
+      },
+    ],
+  },
+  {
+    title: "Account & history",
+    count: 4,
+    rows: [
+      {
+        id: "login",
+        label: "Twitch account",
+        hint: "Log in with Twitch, log out. Not logged in: you can read any channel anonymously. Can chat.",
       },
       {
-        id: "confirm-channel",
-        label: "Confirm channel before typing",
-        hint: "Each message box stays locked until you confirm the channel, so you don't send in the wrong room when several chats are open.",
-      },
-      {
-        id: "read-only",
-        label: "Read only",
-        hint: "Hide the message box on every pane so you can watch without accidentally chatting. Ctrl+Shift+R also switches it.",
+        id: "client-id",
+        label: "Twitch Client ID",
+        hint: "This copy of ZooChattr ships with a Client ID, so login works out of the box. Custom Client ID: clear the field and save to go back to the built-in one. Reading chat works anyway; login needs one.",
       },
       {
         id: "history",
@@ -224,31 +259,13 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
         label: "History server",
         hint: "Your own chat logger. At startup ZooChattr fills in what was said while it was closed. Address and read token.",
       },
+      { id: "clear-history", label: "Clear saved chat history", hint: "Deletes the chat saved on this PC." },
     ],
   },
   {
-    title: "Twitch account",
+    title: "About & data",
+    count: 1,
     rows: [
-      {
-        id: "login",
-        label: "Log in with Twitch",
-        hint: "Not logged in. You can read any channel anonymously.",
-      },
-      {
-        id: "client-id",
-        label: "Twitch Client ID",
-        hint: "Paste a Client ID to enable login",
-      },
-    ],
-  },
-  {
-    title: "Storage",
-    rows: [
-      {
-        id: "paths",
-        label: "Storage paths",
-        hint: "Portable data lives next to ZooChattr. Settings login version.",
-      },
       {
         id: "auto-updates",
         label: "Check for updates automatically",
@@ -257,23 +274,17 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "check-now",
         label: "Check now",
-        hint: "Install update Releases",
+        hint: "Install update Releases version",
       },
-      { id: "clear-history", label: "Clear saved chat history" },
+      {
+        id: "paths",
+        label: "This copy of ZooChattr",
+        hint: "Portable data lives next to ZooChattr. Mode, settings folder, login store, version.",
+      },
       {
         id: "backup",
-        label: "Back up",
-        hint: "Back up, Restore from file, and Reset. Backups hold your preferences, favourites and channel list as plain JSON.",
-      },
-    ],
-  },
-  {
-    title: "Problems",
-    rows: [
-      {
-        id: "problems",
-        label: "Problems",
-        hint: "When a 7TV, BetterTTV or FrankerFaceZ download fails, the last 20 times are listed here so you can see why emotes went quiet.",
+        label: "Back up, restore and reset",
+        hint: "Back up, Restore from file, and Reset settings. Backups hold your preferences, favourites and channel list as plain JSON.",
       },
     ],
   },

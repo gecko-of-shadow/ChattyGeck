@@ -113,10 +113,71 @@ describe("settings catalog", () => {
     expect(ids).toContain("confirm-channel");
     expect(ids).not.toContain("chrome");
     expect(rows.find((row) => row.id === "backup")?.hint ?? "").not.toMatch(/clipboard/i);
-    const chat = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Chat display");
+    const chat = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Chat & mentions");
     expect(filterSection(chat!, "mention sound")).toEqual({ kind: "rows", ids: new Set(["mention-sound"]) });
-    const window = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Window");
+    const window = SETTINGS_SEARCH_CATALOG.find((section) => section.title === "Window & startup");
     expect(filterSection(window!, "hide sidebar")).toBeNull();
+  });
+
+  it("has the 7 approved sections with 35 settings in all", () => {
+    expect(SETTINGS_SEARCH_CATALOG.map((s) => [s.title, s.count])).toEqual([
+      ["Appearance", 6],
+      ["Chat & mentions", 9],
+      ["Emotes", 11],
+      ["Per channel", 1],
+      ["Window & startup", 3],
+      ["Account & history", 4],
+      ["About & data", 1],
+    ]);
+    expect(SETTINGS_SEARCH_CATALOG.reduce((sum, s) => sum + (s.count ?? 0), 0)).toBe(35);
+  });
+
+  it("finds each of the 35 settings by its name, in its own section", () => {
+    // [what someone types, section, row that must show]
+    const all: [string, string, string][] = [
+      ["theme", "Appearance", "crested"],
+      ["text size", "Appearance", "text-size"],
+      ["timestamps", "Appearance", "timestamps"],
+      ["24-hour clock", "Appearance", "24h"],
+      ["badges", "Appearance", "badges"],
+      ["striped rows", "Appearance", "zebra"],
+      ["show deleted messages", "Chat & mentions", "deleted"],
+      ["highlight words", "Chat & mentions", "highlight"],
+      ["mention sound", "Chat & mentions", "mention-sound"],
+      ["cooldown", "Chat & mentions", "mention-sound"],
+      ["confirm channel", "Chat & mentions", "confirm-channel"],
+      ["read only", "Chat & mentions", "read-only"],
+      ["spell check", "Chat & mentions", "spell"],
+      ["language", "Chat & mentions", "spell"],
+      ["dictionary", "Chat & mentions", "spell"],
+      ["7tv", "Emotes", "sources"],
+      ["betterttv", "Emotes", "sources"],
+      ["frankerfacez", "Emotes", "sources"],
+      ["emote size", "Emotes", "size"],
+      ["moving emotes", "Emotes", "anim"],
+      ["overlay emotes", "Emotes", "overlays"],
+      ["preview on hover", "Emotes", "preview"],
+      ["tab finishes", "Emotes", "tab"],
+      ["emote menu", "Emotes", "picker"],
+      ["remember emotes", "Emotes", "remember"],
+      ["blocked emotes", "Emotes", "blocked"],
+      ["per channel", "Per channel", "overrides"],
+      ["close to tray", "Window & startup", "tray"],
+      ["start with windows", "Window & startup", "startup"],
+      ["grid slots", "Window & startup", "grid-slots"],
+      ["remember chat history", "Account & history", "history"],
+      ["history server", "Account & history", "history-server"],
+      ["read token", "Account & history", "history-server"],
+      ["client id", "Account & history", "client-id"],
+      ["check for updates automatically", "About & data", "auto-updates"],
+    ];
+    expect(all).toHaveLength(35);
+    for (const [query, title, id] of all) {
+      const section = SETTINGS_SEARCH_CATALOG.find((s) => s.title === title)!;
+      const result = filterSection(section, query);
+      expect(result, `"${query}" in ${title}`).not.toBeNull();
+      if (result?.kind === "rows") expect(result.ids.has(id), `"${query}" -> ${id}`).toBe(true);
+    }
   });
 });
 
@@ -130,8 +191,8 @@ describe("anySectionMatches", () => {
 
 describe("theme search", () => {
   it("finds every one of the 13 themes by name", () => {
-    const theme = SETTINGS_SEARCH_CATALOG.find((s) => s.title === "Theme")!;
-    expect(theme.rows.map((r) => r.id)).toEqual(SKIN_ORDER);
+    const theme = SETTINGS_SEARCH_CATALOG.find((s) => s.title === "Appearance")!;
+    expect(theme.rows.map((r) => r.id).slice(0, SKIN_ORDER.length)).toEqual(SKIN_ORDER);
     for (const id of SKIN_ORDER) {
       const result = filterSection(theme, THEMES[id].name);
       expect(result, THEMES[id].name).not.toBeNull();

@@ -19,7 +19,7 @@ import { applySkinToDocument } from "@/lib/themes";
 import { useRememberThemeForBoot, useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { applyUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
-import { useUi } from "@/store/ui";
+import { openSettings, useUi } from "@/store/ui";
 
 function BootScreen() {
   const waking = useTheme().waking;
@@ -142,6 +142,12 @@ export default function App() {
           });
         }),
       );
+      // Tray "Settings…" — Rust shows the main window, we open the Settings panel in it.
+      unlistens.push(
+        await listen("open-settings", () => {
+          void openSettings();
+        }),
+      );
       // Tray "Check for updates…" — toast only; never opens Settings.
       unlistens.push(
         await listen("tray-update-check", () => {
@@ -164,13 +170,17 @@ export default function App() {
           <main className="relative flex min-w-0 flex-1 flex-col">
             {chromeHidden ? <ChromeReveal /> : <TopBar />}
             {chromeHidden ? null : <ConnectionBanner />}
-            {count === 0 ? (
-              <EmptyState />
-            ) : mode === "grid" || !focused ? (
-              <GridView />
-            ) : (
-              <FocusedView key={focused} login={focused} />
-            )}
+            {/* Settings opens as a panel over the right part of the chats, between the strip and the message box. */}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {count === 0 ? (
+                <EmptyState />
+              ) : mode === "grid" || !focused ? (
+                <GridView />
+              ) : (
+                <FocusedView key={focused} login={focused} />
+              )}
+              <SettingsDialog />
+            </div>
             {readOnly ? null : composerChannel ? (
               <Composer channel={composerChannel} />
             ) : count > 0 && !loggedIn ? (
@@ -178,7 +188,6 @@ export default function App() {
             ) : null}
           </main>
           <LoginDialog />
-          <SettingsDialog />
           <QuitConfirmDialog />
           <QuickSwitcher />
           <ViewHotkeys />

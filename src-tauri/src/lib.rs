@@ -350,6 +350,15 @@ fn open_settings_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Tray "Settings…": Settings is a panel inside the main window now, so bring the main window back
+/// (it may be hidden in the tray) and ask it to open the panel.
+fn request_settings_panel(app: &AppHandle) {
+    show_main_window(app);
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.emit("open-settings", ());
+    }
+}
+
 /// Tray "Check for updates…" — toast-only path on the main webview. Does not open
 /// Settings, show/focus/disable the main window, or start a download.
 fn request_update_check(app: &AppHandle) {
@@ -508,9 +517,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_main_window(app),
-                    "settings" => {
-                        let _ = open_settings_window(app);
-                    }
+                    "settings" => request_settings_panel(app),
                     "update" => request_update_check(app),
                     "quit" => request_quit_confirm(app),
                     _ => {}

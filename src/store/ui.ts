@@ -99,15 +99,12 @@ export function insertIntoComposer(text: string, channel: string): void {
   }));
 }
 
-/** Desktop: own Settings window (main stays blocked). Browser: in-app dialog. */
+/**
+ * Settings opens as a panel inside the main window (Bran's choice), from the gear and from the tray's Settings….
+ * The old separate Settings window (`open_settings_window_cmd`) is no longer opened.
+ */
 export async function openSettings(): Promise<void> {
-  useUi.setState({ navOpen: false });
-  if (isTauri) {
-    const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("open_settings_window_cmd");
-    return;
-  }
-  useUi.setState({ settingsOpen: true });
+  useUi.setState({ navOpen: false, settingsOpen: true });
 }
 
 export async function closeSettingsWindow(): Promise<void> {

@@ -5,8 +5,11 @@ import { viewShortcut } from "@/lib/view/shortcuts";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
+/** A real overlay (dialog, menu, completion list) is open. The Settings panel isn't one: chat keeps working beside it. */
 function overlayOpen(): boolean {
-  return !!document.querySelector("[role='dialog'], [role='menu'], [data-testid='tab-complete'], [data-testid='spell-menu']");
+  return !!document.querySelector(
+    "[role='dialog']:not([data-testid='settings-panel']), [role='menu'], [data-testid='tab-complete'], [data-testid='spell-menu']",
+  );
 }
 
 /** Makes the grid pane focused, then puts the caret in the shared message box once it has switched to it. */
@@ -46,6 +49,8 @@ export function ViewHotkeys() {
           return;
         }
         if (overlayOpen()) return;
+        // Esc closes the Settings panel first (the panel handles it), not the single view behind it.
+        if (useUi.getState().settingsOpen) return;
         if (useChat.getState().settings.mode === "focused") {
           event.preventDefault();
           chat.setMode("grid");

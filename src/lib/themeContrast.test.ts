@@ -82,8 +82,8 @@ describe("derived colours in index.css", () => {
         check(skin, `warn on ${surface}`, d.warn, t[surface]);
       }
       for (const surface of ["bg", "surface", "surface-2"] as const) check(skin, `danger text on ${surface}`, d.dangerText, t[surface]);
-      for (const surface of ["bg", "surface-2"] as const) {
-        // Danger buttons / menu items rest at 10% and hover at 15% danger tint, on the page or in a dialog/menu.
+      for (const surface of ["bg", "surface", "surface-2"] as const) {
+        // Danger buttons / menu items rest at 10% and hover at 15% danger tint, on the page, the Settings panel or a dialog/menu.
         check(skin, `danger text on danger hover (${surface})`, d.dangerText, mixHex(t.danger, t[surface], 0.15));
       }
       // Input placeholders (muted) on the page-coloured input inside a dialog.
@@ -91,7 +91,7 @@ describe("derived colours in index.css", () => {
       check(skin, "muted on mention highlight", d.mutedOnMention, t.mention);
       check(skin, "button text on hovered accent", t["on-accent"], d.accentHover);
       check(skin, "warn dot on panels", d.warn, t.surface, 3);
-      // Hovered / highlighted menu items (--accent) and their secondary text (boosted in index.css).
+      // Hovered / highlighted menu items and Settings nav rows (--accent) and their secondary text (boosted 50% to text).
       const hover = mixHex(t["surface-2"], t.text, 0.88);
       check(skin, "text on hovered item", t.text, hover);
       check(skin, "secondary text on highlighted menu item", mixHex(t.muted, t.text, 0.5), hover);

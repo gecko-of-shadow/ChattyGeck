@@ -11,7 +11,7 @@ import { chat } from "@/lib/chat/controller";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import { openSettings } from "@/store/ui";
+import { openSettings, useUi } from "@/store/ui";
 import { ConnectionPill } from "./ChatHeader";
 import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
@@ -214,6 +214,7 @@ function ChannelStrip() {
 
 /** The top bar: gecko logo, channel strip, connection status, view switch and gear (same place on every screen). */
 export function TopBar() {
+  const settingsOpen = useUi((s) => s.settingsOpen);
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2" data-testid="top-bar">
       <img src={geckoLogo} alt="ZooChattr" title="ZooChattr" className="size-9 shrink-0" draggable={false} />
@@ -221,11 +222,13 @@ export function TopBar() {
       <ConnectionPill compact />
       <ViewSwitch />
       <Button
-        variant="ghost"
+        variant={settingsOpen ? "default" : "ghost"}
         size="icon-sm"
-        className="size-8 border border-border"
-        onClick={() => void openSettings()}
+        className={cn("size-8 border", settingsOpen ? "border-primary" : "border-border")}
+        onClick={() => (settingsOpen ? useUi.setState({ settingsOpen: false }) : void openSettings())}
         aria-label="Settings"
+        aria-expanded={settingsOpen}
+        data-testid="settings-gear"
         title="Settings (also in the tray menu)"
       >
         <Settings className="size-4" />
