@@ -246,6 +246,16 @@ export class EmoteRegistry {
     return channelEmotes.concat(globalEmotes);
   }
 
+  /**
+   * Every usable emote one provider has for `channel` (channel set first, then global), including names another
+   * provider also uses. The emote panel's BTTV / 7TV tabs list these; chat still shows whichever wins the lookup.
+   */
+  providerEmotes(channel: string, provider: ThirdPartyProvider): Emote[] {
+    const entry = this.channels.get(channel);
+    const own = entry ? this.usable(entry.emotes[provider], provider, channel) : [];
+    return own.concat(this.usable(this.global[provider], provider, channel));
+  }
+
   getGlobalStatus(): ProviderRecord<ProviderStatus> {
     return { ...this.globalStatus };
   }

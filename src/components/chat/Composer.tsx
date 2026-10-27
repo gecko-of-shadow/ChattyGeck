@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { ackSendChannel, clearReplyTarget, useUi } from "@/store/ui";
-import { EmotePicker } from "./EmotePicker";
+import { EmotePicker, rememberEmoteUse } from "./EmotePicker";
 import { SpellMenu, SpellMirror } from "./SpellOverlay";
 import { useEmoteIndex } from "./useEmoteIndex";
 
@@ -444,6 +444,8 @@ export function Composer({ channel, compact = false }: { channel: string | null;
     if (close) {
       setCompletion(null);
       inputRef.current?.focus();
+      const chosen = base.matches[nextIndex];
+      if (chosen.kind === "emote") rememberEmoteUse(chosen.emote);
     } else {
       setCompletion({ ...base, index: nextIndex, end });
     }
@@ -511,6 +513,8 @@ export function Composer({ channel, compact = false }: { channel: string | null;
         event.preventDefault();
         if (completion) {
           const end = completion.end;
+          const chosen = completion.matches[completion.index];
+          if (chosen?.kind === "emote") rememberEmoteUse(chosen.emote);
           setCompletion(null);
           const el = inputRef.current;
           el?.focus();

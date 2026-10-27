@@ -99,6 +99,7 @@ describe("derived colours in index.css", () => {
       check(skin, "highlight bar (accent-2) on mention background", t["accent-2"], t.mention, 3);
       check(skin, "focus ring on raised panels", t.focus, t["surface-2"], 3);
       check(skin, "checked switch on raised panels", t.accent, t["surface-2"], 3);
+      check(skin, "emote tile hover border (accent-2) on raised surfaces", t["accent-2"], t["surface-2"], 3);
       check(skin, "secondary text on raised panels", t.muted, t["surface-2"]);
       // Switch: unchecked track is muted, its thumb the page colour.
       for (const surface of ["bg", "surface", "surface-2"] as const) check(skin, `switch track on ${surface}`, t.muted, t[surface], 3);

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, useEffectEvent, startTransition } from "react";
-import { Search, Star } from "lucide-react";
-import { Mascot } from "@/components/mascots/Mascot";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useEffectEvent, startTransition, type KeyboardEvent } from "react";
+import { Search, Smile, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chat } from "@/lib/chat/controller";
+import { emoteRegistry } from "@/lib/emotes/registry";
 import { findEmotes, type NameIndex } from "@/lib/emotes/search";
 import {
   PROVIDER_SHORT,
@@ -16,105 +16,117 @@ import {
 } from "@/lib/emotes/types";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import type { PickerTab } from "@/store/settings";
+import { MAX_RECENT_EMOTES, type PickerTab } from "@/store/settings";
 
-const TABS: { id: PickerTab; label: string }[] = [
-  { id: "fav", label: "★" },
-  { id: "channel", label: "Channel" },
-  { id: "all", label: "All" },
+/** The panel's tabs (Bran's choice: favourites first, then the approved Recent / Channel / Global / BTTV / 7TV). */
+const TABS: { id: Exclude<PickerTab, "all">; label: string; title: string; name?: string }[] = [
+  { id: "fav", label: "★", name: "Favourites", title: "Favourites (right-click an emote to add or remove it)" },
+  { id: "recent", label: "Recent", title: "Emotes you used recently" },
+  { id: "channel", label: "Channel", title: "This channel's emotes (7TV, BetterTTV, FrankerFaceZ)" },
+  { id: "global", label: "Global", title: "Emotes every channel has" },
+  { id: "bttv", label: "BTTV", title: "BetterTTV emotes" },
+  { id: "7tv", label: "7TV", title: "7TV emotes" },
 ];
 
-/** How many rows to paint at first / each scroll page. Keeps "All" from freezing on big packs. */
-const PAGE = 60;
+/** Older builds saved "all"; it shows as Recent. */
+function shownTab(tab: PickerTab): Exclude<PickerTab, "all"> {
+  return tab === "all" ? "recent" : tab;
+}
+
+/** How many tiles to paint at first / per scroll page, so big packs open instantly. */
+const PAGE = 160;
 
 const PROVIDERS: EmoteProvider[] = ["twitch", "7tv", "bttv", "ffz"];
 const SCOPE_LABEL: Record<EmoteScope, string> = { channel: "Channel", global: "Global" };
 
-interface Row {
-  kind: "header" | "emote";
-  key: string;
-  title?: string;
-  count?: number;
-  emote?: Emote;
+/** Puts an emote at the front of Recent (picked here, or finished with Tab in the message box). */
+export function rememberEmoteUse(emote: Emote): void {
+  const key = emoteKey(emote);
+  chat.updateSettings((s) => ({
+    recentEmotes: [key, ...s.recentEmotes.filter((k) => k !== key)].slice(0, MAX_RECENT_EMOTES),
+  }));
 }
 
-function buildRows(emotes: Emote[], tab: PickerTab, typed: string, favourites: string[]): Row[] {
-  if (tab === "fav" || typed) {
-    const list =
-      tab === "fav"
-        ? emotes.slice().sort((a, b) => favourites.indexOf(emoteKey(a)) - favourites.indexOf(emoteKey(b)))
-        : emotes;
-    return list.map((emote) => ({ kind: "emote", key: emoteKey(emote), emote }));
-  }
+interface Section {
+  key: string;
+  title?: string;
+  emotes: Emote[];
+}
 
-  const buckets = new Map<string, Emote[]>();
-  for (const scope of ["channel", "global"] as EmoteScope[]) {
-    for (const provider of PROVIDERS) buckets.set(`${scope}:${provider}`, []);
-  }
+/** Groups a tab's emotes under small headers (by provider, or by channel/global for a provider tab). */
+function buildSections(emotes: Emote[], tab: Exclude<PickerTab, "all">, typed: string): Section[] {
+  if (typed || tab === "fav" || tab === "recent") return [{ key: "all", emotes }];
+  const groups = new Map<string, Emote[]>();
   for (const emote of emotes) {
-    buckets.get(`${emote.scope}:${emote.provider}`)?.push(emote);
+    const key = tab === "bttv" || tab === "7tv" ? emote.scope : emote.provider;
+    const list = groups.get(key) ?? [];
+    list.push(emote);
+    groups.set(key, list);
   }
-
-  const rows: Row[] = [];
-  for (const scope of ["channel", "global"] as EmoteScope[]) {
-    for (const provider of PROVIDERS) {
-      const list = buckets.get(`${scope}:${provider}`) ?? [];
-      if (!list.length) continue;
-      rows.push({
-        kind: "header",
-        key: `h:${scope}:${provider}`,
-        title: `${SCOPE_LABEL[scope]} · ${PROVIDER_SHORT[provider]}`,
-        count: list.length,
-      });
-      for (const emote of list) rows.push({ kind: "emote", key: emoteKey(emote), emote });
-    }
-  }
-  return rows;
+  const order: string[] = tab === "bttv" || tab === "7tv" ? ["channel", "global"] : PROVIDERS;
+  return order
+    .filter((key) => groups.get(key)?.length)
+    .map((key) => ({
+      key,
+      title: tab === "bttv" || tab === "7tv" ? SCOPE_LABEL[key as EmoteScope] : PROVIDER_SHORT[key as EmoteProvider],
+      emotes: groups.get(key)!,
+    }));
 }
 
 function toggleInList(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-function EmoteRow({ emote, favourite, still, onPick }: { emote: Emote; favourite: boolean; still: boolean; onPick: (emote: Emote) => void }) {
+/** Memoized: hovering one tile updates the footer without redrawing every tile. */
+const EmoteTile = memo(function EmoteTile({
+  emote,
+  favourite,
+  still,
+  onPick,
+  onShow,
+}: {
+  emote: Emote;
+  favourite: boolean;
+  still: boolean;
+  onPick: (emote: Emote) => void;
+  onShow: (emote: Emote | null) => void;
+}) {
   const [failed, setFailed] = useState(false);
   const urls = emoteUrls(emote, still);
   return (
     <button
       type="button"
-      title={`Right-click to ${favourite ? "unfavourite" : "favourite"}`}
-      aria-label={emote.name}
+      title={`${emote.name} · ${PROVIDER_SHORT[emote.provider]}. Right-click to ${favourite ? "unfavourite" : "favourite"}`}
+      aria-label={`${emote.name}, ${PROVIDER_SHORT[emote.provider]}${favourite ? ", favourite" : ""}`}
       data-emote-tile={emote.name}
       onClick={() => onPick(emote)}
+      onMouseEnter={() => onShow(emote)}
+      onFocus={() => onShow(emote)}
       onContextMenu={(event) => {
         event.preventDefault();
         chat.updateSettings((s) => ({ favoriteEmotes: toggleInList(s.favoriteEmotes, emoteKey(emote)) }));
       }}
-      className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1 text-left transition hover:bg-accent hover:**:text-foreground focus-visible:ring-2 focus-visible:ring-ring outline-none"
-      style={{ contentVisibility: "auto", containIntrinsicSize: "0 36px" }}
+      className="relative grid size-9 place-items-center border-2 border-transparent outline-none hover:border-accent-2 hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "36px 36px" }}
     >
-      <span className="grid size-9 shrink-0 place-items-center">
-        {failed ? (
-          <span className="text-[10px] text-muted-foreground">?</span>
-        ) : (
-          <img
-            src={urls.url1x}
-            srcSet={urls.url2x ? `${urls.url1x} 1x, ${urls.url2x} 2x` : undefined}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            draggable={false}
-            onError={() => setFailed(true)}
-            className="max-h-9 max-w-12 object-contain"
-          />
-        )}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{emote.name}</span>
-      <span className="shrink-0 text-[10px] text-muted-foreground">{PROVIDER_SHORT[emote.provider]}</span>
-      {favourite ? <Star className="size-3 shrink-0 fill-mention text-mention" /> : null}
+      {failed ? (
+        <span className="truncate px-0.5 text-[9px] text-muted-foreground">{emote.name}</span>
+      ) : (
+        <img
+          src={urls.url1x}
+          srcSet={urls.url2x ? `${urls.url1x} 1x, ${urls.url2x} 2x` : undefined}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          onError={() => setFailed(true)}
+          className="max-h-7 max-w-8 object-contain"
+        />
+      )}
+      {favourite ? <Star className="absolute top-0 right-0 size-2.5 fill-mention text-mention" aria-hidden /> : null}
     </button>
   );
-}
+});
 
 export interface EmotePickerProps {
   channel: string;
@@ -126,19 +138,25 @@ export interface EmotePickerProps {
   compact?: boolean;
 }
 
-/** Compact emote menu: search, three tabs, a windowed vertical list (so "All" stays snappy). */
+/** The emote panel next to Send: search, tabs, an emote grid and a footer naming the emote under the pointer. */
 export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compact = false }: EmotePickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
-  const tab = useChat((s) => s.settings.pickerTab);
+  const [shownEmote, setShownEmote] = useState<Emote | null>(null);
+  const tab = shownTab(useChat((s) => s.settings.pickerTab));
   const favourites = useChat((s) => s.settings.favoriteEmotes);
+  const recent = useChat((s) => s.settings.recentEmotes);
   const still = useChat((s) => s.settings.emoteAnimation === "never");
+  const emoteVersion = useChat((s) => `${s.emoteVersions[channel] ?? 0}.${s.globalEmoteVersion}`);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open) setQuery("");
+    if (!open) {
+      setQuery("");
+      setShownEmote(null);
+    }
   }, [open]);
 
   useEffect(() => {
@@ -149,19 +167,53 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
   const favouriteSet = useMemo(() => new Set(favourites), [favourites]);
   const typed = query.trim();
 
-  const shown = useMemo(() => {
-    const base = typed ? findEmotes(index, typed, 500) : emotes;
-    if (tab === "fav") return base.filter((e) => favouriteSet.has(emoteKey(e)));
-    if (tab === "channel") return base.filter((e) => e.scope === "channel");
-    return base;
-  }, [emotes, index, typed, tab, favouriteSet]);
+  const tabEmotes = useMemo(() => {
+    if (typed) return findEmotes(index, typed, 500);
+    // Favourites and Recent can hold emotes picked from the BTTV / 7TV tabs whose name another source wins in chat.
+    const known = (): Map<string, Emote> => {
+      const byKey = new Map(emotes.map((e) => [emoteKey(e), e]));
+      for (const provider of ["7tv", "bttv", "ffz"] as const) {
+        for (const e of emoteRegistry.providerEmotes(channel, provider)) if (!byKey.has(emoteKey(e))) byKey.set(emoteKey(e), e);
+      }
+      return byKey;
+    };
+    switch (tab) {
+      case "fav": {
+        const byKey = known();
+        return favourites.map((key) => byKey.get(key)).filter((e): e is Emote => !!e);
+      }
+      case "recent": {
+        const byKey = known();
+        return recent.map((key) => byKey.get(key)).filter((e): e is Emote => !!e);
+      }
+      case "channel":
+        return emotes.filter((e) => e.scope === "channel");
+      case "global":
+        return emotes.filter((e) => e.scope === "global");
+      case "bttv":
+      case "7tv":
+        // Every emote of the source, also names another source wins in chat.
+        return emoteRegistry.providerEmotes(channel, tab);
+      default:
+        return emotes;
+    }
+    // emoteVersion is a dependency on purpose: provider lists can change without the lookup list changing.
+  }, [emotes, index, typed, tab, favouriteSet, favourites, recent, channel, emoteVersion]);
 
-  const rows = useMemo(() => buildRows(shown, tab, typed, favourites), [shown, tab, typed, favourites]);
-  const visible = rows.slice(0, limit);
-  const hasMore = limit < rows.length;
+  const sections = useMemo(() => buildSections(tabEmotes, tab, typed), [tabEmotes, tab, typed]);
+  // Page through tiles (not sections) so a huge pack never paints at once.
+  let budget = limit;
+  const visibleSections = sections
+    .map((section) => {
+      const take = section.emotes.slice(0, Math.max(0, budget));
+      budget -= take.length;
+      return { ...section, total: section.emotes.length, emotes: take };
+    })
+    .filter((section) => section.emotes.length > 0);
+  const hasMore = limit < tabEmotes.length;
 
   const grow = useEffectEvent(() => {
-    startTransition(() => setLimit((n) => Math.min(n + PAGE, rows.length)));
+    startTransition(() => setLimit((n) => Math.min(n + PAGE, tabEmotes.length)));
   });
 
   useEffect(() => {
@@ -177,11 +229,36 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
     );
     io.observe(node);
     return () => io.disconnect();
-  }, [open, hasMore, limit, rows.length]);
+  }, [open, hasMore, limit, tabEmotes.length]);
 
-  const pick = (emote: Emote) => {
-    onPick(emote);
+  // Stable, so the memoized tiles don't redraw when the message box re-renders.
+  const onPickRef = useRef(onPick);
+  onPickRef.current = onPick;
+  const pick = useCallback((emote: Emote) => {
+    onPickRef.current(emote);
+    rememberEmoteUse(emote);
     setOpen(false);
+  }, []);
+  const panelId = useId();
+
+  const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const at = TABS.findIndex((t) => t.id === tab);
+    const to =
+      event.key === "ArrowRight"
+        ? (at + 1) % TABS.length
+        : event.key === "ArrowLeft"
+          ? (at - 1 + TABS.length) % TABS.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? TABS.length - 1
+              : -1;
+    if (to < 0) return;
+    event.preventDefault();
+    const next = TABS[to];
+    setQuery("");
+    chat.updateSettings({ pickerTab: next.id });
+    event.currentTarget.querySelector<HTMLButtonElement>(`[data-tab="${next.id}"]`)?.focus();
   };
 
   const emptyText =
@@ -190,10 +267,12 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
       : typed
         ? `Nothing called "${typed}".`
         : tab === "fav"
-          ? "No favourites yet. Right-click to pin one."
-          : tab === "channel"
-            ? `#${channel} has no channel emotes.`
-            : "Nothing to show.";
+          ? "No favourites yet. Right-click an emote to add it."
+          : tab === "recent"
+            ? "Emotes you use show up here."
+            : tab === "channel"
+              ? `#${channel} has no channel emotes.`
+              : "None from this source here.";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -201,92 +280,129 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
         render={
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size={compact ? "icon-sm" : "icon-lg"}
-            className="shrink-0"
+            className={cn(
+              "shrink-0 data-popup-open:border-primary data-popup-open:bg-primary data-popup-open:text-primary-foreground",
+              !compact && "size-10",
+            )}
             aria-label="Emote menu"
             title="Emotes (right-click one to favourite it)"
             data-testid="emote-picker-button"
           />
         }
       >
-        <Mascot className={compact ? "size-5" : "size-6"} anim="none" />
+        <Smile className={compact ? "size-4" : "size-5"} />
       </PopoverTrigger>
       <PopoverContent
         align="end"
         side="top"
         sideOffset={6}
         finalFocus={returnFocus}
-        className="w-[min(92vw,16.5rem)] gap-1.5 p-1.5"
+        className="w-[min(92vw,22.5rem)] gap-0 border border-border bg-surface p-0 shadow-none ring-0"
         data-testid="emote-picker"
       >
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative p-2">
+          <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={(event) => {
-              const first = rows.find((row) => row.emote);
-              if (event.key === "Enter" && first?.emote) {
+              const first = tabEmotes[0];
+              // Enter picks the first search result (only once something is typed).
+              if (event.key === "Enter" && typed && first) {
                 event.preventDefault();
-                pick(first.emote);
+                pick(first);
               }
             }}
-            placeholder="Search…"
+            placeholder="Search emotes"
             aria-label="Search emotes"
-            className="h-7 pl-7 text-xs"
+            className="h-9 pl-8 text-sm"
             autoComplete="off"
             spellCheck={false}
           />
         </div>
-        <div className="flex gap-0.5" role="tablist" aria-label="Emote groups">
+        <div className="flex border-b border-border px-1" role="tablist" aria-label="Emote groups" onKeyDown={onTabKey}>
           {TABS.map((option) => (
             <button
               key={option.id}
               type="button"
               role="tab"
-              aria-selected={tab === option.id}
-              onClick={() => chat.updateSettings({ pickerTab: option.id })}
+              data-tab={option.id}
+              aria-selected={!typed && tab === option.id}
+              aria-controls={panelId}
+              aria-label={option.name}
+              tabIndex={tab === option.id ? 0 : -1}
+              title={option.title}
+              onClick={() => {
+                setQuery("");
+                chat.updateSettings({ pickerTab: option.id });
+              }}
               className={cn(
-                "h-6 flex-1 rounded-md text-xs font-medium",
-                tab === option.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                "-mb-px h-9 border-b-2 px-2 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                !typed && tab === option.id
+                  ? "border-primary font-semibold text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               {option.label}
             </button>
           ))}
         </div>
-        <div ref={listRef} className="zoo-scroll max-h-80 min-h-16 overflow-y-auto overscroll-contain">
-          {rows.length === 0 ? (
-            <p className="px-1 py-5 text-center text-xs text-muted-foreground">{emptyText}</p>
+        <div
+          ref={listRef}
+          id={panelId}
+          role="tabpanel"
+          aria-label={typed ? "Search results" : (TABS.find((t) => t.id === tab)?.name ?? TABS.find((t) => t.id === tab)?.label)}
+          className="zoo-scroll max-h-72 min-h-24 overflow-y-auto overscroll-contain p-2"
+        >
+          {tabEmotes.length === 0 ? (
+            <p className="px-1 py-6 text-center text-xs text-muted-foreground">{emptyText}</p>
           ) : (
             <>
-              {visible.map((row) =>
-                row.kind === "header" ? (
-                  <div
-                    key={row.key}
-                    className="sticky top-0 z-10 bg-popover px-1.5 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase"
-                  >
-                    {row.title}
-                    <span className="ml-1 font-normal normal-case">{row.count}</span>
+              {visibleSections.map((section) => (
+                <div key={section.key} className="mb-1">
+                  {section.title ? (
+                    <div className="px-0.5 pb-0.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      {section.title}{" "}
+                      <span className="ml-0.5 font-normal normal-case">{section.total}</span>
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(2.25rem,1fr))] gap-1">
+                    {section.emotes.map((emote) => (
+                      <EmoteTile
+                        key={emoteKey(emote)}
+                        emote={emote}
+                        favourite={favouriteSet.has(emoteKey(emote))}
+                        still={still}
+                        onPick={pick}
+                        onShow={setShownEmote}
+                      />
+                    ))}
                   </div>
-                ) : (
-                  <EmoteRow
-                    key={row.key}
-                    emote={row.emote!}
-                    favourite={favouriteSet.has(emoteKey(row.emote!))}
-                    still={still}
-                    onPick={pick}
-                  />
-                ),
-              )}
+                </div>
+              ))}
               {hasMore ? (
                 <div ref={sentinelRef} className="px-1 py-2 text-center text-[10px] text-muted-foreground">
                   Loading more…
                 </div>
               ) : null}
             </>
+          )}
+        </div>
+        {/* Visual helper only: each tile already says its name and source to screen readers. */}
+        <div className="flex h-9 items-center gap-2 border-t border-border px-2 text-xs" aria-hidden>
+          {shownEmote ? (
+            <>
+              <img src={emoteUrls(shownEmote, still).url1x} alt="" className="max-h-6 max-w-8 object-contain" />
+              <span className="truncate font-semibold">{shownEmote.name}</span>
+              <span className="shrink-0 text-muted-foreground">
+                · {PROVIDER_SHORT[shownEmote.provider]} · click to insert
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Click an emote to insert it. Right-click to favourite.</span>
           )}
         </div>
       </PopoverContent>

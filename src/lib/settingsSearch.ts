@@ -145,7 +145,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "picker",
         label: "Emote menu",
-        hint: "The animal button next to the message box",
+        hint: "The smiley button next to Send",
       },
       {
         id: "remember",

@@ -167,9 +167,18 @@ describe("sanitizeSettings", () => {
     expect(s.emoteAnimation).toBe("hover");
     expect(s.overlayEmotes).toBe(false);
     expect(s.blockedEmotes).toEqual(["KEKW", "Clap"]);
-    expect(s.pickerTab).toBe("all");
+    expect(s.pickerTab).toBe("recent");
     expect(s.favoriteEmotes).toEqual(["7tv:abc"]);
     expect(sanitizeSettings({ emoteSize: 3 }).emoteSize).toBe(1);
+  });
+
+  it("loads the old emote tabs and the new ones, and keeps a short Recent list", () => {
+    for (const tab of ["fav", "channel", "all", "recent", "global", "bttv", "7tv"]) {
+      expect(sanitizeSettings({ pickerTab: tab }).pickerTab).toBe(tab);
+    }
+    const many = Array.from({ length: 60 }, (_, i) => `7tv:e${i}`);
+    expect(sanitizeSettings({ recentEmotes: many }).recentEmotes).toHaveLength(40);
+    expect(sanitizeSettings({}).recentEmotes).toEqual([]);
   });
 });
 

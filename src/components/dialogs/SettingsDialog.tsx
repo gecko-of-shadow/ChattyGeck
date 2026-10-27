@@ -607,7 +607,7 @@ function EmotesSection() {
           <ToggleRow id="pref-tab" label={TAB_COMPLETE_LABEL} hint={TAB_COMPLETE_HINT} setting="tabComplete" />
         </Searchable>
         <Searchable section="Emotes" id="picker">
-          <ToggleRow id="pref-picker" label="Emote menu" hint="The animal button next to the message box" setting="emotePicker" />
+          <ToggleRow id="pref-picker" label="Emote menu" hint="The smiley button next to Send" setting="emotePicker" />
         </Searchable>
         <Searchable section="Emotes" id="remember">
           <div className="space-y-1.5">

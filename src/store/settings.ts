@@ -11,7 +11,11 @@ export type ViewMode = "grid" | "focused";
 export type EmoteSize = 1 | 1.5 | 2;
 /** Moving emotes: always, only while pointed at, or shown as a still frame. */
 export type EmoteAnimation = "always" | "hover" | "never";
-export type PickerTab = "fav" | "channel" | "all";
+/** Emote panel tab. `all` is from older builds (it loads and shows as Recent). */
+export type PickerTab = "fav" | "recent" | "channel" | "global" | "bttv" | "7tv" | "all";
+export const PICKER_TABS: readonly PickerTab[] = ["fav", "recent", "channel", "global", "bttv", "7tv", "all"];
+/** How many recently used emotes the panel remembers. */
+export const MAX_RECENT_EMOTES = 40;
 
 /** Hard cap on grid boxes. The user's setting ({@link DEFAULT_GRID_SLOTS}) starts at 4. */
 const MAX_GRID_SLOTS = 9;
@@ -110,6 +114,8 @@ export interface Settings {
   /** Picker sections folded shut, as "scope:provider". */
   pickerFolded: string[];
   pickerTab: PickerTab;
+  /** "provider:id" of the emotes used most recently, newest first (the panel's Recent tab). */
+  recentEmotes: string[];
 
   // ---- reading ----
   /** Besides your own name, these words make a message stand out. */
@@ -248,7 +254,8 @@ export const DEFAULT_SETTINGS: Settings = {
   emotePreview: true,
   favoriteEmotes: [],
   pickerFolded: [],
-  pickerTab: "all",
+  pickerTab: "recent",
+  recentEmotes: [],
   highlightWords: [],
   mentionSound: false,
   mentionSoundCooldown: MENTION_COOLDOWN_DEFAULT,
@@ -379,7 +386,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     emotePreview: bool(input.emotePreview, DEFAULT_SETTINGS.emotePreview),
     favoriteEmotes: cleanWordList(input.favoriteEmotes, MAX_FAVOURITES),
     pickerFolded: cleanWordList(input.pickerFolded),
-    pickerTab: pick(input.pickerTab, ["fav", "channel", "all"] as const, DEFAULT_SETTINGS.pickerTab),
+    pickerTab: pick(input.pickerTab, PICKER_TABS, DEFAULT_SETTINGS.pickerTab),
+    recentEmotes: cleanWordList(input.recentEmotes, MAX_RECENT_EMOTES),
     highlightWords: cleanWordList(input.highlightWords),
     mentionSound: bool(input.mentionSound, DEFAULT_SETTINGS.mentionSound),
     mentionSoundCooldown: clampMentionCooldown(input.mentionSoundCooldown),
