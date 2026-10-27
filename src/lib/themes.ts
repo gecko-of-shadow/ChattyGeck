@@ -230,6 +230,19 @@ export function applySkinToDocument(skin: ConcreteSkin, root: HTMLElement = docu
   root.dataset.skin = skin;
   root.classList.toggle("dark", !light);
   root.style.colorScheme = light ? "light" : "dark";
+  root.ownerDocument.querySelector('meta[name="color-scheme"]')?.setAttribute("content", light ? "light" : "dark");
+}
+
+/** localStorage key read by public/theme-boot.js before the app starts. */
+export const BOOT_THEME_KEY = "zoochattr.theme";
+
+/** Saves the theme choice where public/theme-boot.js can read it at the next start (before settings load). */
+export function rememberThemeForBoot(skin: Skin, light: ConcreteSkin, dark: ConcreteSkin): void {
+  try {
+    localStorage.setItem(BOOT_THEME_KEY, JSON.stringify({ skin, light, dark }));
+  } catch {
+    // Storage full or blocked: the next start just shows Crested gecko until settings load.
+  }
 }
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";

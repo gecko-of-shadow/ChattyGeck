@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { isTauri } from "@/lib/platform";
 import { applySkinToDocument } from "@/lib/themes";
-import { useResolvedSkin } from "@/lib/useTheme";
+import { useRememberThemeForBoot, useResolvedSkin } from "@/lib/useTheme";
 import { useChat } from "@/store/chat";
 import { closeSettingsWindow } from "@/store/ui";
 import { SettingsBody } from "./SettingsDialog";
@@ -14,15 +14,17 @@ export function SettingsApp() {
   const ready = useChat((s) => s.ready);
   const skin = useResolvedSkin();
   const [searchQuery, setSearchQuery] = useState("");
+  useRememberThemeForBoot();
 
   useEffect(() => {
     void chat.bootSettingsUi();
   }, []);
 
   useEffect(() => {
-    applySkinToDocument(skin);
+    // Before settings load the store holds defaults; theme-boot.js already put the saved theme on the page.
+    if (ready) applySkinToDocument(skin);
     document.title = "ZooChattr Settings";
-  }, [skin]);
+  }, [ready, skin]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{
-    AppHandle, Emitter, Manager, Position, RunEvent, Size, State, Theme, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, Manager, Position, RunEvent, Size, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder, WindowEvent,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -317,7 +317,8 @@ fn open_settings_window(app: &AppHandle) -> Result<(), String> {
         .min_inner_size(400.0, 480.0)
         .resizable(true)
         .maximizable(false)
-        .theme(Some(Theme::Dark))
+        // No forced theme: Tauri passes Windows' light/dark to the page, which the Auto theme follows.
+        .theme(None)
         .background_color(Color(0x09, 0x0d, 0x0a, 0xff))
         .center();
     if state.data.portable {

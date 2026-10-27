@@ -185,6 +185,7 @@ class ChatController {
       appInfo,
       channels: Object.fromEntries(settings.channels.map((c) => [c, newChannelView(c)])),
       ready: true,
+      settingsLoaded: rawSettings !== null,
     });
 
     if (settings.rememberChatHistory) {
@@ -254,6 +255,7 @@ class ChatController {
       appInfo,
       channels: {},
       ready: true,
+      settingsLoaded: rawSettings !== null,
       auth: display?.login
         ? { status: "logged_in", login: display.login, userId: display.userId, remembered: display.remembered }
         : { status: "anonymous" },

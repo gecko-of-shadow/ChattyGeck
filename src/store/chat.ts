@@ -37,6 +37,8 @@ export interface ConnectionView {
 
 export interface ChatState {
   ready: boolean;
+  /** True when a saved settings file was read at boot (false: first start, or the read failed and defaults are in use). */
+  settingsLoaded: boolean;
   settings: Settings;
   appInfo: AppInfo | null;
   channels: Record<string, ChannelView>;
@@ -51,6 +53,7 @@ export interface ChatState {
 
 export const useChat = create<ChatState>(() => ({
   ready: false,
+  settingsLoaded: false,
   settings: DEFAULT_SETTINGS,
   appInfo: null,
   channels: {},

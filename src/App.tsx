@@ -16,7 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { setTrayStatus } from "@/lib/platform";
 import { applySkinToDocument } from "@/lib/themes";
-import { useResolvedSkin, useTheme } from "@/lib/useTheme";
+import { useRememberThemeForBoot, useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { applyUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
@@ -111,9 +111,12 @@ export default function App() {
     void chat.boot();
   }, []);
 
+  // Until the saved settings are loaded the store holds defaults; keep the theme theme-boot.js already put on the page.
   useEffect(() => {
+    if (!ready) return;
     applySkinToDocument(skin);
-  }, [skin]);
+  }, [ready, skin]);
+  useRememberThemeForBoot();
 
   useEffect(() => {
     document.title = mentions > 0 ? `(${mentions}) ZooChattr` : "ZooChattr";
