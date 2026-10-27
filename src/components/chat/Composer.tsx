@@ -79,7 +79,7 @@ export function LoginPrompt() {
   const booting = useChat((s) => s.auth.status === "booting");
   return (
     <div className="border-t border-border bg-surface px-2 py-2">
-      <div className="flex flex-wrap items-center gap-3 px-1 py-1">
+      <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-3 px-1 py-1">
         <Mascot className="size-7 shrink-0" />
         <p className="min-w-0 flex-1 text-sm text-muted-foreground">
           You're reading anonymously. Log in with Twitch to chat back.
@@ -554,6 +554,8 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   return (
     <div className={cn("border-t border-border bg-surface", compact ? "px-2 py-1.5" : "px-2 py-2")} data-testid="composer">
+      {/* The bar spans the window; what's in it stays a comfortable width, centered, when the window is wide. */}
+      <div className="mx-auto w-full max-w-3xl" data-testid="composer-inner">
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-danger-text", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
@@ -716,6 +718,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
       {!compact && !connected && !locked ? (
         <p className="mt-1.5 text-[11px] text-muted-foreground">Connecting your account to Twitch chat…</p>
       ) : null}
+      </div>
     </div>
   );
 }
