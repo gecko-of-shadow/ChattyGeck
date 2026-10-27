@@ -4,7 +4,8 @@ import { useShallow } from "zustand/react/shallow";
 import { PawPrint } from "lucide-react";
 import { GeckoFootIcon } from "@/components/mascots/icons";
 import { PROVIDER_LABELS, type EmoteProvider } from "@/lib/emotes/types";
-import { THEMES } from "@/lib/themes";
+import { resolveSkin } from "@/lib/themes";
+import { usePrefersDark, useTheme } from "@/lib/useTheme";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
@@ -57,8 +58,10 @@ export function ChatLog({
   label = "Chat messages",
   onNameClick,
 }: ChatLogProps) {
+  const prefersDark = usePrefersDark();
   const prefs: RowPrefs & { textSize: number; emoteSize: number; emotePreview: boolean; zebra: boolean } = useChat(
     useShallow((s) => ({
+      skin: resolveSkin(s.settings.skin, s.settings.autoLightSkin, s.settings.autoDarkSkin, prefersDark),
       showTimestamps: s.settings.showTimestamps,
       use24h: s.settings.use24h,
       showBadges: s.settings.showBadges,
@@ -74,7 +77,9 @@ export function ChatLog({
   const globalEmoteVersion = useChat((s) => s.globalEmoteVersion);
   const badgeVersion = useChat((s) => s.badgeVersion);
   const selfLogin = useChat((s) => (s.auth.status === "logged_in" ? s.auth.login : undefined));
-  const isGecko = useChat((s) => THEMES[s.settings.skin].animal === "gecko");
+  const theme = useTheme();
+  // Gecko wording only on an animal gecko theme; Crested gecko uses plain words (Bran's choice).
+  const isGecko = theme.kind === "animal" && theme.animal === "gecko";
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -217,7 +222,7 @@ export function ChatLog({
         onMouseOut={onMouseOut}
         tabIndex={0}
         aria-label={label}
-        className="zoo-scroll absolute inset-0 overflow-y-auto overscroll-contain outline-none"
+        className="zoo-scroll absolute inset-0 overflow-y-auto overscroll-contain outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring"
         data-testid="chat-log-scroll"
       >
         <div
@@ -242,9 +247,9 @@ export function ChatLog({
               />
               {message.id === readMarker && index < visible.length - 1 ? (
                 <div className="flex items-center gap-2 px-3 py-1 text-[11px] font-semibold tracking-wide text-mention uppercase" role="separator">
-                  <span className="h-px flex-1 bg-[rgb(var(--mention-rgb)/0.45)]" />
+                  <span className="h-px flex-1 bg-mention/45" />
                   New since you left
-                  <span className="h-px flex-1 bg-[rgb(var(--mention-rgb)/0.45)]" />
+                  <span className="h-px flex-1 bg-mention/45" />
                 </div>
               ) : null}
             </Fragment>

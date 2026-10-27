@@ -1,3 +1,6 @@
+import { contrastRatio, THEME_TOKENS } from "@/lib/themeTokens";
+import type { ConcreteSkin } from "@/lib/themes";
+
 /** Twitch's default name colours, used when a chatter never picked one. */
 const DEFAULT_NAME_COLORS = [
   "#FF0000",
@@ -48,37 +51,55 @@ function hexToRgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  if (max === min) return [0, 0, l];
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  let h: number;
-  if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
-  else if (max === g) h = (b - r) / d + 2;
-  else h = (r - g) / d + 4;
-  return [h * 60, s, l];
+function toHex([r, g, b]: [number, number, number]): string {
+  return `#${[r, g, b].map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function mix(a: [number, number, number], b: [number, number, number], amount: number): [number, number, number] {
+  return [a[0] + (b[0] - a[0]) * amount, a[1] + (b[1] - a[1]) * amount, a[2] + (b[2] - a[2]) * amount];
+}
+
+/** Warm themes pull every name a little toward their text colour so bright blues don't undo the low-glare idea. */
+const WARM_BLEND: Partial<Record<ConcreteSkin, number>> = { eyecomfort: 0.4, "eyecomfort-light": 0.25 };
+const MIN_NAME_CONTRAST = 4.5;
+
+/** Zebra stripes tint rows 4% toward the text colour (index.css). */
+const ZEBRA_TINT = 0.04;
+
+/** Every background a chat row can sit on: page, panel, mention highlight, and the striped versions of the first two. */
+export function rowBackgrounds(skin: ConcreteSkin): string[] {
+  const t = THEME_TOKENS[skin];
+  const text = hexToRgb(t.text)!;
+  const striped = (hex: string) => toHex(mix(hexToRgb(hex)!, text, ZEBRA_TINT));
+  return [t.bg, t.surface, t.mention, striped(t.bg), striped(t.surface)];
 }
 
 const readableCache = new Map<string, string>();
 
-/** Lifts dark name colours (pure blue, dark green…) so they stay legible on the dark UI. */
-export function readableNameColor(color: string | undefined, login: string): string {
+/**
+ * A chatter's name colour, nudged toward the theme's text colour until it reads at 4.5:1 or better on every row
+ * background ({@link rowBackgrounds}).
+ */
+export function readableNameColor(color: string | undefined, login: string, skin: ConcreteSkin = "crested"): string {
   const source = color || DEFAULT_NAME_COLORS[hashString(login) % DEFAULT_NAME_COLORS.length];
-  const cached = readableCache.get(source);
+  const key = `${skin}|${source}`;
+  const cached = readableCache.get(key);
   if (cached) return cached;
-  const rgb = hexToRgb(source);
+  const tokens = THEME_TOKENS[skin];
+  const text = hexToRgb(tokens.text)!;
+  let rgb = hexToRgb(source);
   let result = source;
   if (rgb) {
-    const [h, s, l] = rgbToHsl(...rgb);
-    const minLightness = h > 200 && h < 290 ? 0.68 : 0.6;
-    if (l < minLightness) result = `hsl(${h.toFixed(0)} ${(Math.min(s, 0.9) * 100).toFixed(0)}% ${(minLightness * 100).toFixed(0)}%)`;
+    rgb = mix(rgb, text, WARM_BLEND[skin] ?? 0);
+    const backgrounds = rowBackgrounds(skin);
+    const readable = (hex: string) => backgrounds.every((bg) => contrastRatio(hex, bg) >= MIN_NAME_CONTRAST);
+    let step = 0;
+    while (!readable(toHex(rgb)) && step < 20) {
+      rgb = mix(rgb, text, 0.1);
+      step++;
+    }
+    result = readable(toHex(rgb)) ? toHex(rgb) : tokens.text;
   }
-  readableCache.set(source, result);
+  readableCache.set(key, result);
   return result;
 }

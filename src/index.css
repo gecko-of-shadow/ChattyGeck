@@ -22,6 +22,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,7 +40,18 @@
   --color-mascot-eye: var(--mascot-eye);
   --color-mascot-spot: var(--mascot-spot);
   --color-mention: var(--mention);
+  --color-mention-bg: var(--zc-mention);
   --color-live: var(--live);
+  --color-warn: var(--warn);
+  --color-danger-text: var(--danger-text);
+  --color-accent-text: var(--accent-text);
+  --color-surface: var(--zc-surface);
+  --color-surface-2: var(--zc-surface-2);
+  --color-gap: var(--zc-gap);
+  --color-accent-2: var(--zc-accent-2);
+  --color-focus: var(--zc-focus);
+  --color-badge: var(--zc-badge);
+  --color-badge-ink: var(--zc-badge-ink);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -50,481 +62,363 @@
 }
 
 /* ---------------------------------------------------------------- themes */
-/* Each animal theme sets the shadcn palette, the mascot colours, and a background texture. */
+/* Every theme sets only the 19 tokens from docs/redesign/THEMES.md (as --zc-*), mirrored in src/lib/themeTokens.ts
+   and checked by themeContrast.test.ts. This block maps them onto the names the components use. Flat look: square
+   corners, no textures or glows. The mapping also runs on any element with its own data-skin (the theme cards), so a
+   card shows its own theme and not the one that is active. */
 
 :root,
-[data-skin="crested"] {
-  --background: #0f0a08;
-  --foreground: #f0e1d4;
-  --card: #18100c;
-  --card-foreground: #f0e1d4;
-  --popover: #1b120d;
-  --popover-foreground: #f6e7da;
-  --primary: #ff8c42;
-  --primary-foreground: #1d0c02;
-  --secondary: #24170f;
-  --secondary-foreground: #ead8c8;
-  --muted: #1c130e;
-  --muted-foreground: #b09482;
-  --accent: #2e1d13;
-  --accent-foreground: #fbeee2;
-  --destructive: #ff6b5b;
-  --border: #33221a;
-  --input: #432c20;
-  --ring: #ff8c42;
-  --radius: 0.7rem;
-  --sidebar: #120c09;
-  --sidebar-foreground: #ead8c8;
-  --sidebar-primary: #ff8c42;
-  --sidebar-primary-foreground: #1d0c02;
-  --sidebar-accent: #281a11;
-  --sidebar-accent-foreground: #fbeee2;
-  --sidebar-border: #301f16;
-  --sidebar-ring: #ff8c42;
+[data-skin] {
+  --background: var(--zc-bg);
+  --foreground: var(--zc-text);
+  --card: var(--zc-surface);
+  --card-foreground: var(--zc-text);
+  --popover: var(--zc-surface-2);
+  --popover-foreground: var(--zc-text);
+  --primary: var(--zc-accent);
+  --primary-foreground: var(--zc-on-accent);
+  --secondary: var(--zc-surface-2);
+  --secondary-foreground: var(--zc-text);
+  --muted: var(--zc-surface-2);
+  --muted-foreground: var(--zc-muted);
+  /* Hover / highlighted item: raised panel nudged toward the text colour so it shows on popovers too. */
+  --accent: color-mix(in srgb, var(--zc-surface-2) 88%, var(--zc-text));
+  --accent-foreground: var(--zc-text);
+  --destructive: var(--zc-danger);
+  --destructive-foreground: var(--zc-on-danger);
+  --border: var(--zc-border);
+  --input: var(--zc-border);
+  --ring: var(--zc-focus);
+  --radius: 0rem;
+  --sidebar: var(--zc-surface);
+  --sidebar-foreground: var(--zc-text);
+  --sidebar-primary: var(--zc-accent);
+  --sidebar-primary-foreground: var(--zc-on-accent);
+  --sidebar-accent: var(--zc-surface-2);
+  --sidebar-accent-foreground: var(--zc-text);
+  --sidebar-border: var(--zc-border);
+  --sidebar-ring: var(--zc-focus);
+  /* Mention bar and cue text (the row background is --zc-mention). */
+  /* Derived text colours: a token nudged toward the text colour so it also reads at 4.5:1 on raised panels and the
+     mention highlight (checked in themeContrast.test.ts; the mix is plain sRGB so the test can compute it). */
+  --accent-text: color-mix(in srgb, var(--zc-accent) 92%, var(--zc-text));
+  --mention: var(--accent-text);
+  /* Warnings (failed emote source, joining) stand apart from accent and success text. */
+  --warn: color-mix(in srgb, var(--zc-accent-2) 92%, var(--zc-text));
+  /* Danger as text ("Not sent", errors); the danger token itself is a button background. */
+  --danger-text: color-mix(in srgb, var(--zc-danger) 55%, var(--zc-text));
+  --live: var(--zc-live);
 
-  --mascot-body: #ff8c42;
-  --mascot-belly: #ffd2a8;
-  --mascot-spot: #f3e1c4;
-  --mascot-eye: #ffd166;
-  --mascot-pupil: #1b0c04;
-  --mascot-accent: #ff6f91;
-  --texture-rgb: 255 140 66;
-  --glow-rgb: 255 140 66;
-  --mention: #ffd166;
-  --mention-rgb: 255 209 102;
-  --live: #7dd3fc;
-  --live-rgb: 125 211 252;
-  /* Granular gecko skin: offset rows of tiny bumps. */
-  --texture-image:
-    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.075) 0 1.6px, transparent 2.1px),
-    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.05) 0 1.6px, transparent 2.1px);
-  --texture-size: 9px 8px, 9px 8px;
-  --texture-position: 0 0, 4.5px 4px;
+  /* Gecko mascot colours for the non-animal themes; animal themes set their own below. */
+  --mascot-body: var(--zc-accent);
+  --mascot-belly: var(--zc-badge-ink);
+  --mascot-spot: var(--zc-accent-2);
+  --mascot-eye: var(--zc-accent-2);
+  --mascot-pupil: var(--zc-bg);
+  --mascot-accent: var(--zc-danger);
 }
 
-[data-skin="penguin"] {
-  --background: #070b12;
-  --foreground: #e3ebf5;
-  --card: #0c121c;
-  --card-foreground: #e3ebf5;
-  --popover: #0e1520;
-  --popover-foreground: #edf3fa;
-  --primary: #7dd3fc;
-  --primary-foreground: #04121c;
-  --secondary: #121b28;
-  --secondary-foreground: #d6e2f0;
-  --muted: #0f1724;
-  --muted-foreground: #8b9bb2;
-  --accent: #172234;
-  --accent-foreground: #f0f6fd;
-  --border: #1b2638;
-  --input: #24334a;
-  --ring: #7dd3fc;
-  --sidebar: #090e17;
-  --sidebar-foreground: #d6e2f0;
-  --sidebar-primary: #7dd3fc;
-  --sidebar-primary-foreground: #04121c;
-  --sidebar-accent: #142034;
-  --sidebar-accent-foreground: #f0f6fd;
-  --sidebar-border: #182335;
-  --sidebar-ring: #7dd3fc;
+/* Crested gecko (default) */
+:root,
+[data-skin="crested"] {
+  --zc-bg: #141614;
+  --zc-surface: #1a1d1a;
+  --zc-surface-2: #202420;
+  --zc-border: #2a2f2a;
+  --zc-gap: #0d0f0d;
+  --zc-text: #d8ddd6;
+  --zc-muted: #858e83;
+  --zc-accent: #7ed957;
+  --zc-on-accent: #121412;
+  --zc-accent-2: #2ec4b6;
+  --zc-live: #3ddc4a;
+  --zc-mention: #27311f;
+  --zc-focus: #2ec4b6;
+  --zc-scrollbar: #7ed957;
+  --zc-track: #30362f;
+  --zc-badge: #2a2f2a;
+  --zc-badge-ink: #e8ece6;
+  --zc-danger: #c0392b;
+  --zc-on-danger: #ffffff;
+}
 
+/* Dark */
+[data-skin="dark"] {
+  --zc-bg: #121316;
+  --zc-surface: #191a1e;
+  --zc-surface-2: #212328;
+  --zc-border: #2c2f35;
+  --zc-gap: #0b0c0e;
+  --zc-text: #e4e6ea;
+  --zc-muted: #9a9ea8;
+  --zc-accent: #6ea8fe;
+  --zc-on-accent: #0b1220;
+  --zc-accent-2: #e9b44c;
+  --zc-live: #4ade80;
+  --zc-mention: #1e2a3e;
+  --zc-focus: #6ea8fe;
+  --zc-scrollbar: #6ea8fe;
+  --zc-track: #2c2f35;
+  --zc-badge: #2c2f35;
+  --zc-badge-ink: #eef0f3;
+  --zc-danger: #c0392b;
+  --zc-on-danger: #ffffff;
+}
+
+/* Light */
+[data-skin="light"] {
+  --zc-bg: #f4f5f3;
+  --zc-surface: #ffffff;
+  --zc-surface-2: #e9ebe7;
+  --zc-border: #d3d7d0;
+  --zc-gap: #cfd3cc;
+  --zc-text: #1a1d1a;
+  --zc-muted: #596157;
+  --zc-accent: #2f7a12;
+  --zc-on-accent: #ffffff;
+  --zc-accent-2: #0b7a70;
+  --zc-live: #15803d;
+  --zc-mention: #fff1c2;
+  --zc-focus: #0b7a70;
+  --zc-scrollbar: #2f7a12;
+  --zc-track: #d3d7d0;
+  --zc-badge: #3a403a;
+  --zc-badge-ink: #ffffff;
+  --zc-danger: #b3261e;
+  --zc-on-danger: #ffffff;
+}
+
+/* Eye comfort */
+[data-skin="eyecomfort"] {
+  --zc-bg: #1e1a15;
+  --zc-surface: #25201a;
+  --zc-surface-2: #2d271f;
+  --zc-border: #3b3329;
+  --zc-gap: #16130f;
+  --zc-text: #e6d9c3;
+  --zc-muted: #ab9a7f;
+  --zc-accent: #d9a35f;
+  --zc-on-accent: #231a0f;
+  --zc-accent-2: #9dbd94;
+  --zc-live: #a3d17f;
+  --zc-mention: #3a2e1b;
+  --zc-focus: #d9a35f;
+  --zc-scrollbar: #d9a35f;
+  --zc-track: #3b3329;
+  --zc-badge: #3b3329;
+  --zc-badge-ink: #efe3cd;
+  --zc-danger: #a54e37;
+  --zc-on-danger: #fff4e6;
+}
+
+/* Paper */
+[data-skin="eyecomfort-light"] {
+  --zc-bg: #f1e8d6;
+  --zc-surface: #f7efe0;
+  --zc-surface-2: #e8dcc4;
+  --zc-border: #d6c7a6;
+  --zc-gap: #d6c7a6;
+  --zc-text: #3a3024;
+  --zc-muted: #6a5c48;
+  --zc-accent: #875820;
+  --zc-on-accent: #fbf5ea;
+  --zc-accent-2: #3d6c58;
+  --zc-live: #3a7a37;
+  --zc-mention: #efd9a2;
+  --zc-focus: #3d6c58;
+  --zc-scrollbar: #875820;
+  --zc-track: #d6c7a6;
+  --zc-badge: #5a4a36;
+  --zc-badge-ink: #fbf5ea;
+  --zc-danger: #a23a26;
+  --zc-on-danger: #fbf5ea;
+}
+
+/* Penguin */
+[data-skin="penguin"] {
+  --zc-bg: #0e1520;
+  --zc-surface: #131c29;
+  --zc-surface-2: #1a2533;
+  --zc-border: #253244;
+  --zc-gap: #080d14;
+  --zc-text: #e4ecf5;
+  --zc-muted: #8fa1b6;
+  --zc-accent: #ff9f43;
+  --zc-on-accent: #1a0f03;
+  --zc-accent-2: #7dd3fc;
+  --zc-live: #4ade80;
+  --zc-mention: #2e2414;
+  --zc-focus: #7dd3fc;
+  --zc-scrollbar: #ff9f43;
+  --zc-track: #253244;
+  --zc-badge: #253244;
+  --zc-badge-ink: #eef4fb;
+  --zc-danger: #c63b3b;
+  --zc-on-danger: #ffffff;
   --mascot-body: #3b4f6b;
   --mascot-belly: #f1f5f9;
   --mascot-spot: #ffcf70;
   --mascot-eye: #0b1220;
   --mascot-pupil: #0b1220;
   --mascot-accent: #ffa94d;
-  --texture-rgb: 186 230 253;
-  --glow-rgb: 125 211 252;
-  --mention: #ffa94d;
-  --mention-rgb: 255 169 77;
-  --live: #7dd3fc;
-  --live-rgb: 125 211 252;
-  /* Light snowfall. */
-  --texture-image:
-    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.11) 0 1.2px, transparent 1.6px),
-    radial-gradient(circle at center, rgb(var(--texture-rgb) / 0.06) 0 0.9px, transparent 1.3px);
-  --texture-size: 23px 19px, 13px 17px;
-  --texture-position: 0 0, 7px 9px;
 }
 
+/* Sea turtle */
 [data-skin="turtle"] {
-  --background: #061210;
-  --foreground: #d9efe9;
-  --card: #0a1a17;
-  --card-foreground: #d9efe9;
-  --popover: #0c1e1a;
-  --popover-foreground: #e4f6f1;
-  --primary: #34d1a8;
-  --primary-foreground: #021511;
-  --secondary: #10241f;
-  --secondary-foreground: #cfe7e0;
-  --muted: #0d1f1b;
-  --muted-foreground: #7fa69b;
-  --accent: #133029;
-  --accent-foreground: #e6f8f3;
-  --border: #16302a;
-  --input: #1f4038;
-  --ring: #34d1a8;
-  --sidebar: #071613;
-  --sidebar-foreground: #cfe7e0;
-  --sidebar-primary: #34d1a8;
-  --sidebar-primary-foreground: #021511;
-  --sidebar-accent: #11291f;
-  --sidebar-accent-foreground: #e6f8f3;
-  --sidebar-border: #142c26;
-  --sidebar-ring: #34d1a8;
-
+  --zc-bg: #0c1a1a;
+  --zc-surface: #102222;
+  --zc-surface-2: #152b2b;
+  --zc-border: #1f3a3a;
+  --zc-gap: #071111;
+  --zc-text: #dcebe5;
+  --zc-muted: #88a8a0;
+  --zc-accent: #e9c46a;
+  --zc-on-accent: #1d1605;
+  --zc-accent-2: #40c9b5;
+  --zc-live: #6ee07f;
+  --zc-mention: #2b2c18;
+  --zc-focus: #40c9b5;
+  --zc-scrollbar: #e9c46a;
+  --zc-track: #1f3a3a;
+  --zc-badge: #1f3a3a;
+  --zc-badge-ink: #e8f4f0;
+  --zc-danger: #bb4a3e;
+  --zc-on-danger: #ffffff;
   --mascot-body: #5f8a45;
   --mascot-belly: #8fd4a8;
   --mascot-spot: #2f4d22;
   --mascot-eye: #0b1a14;
   --mascot-pupil: #0b1a14;
   --mascot-accent: #e9c46a;
-  --texture-rgb: 52 209 168;
-  --glow-rgb: 52 209 168;
-  --mention: #f2c26b;
-  --mention-rgb: 242 194 107;
-  --live: #5eead4;
-  --live-rgb: 94 234 212;
-  /* Shell plates: a honeycomb of hexagons. */
-  --texture-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13.856' height='24'%3E%3Cg fill='none' stroke='%2334d1a8' stroke-opacity='0.09' stroke-width='0.8'%3E%3Cpath d='M6.928 4l6.928 4v8l-6.928 4L0 16V8z'/%3E%3Cpath d='M0 -8l6.928 4v8L0 8l-6.928-4v-8zM13.856 -8l6.928 4v8l-6.928 4-6.928-4v-8zM0 16l6.928 4v8L0 32l-6.928-4v-8zM13.856 16l6.928 4v8l-6.928 4-6.928-4v-8z'/%3E%3C/g%3E%3C/svg%3E");
-  --texture-size: 13.856px 24px;
-  --texture-position: 0 0;
 }
 
+/* Elephant */
 [data-skin="elephant"] {
-  --background: #0e0e12;
-  --foreground: #e6e4ec;
-  --card: #15151b;
-  --card-foreground: #e6e4ec;
-  --popover: #18181f;
-  --popover-foreground: #efedf5;
-  --primary: #b4a5f5;
-  --primary-foreground: #120d26;
-  --secondary: #1d1d26;
-  --secondary-foreground: #dddbe6;
-  --muted: #19191f;
-  --muted-foreground: #9a97a8;
-  --accent: #24232e;
-  --accent-foreground: #f2f0f8;
-  --border: #2a2934;
-  --input: #363544;
-  --ring: #b4a5f5;
-  --sidebar: #111116;
-  --sidebar-foreground: #dddbe6;
-  --sidebar-primary: #b4a5f5;
-  --sidebar-primary-foreground: #120d26;
-  --sidebar-accent: #20202a;
-  --sidebar-accent-foreground: #f2f0f8;
-  --sidebar-border: #26252f;
-  --sidebar-ring: #b4a5f5;
-
+  --zc-bg: #17161c;
+  --zc-surface: #1e1d24;
+  --zc-surface-2: #26252d;
+  --zc-border: #34323d;
+  --zc-gap: #0f0e13;
+  --zc-text: #e6e2ec;
+  --zc-muted: #9e99aa;
+  --zc-accent: #c3a6ff;
+  --zc-on-accent: #1a1226;
+  --zc-accent-2: #e3a5a0;
+  --zc-live: #6fdc8c;
+  --zc-mention: #2c2638;
+  --zc-focus: #c3a6ff;
+  --zc-scrollbar: #c3a6ff;
+  --zc-track: #34323d;
+  --zc-badge: #34323d;
+  --zc-badge-ink: #f0edf5;
+  --zc-danger: #c94a5a;
+  --zc-on-danger: #ffffff;
   --mascot-body: #9ca3af;
   --mascot-belly: #d1d5db;
   --mascot-spot: #6b7280;
   --mascot-eye: #111827;
   --mascot-pupil: #111827;
   --mascot-accent: #f9a8d4;
-  --texture-rgb: 180 165 245;
-  --glow-rgb: 180 165 245;
-  --mention: #ffb4a2;
-  --mention-rgb: 255 180 162;
-  --live: #c4b5fd;
-  --live-rgb: 196 181 253;
-  /* Wrinkly elephant skin. */
-  --texture-image:
-    repeating-linear-gradient(176deg, rgb(var(--texture-rgb) / 0.05) 0 1px, transparent 1px 9px),
-    repeating-linear-gradient(184deg, rgb(var(--texture-rgb) / 0.035) 0 1px, transparent 1px 13px);
-  --texture-size: auto, auto;
-  --texture-position: 0 0, 0 0;
 }
 
-[data-skin="dark"] {
-  --background: #0c0e12;
-  --foreground: #e8eaef;
-  --card: #12151c;
-  --card-foreground: #e8eaef;
-  --popover: #151922;
-  --popover-foreground: #f1f3f7;
-  --primary: #8ab4ff;
-  --primary-foreground: #071225;
-  --secondary: #1a1f2a;
-  --secondary-foreground: #d5dae6;
-  --muted: #161b24;
-  --muted-foreground: #9aa3b5;
-  --accent: #1f2633;
-  --accent-foreground: #f1f3f7;
-  --destructive: #ff8a7a;
-  --border: #262c3a;
-  --input: #323a4c;
-  --ring: #8ab4ff;
-  --sidebar: #0a0c10;
-  --sidebar-foreground: #d5dae6;
-  --sidebar-primary: #8ab4ff;
-  --sidebar-primary-foreground: #071225;
-  --sidebar-accent: #1a2030;
-  --sidebar-accent-foreground: #f1f3f7;
-  --sidebar-border: #1e2430;
-  --sidebar-ring: #8ab4ff;
-
-  --mascot-body: #6b7c99;
-  --mascot-belly: #d7dde8;
-  --mascot-spot: #8ab4ff;
-  --mascot-eye: #ffc857;
-  --mascot-pupil: #0c0e12;
-  --mascot-accent: #ffb454;
-  --texture-rgb: 138 180 255;
-  --glow-rgb: 138 180 255;
-  --mention: #ffb454;
-  --mention-rgb: 255 180 84;
-  --live: #8ab4ff;
-  --live-rgb: 138 180 255;
-  --texture-image:
-    linear-gradient(rgb(var(--texture-rgb) / 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--texture-rgb) / 0.035) 1px, transparent 1px);
-  --texture-size: 18px 18px, 18px 18px;
-  --texture-position: 0 0, 0 0;
-}
-
-[data-skin="light"] {
-  --background: #f4f6fa;
-  --foreground: #1a2030;
-  --card: #ffffff;
-  --card-foreground: #1a2030;
-  --popover: #ffffff;
-  --popover-foreground: #1a2030;
-  --primary: #2563eb;
-  --primary-foreground: #f8fafc;
-  --secondary: #e8edf5;
-  --secondary-foreground: #1a2030;
-  --muted: #eef1f6;
-  --muted-foreground: #5b6578;
-  --accent: #e2e8f4;
-  --accent-foreground: #1a2030;
-  --destructive: #c2410c;
-  --border: #d5dbe8;
-  --input: #c9d1e0;
-  --ring: #2563eb;
-  --sidebar: #e9eef7;
-  --sidebar-foreground: #1a2030;
-  --sidebar-primary: #2563eb;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #dde5f3;
-  --sidebar-accent-foreground: #1a2030;
-  --sidebar-border: #ced6e6;
-  --sidebar-ring: #2563eb;
-
-  --mascot-body: #3b82f6;
-  --mascot-belly: #dbeafe;
-  --mascot-spot: #1d4ed8;
-  --mascot-eye: #ea580c;
-  --mascot-pupil: #0f172a;
-  --mascot-accent: #f59e0b;
-  --texture-rgb: 37 99 235;
-  --glow-rgb: 37 99 235;
-  --mention: #c2410c;
-  --mention-rgb: 194 65 12;
-  --live: #2563eb;
-  --live-rgb: 37 99 235;
-  --texture-image:
-    linear-gradient(rgb(var(--texture-rgb) / 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--texture-rgb) / 0.04) 1px, transparent 1px);
-  --texture-size: 20px 20px, 20px 20px;
-  --texture-position: 0 0, 0 0;
-}
-
-/* Colour-vision themes: blue/orange (or magenta/teal) + shape/weight cues — never red-vs-green alone. */
+/* Deuteranopia */
 [data-skin="deuteranopia"] {
-  --background: #0b1020;
-  --foreground: #eaf0ff;
-  --card: #121a30;
-  --card-foreground: #eaf0ff;
-  --popover: #152038;
-  --popover-foreground: #f4f7ff;
-  --primary: #4da3ff;
-  --primary-foreground: #04101f;
-  --secondary: #18233d;
-  --secondary-foreground: #d7e2f8;
-  --muted: #141d33;
-  --muted-foreground: #9aacc8;
-  --accent: #1c2a48;
-  --accent-foreground: #f4f7ff;
-  --destructive: #ff9f43;
-  --border: #243352;
-  --input: #314366;
-  --ring: #4da3ff;
-  --sidebar: #090e1b;
-  --sidebar-foreground: #d7e2f8;
-  --sidebar-primary: #4da3ff;
-  --sidebar-primary-foreground: #04101f;
-  --sidebar-accent: #16233f;
-  --sidebar-accent-foreground: #f4f7ff;
-  --sidebar-border: #1e2c48;
-  --sidebar-ring: #4da3ff;
-
-  --mascot-body: #4da3ff;
-  --mascot-belly: #d7e8ff;
-  --mascot-spot: #ff9f43;
-  --mascot-eye: #ffd166;
-  --mascot-pupil: #0b1020;
-  --mascot-accent: #ff9f43;
-  --texture-rgb: 77 163 255;
-  --glow-rgb: 77 163 255;
-  --mention: #ff9f43;
-  --mention-rgb: 255 159 67;
-  --live: #4da3ff;
-  --live-rgb: 77 163 255;
-  --texture-image:
-    repeating-linear-gradient(90deg, rgb(var(--texture-rgb) / 0.06) 0 2px, transparent 2px 12px);
-  --texture-size: auto;
-  --texture-position: 0 0;
+  --zc-bg: #131418;
+  --zc-surface: #1a1b20;
+  --zc-surface-2: #22232a;
+  --zc-border: #2e3038;
+  --zc-gap: #0b0c0f;
+  --zc-text: #e6e7eb;
+  --zc-muted: #9ea1ab;
+  --zc-accent: #e69f00;
+  --zc-on-accent: #1a1200;
+  --zc-accent-2: #56b4e9;
+  --zc-live: #f0e442;
+  --zc-mention: #33280f;
+  --zc-focus: #56b4e9;
+  --zc-scrollbar: #e69f00;
+  --zc-track: #2e3038;
+  --zc-badge: #2e3038;
+  --zc-badge-ink: #f0f1f4;
+  --zc-danger: #d55e00;
+  --zc-on-danger: #120800;
 }
 
+/* Protanopia */
 [data-skin="protanopia"] {
-  --background: #0a1218;
-  --foreground: #e8f2f8;
-  --card: #101b24;
-  --card-foreground: #e8f2f8;
-  --popover: #13212c;
-  --popover-foreground: #f2f8fc;
-  --primary: #5ec8ff;
-  --primary-foreground: #041018;
-  --secondary: #162430;
-  --secondary-foreground: #d5e6f0;
-  --muted: #121f29;
-  --muted-foreground: #93a9b8;
-  --accent: #1a2c3a;
-  --accent-foreground: #f2f8fc;
-  --destructive: #e6a23c;
-  --border: #243848;
-  --input: #314a5e;
-  --ring: #5ec8ff;
-  --sidebar: #081016;
-  --sidebar-foreground: #d5e6f0;
-  --sidebar-primary: #5ec8ff;
-  --sidebar-primary-foreground: #041018;
-  --sidebar-accent: #152735;
-  --sidebar-accent-foreground: #f2f8fc;
-  --sidebar-border: #1d3140;
-  --sidebar-ring: #5ec8ff;
-
-  --mascot-body: #5ec8ff;
-  --mascot-belly: #d9f0ff;
-  --mascot-spot: #e6a23c;
-  --mascot-eye: #ffe08a;
-  --mascot-pupil: #0a1218;
-  --mascot-accent: #e6a23c;
-  --texture-rgb: 94 200 255;
-  --glow-rgb: 94 200 255;
-  --mention: #e6a23c;
-  --mention-rgb: 230 162 60;
-  --live: #5ec8ff;
-  --live-rgb: 94 200 255;
-  --texture-image:
-    repeating-linear-gradient(0deg, rgb(var(--texture-rgb) / 0.055) 0 2px, transparent 2px 14px);
-  --texture-size: auto;
-  --texture-position: 0 0;
+  --zc-bg: #13151a;
+  --zc-surface: #1a1c22;
+  --zc-surface-2: #22252c;
+  --zc-border: #2e323a;
+  --zc-gap: #0b0c10;
+  --zc-text: #e6e8ec;
+  --zc-muted: #9ea2ac;
+  --zc-accent: #56b4e9;
+  --zc-on-accent: #06141d;
+  --zc-accent-2: #e69f00;
+  --zc-live: #f0e442;
+  --zc-mention: #14283a;
+  --zc-focus: #f0e442;
+  --zc-scrollbar: #56b4e9;
+  --zc-track: #2e323a;
+  --zc-badge: #2e323a;
+  --zc-badge-ink: #f0f2f5;
+  --zc-danger: #e69f00;
+  --zc-on-danger: #140d00;
 }
 
+/* Tritanopia */
 [data-skin="tritanopia"] {
-  --background: #140c14;
-  --foreground: #f3e8f3;
-  --card: #1d121d;
-  --card-foreground: #f3e8f3;
-  --popover: #221622;
-  --popover-foreground: #faf0fa;
-  --primary: #e879f9;
-  --primary-foreground: #1a061c;
-  --secondary: #2a1a2a;
-  --secondary-foreground: #ebdceb;
-  --muted: #221522;
-  --muted-foreground: #b39ab3;
-  --accent: #322032;
-  --accent-foreground: #faf0fa;
-  --destructive: #2dd4bf;
-  --border: #3a273a;
-  --input: #4a354a;
-  --ring: #e879f9;
-  --sidebar: #110a11;
-  --sidebar-foreground: #ebdceb;
-  --sidebar-primary: #e879f9;
-  --sidebar-primary-foreground: #1a061c;
-  --sidebar-accent: #271827;
-  --sidebar-accent-foreground: #faf0fa;
-  --sidebar-border: #2f1f2f;
-  --sidebar-ring: #e879f9;
-
-  --mascot-body: #c084fc;
-  --mascot-belly: #f5d0fe;
-  --mascot-spot: #2dd4bf;
-  --mascot-eye: #f0abfc;
-  --mascot-pupil: #140c14;
-  --mascot-accent: #2dd4bf;
-  --texture-rgb: 232 121 249;
-  --glow-rgb: 232 121 249;
-  --mention: #e879f9;
-  --mention-rgb: 232 121 249;
-  --live: #2dd4bf;
-  --live-rgb: 45 212 191;
-  --texture-image:
-    repeating-linear-gradient(135deg, rgb(var(--texture-rgb) / 0.06) 0 2px, transparent 2px 11px);
-  --texture-size: auto;
-  --texture-position: 0 0;
+  --zc-bg: #151418;
+  --zc-surface: #1c1b20;
+  --zc-surface-2: #24232a;
+  --zc-border: #312f38;
+  --zc-gap: #0d0c0f;
+  --zc-text: #ebe7ec;
+  --zc-muted: #a49faa;
+  --zc-accent: #cc79a7;
+  --zc-on-accent: #1d0a15;
+  --zc-accent-2: #009e73;
+  --zc-live: #e69f00;
+  --zc-mention: #33192a;
+  --zc-focus: #cc79a7;
+  --zc-scrollbar: #cc79a7;
+  --zc-track: #312f38;
+  --zc-badge: #312f38;
+  --zc-badge-ink: #f3f0f4;
+  --zc-danger: #d55e00;
+  --zc-on-danger: #120800;
 }
 
-[data-skin="eyecomfort"] {
-  --background: #1c1712;
-  --foreground: #e8dcc8;
-  --card: #251f18;
-  --card-foreground: #e8dcc8;
-  --popover: #2a231b;
-  --popover-foreground: #f0e6d4;
-  --primary: #d4a574;
-  --primary-foreground: #22180e;
-  --secondary: #322920;
-  --secondary-foreground: #ddcfb8;
-  --muted: #2a221a;
-  --muted-foreground: #a89880;
-  --accent: #3a3026;
-  --accent-foreground: #f0e6d4;
-  --destructive: #c47a5a;
-  --border: #3f3428;
-  --input: #4f4233;
-  --ring: #d4a574;
-  --sidebar: #18130f;
-  --sidebar-foreground: #ddcfb8;
-  --sidebar-primary: #d4a574;
-  --sidebar-primary-foreground: #22180e;
-  --sidebar-accent: #2e261e;
-  --sidebar-accent-foreground: #f0e6d4;
-  --sidebar-border: #372e24;
-  --sidebar-ring: #d4a574;
-
-  --mascot-body: #c49264;
-  --mascot-belly: #e8d2b0;
-  --mascot-spot: #8b6a45;
-  --mascot-eye: #e8c07a;
-  --mascot-pupil: #1c1712;
-  --mascot-accent: #c47a5a;
-  --texture-rgb: 212 165 116;
-  --glow-rgb: 212 165 116;
-  --mention: #e0b56a;
-  --mention-rgb: 224 181 106;
-  --live: #8fbfb0;
-  --live-rgb: 143 191 176;
-  --texture-image:
-    radial-gradient(ellipse at center, rgb(var(--texture-rgb) / 0.05) 0 40%, transparent 70%);
-  --texture-size: 28px 22px;
-  --texture-position: 0 0;
+/* High contrast */
+[data-skin="highcontrast"] {
+  --zc-bg: #000000;
+  --zc-surface: #000000;
+  --zc-surface-2: #121212;
+  --zc-border: #ffffff;
+  --zc-gap: #ffffff;
+  --zc-text: #ffffff;
+  --zc-muted: #d6d6d6;
+  --zc-accent: #ffd60a;
+  --zc-on-accent: #000000;
+  --zc-accent-2: #3ff0ff;
+  --zc-live: #39ff6a;
+  --zc-mention: #3a3000;
+  --zc-focus: #ffd60a;
+  --zc-scrollbar: #ffffff;
+  --zc-track: #555555;
+  --zc-badge: #000000;
+  --zc-badge-ink: #ffffff;
+  --zc-danger: #ff6b6b;
+  --zc-on-danger: #000000;
 }
 
 /* ---------------------------------------------------------------- base */
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
+    scrollbar-color: var(--zc-scrollbar) var(--zc-track);
   }
   html,
   body,
@@ -539,69 +433,35 @@
     @apply font-sans;
     color-scheme: dark;
   }
-  html[data-skin="light"] {
+  html[data-skin="light"],
+  html[data-skin="eyecomfort-light"] {
     color-scheme: light;
   }
   ::selection {
-    background: rgb(var(--glow-rgb) / 0.35);
+    background: color-mix(in srgb, var(--zc-accent) 35%, transparent);
     color: var(--foreground);
   }
 }
 
+/* Flat surfaces. The old texture classes stay as plain panels so nothing else has to change at once. */
 .zoo-texture {
-  background-color: var(--sidebar);
-  background-image: var(--texture-image);
-  background-size: var(--texture-size);
-  background-position: var(--texture-position);
+  background-color: var(--zc-bg);
 }
-
-/* Same texture at half strength, behind the content. */
 .zoo-texture-soft {
   position: relative;
-  isolation: isolate;
-}
-.zoo-texture-soft::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: var(--texture-image);
-  background-size: var(--texture-size);
-  background-position: var(--texture-position);
 }
 
+/* Former glow: a plain 1px outline in the focus colour (no shadows). */
 .zoo-glow {
-  box-shadow:
-    0 0 0 1px rgb(var(--glow-rgb) / 0.25),
-    0 0 18px -4px rgb(var(--glow-rgb) / 0.55);
+  box-shadow: 0 0 0 1px var(--zc-focus);
 }
-
 .zoo-text-glow {
-  text-shadow: 0 0 14px rgb(var(--glow-rgb) / 0.45);
+  text-shadow: none;
 }
 
+/* Thin themed scrollbar (thumb vs track is a checked 3:1 pair). */
 .zoo-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--texture-rgb) / 0.35) transparent;
-}
-.zoo-scroll::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-.zoo-scroll::-webkit-scrollbar-thumb {
-  background: rgb(var(--texture-rgb) / 0.3);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.zoo-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--texture-rgb) / 0.55);
-  background-clip: padding-box;
-}
-.zoo-scroll::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 /* ---------------------------------------------------------------- mascot animation */
@@ -696,7 +556,7 @@
 
 @keyframes chat-row-in {
   from {
-    background-color: rgb(var(--glow-rgb) / 0.08);
+    background-color: color-mix(in srgb, var(--zc-accent) 8%, transparent);
   }
   to {
     background-color: transparent;
@@ -855,33 +715,51 @@
 }
 .chat-row.chat-row-deleted .chat-text {
   text-decoration: line-through;
-  text-decoration-color: rgb(var(--texture-rgb) / 0.6);
+  text-decoration-color: var(--zc-muted);
+}
+/* Keyboard-highlighted menu items: a focus-colour bar (shape, not just a tint) and stronger secondary text. */
+[role^="menuitem"]:focus,
+[role^="menuitem"][data-highlighted] {
+  box-shadow: inset 2px 0 0 var(--ring);
+  --muted-foreground: color-mix(in srgb, var(--zc-muted) 50%, var(--zc-text));
 }
 
-/* Colour-vision themes: second cues beyond hue (weight + double bar / dashed deleted). */
+/* Muted text (timestamps, ":" and reply lines) on the mention highlight needs a little more weight in some themes.
+   Channel-points "highlight my message" rows use the same background. */
+.chat-row[data-highlighted="true"],
+.chat-row[data-mention="true"] {
+  --muted-foreground: color-mix(in srgb, var(--zc-muted) 80%, var(--zc-text));
+}
+
+/* Colour-vision and high-contrast themes: second cues beyond hue (weight + double bar / dashed deleted). */
 html[data-skin="deuteranopia"] .chat-row[data-mention="true"],
 html[data-skin="protanopia"] .chat-row[data-mention="true"],
-html[data-skin="tritanopia"] .chat-row[data-mention="true"] {
+html[data-skin="tritanopia"] .chat-row[data-mention="true"],
+html[data-skin="highcontrast"] .chat-row[data-mention="true"] {
   font-weight: 600;
   box-shadow:
     inset 3px 0 0 var(--mention),
-    inset 7px 0 0 rgb(var(--mention-rgb) / 0.35);
+    inset 7px 0 0 color-mix(in srgb, var(--mention) 35%, transparent);
 }
 html[data-skin="deuteranopia"] .chat-row.chat-row-deleted .chat-text,
 html[data-skin="protanopia"] .chat-row.chat-row-deleted .chat-text,
-html[data-skin="tritanopia"] .chat-row.chat-row-deleted .chat-text {
+html[data-skin="tritanopia"] .chat-row.chat-row-deleted .chat-text,
+html[data-skin="highcontrast"] .chat-row.chat-row-deleted .chat-text {
   text-decoration: line-through underline;
   text-decoration-style: solid wavy;
   text-decoration-color: var(--destructive);
 }
 html[data-skin="deuteranopia"] .chat-row.chat-row-deleted,
 html[data-skin="protanopia"] .chat-row.chat-row-deleted,
-html[data-skin="tritanopia"] .chat-row.chat-row-deleted {
-  opacity: 0.72;
+html[data-skin="tritanopia"] .chat-row.chat-row-deleted,
+html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
   border-left: 3px dashed var(--destructive);
 }
-.chat-log[data-zebra="true"] .chat-row:nth-child(even) {
-  background-color: rgb(var(--texture-rgb) / 0.025);
+/* In a layer so mention, highlighted and event row backgrounds (utility classes) still win over the stripe. */
+@layer components {
+  .chat-log[data-zebra="true"] .chat-row:nth-child(even) {
+    background-color: color-mix(in srgb, var(--zc-text) 4%, transparent);
+  }
 }
 .chat-emote {
   height: var(--emote-h);
@@ -889,4 +767,36 @@ html[data-skin="tritanopia"] .chat-row.chat-row-deleted {
   max-width: calc(var(--emote-h) * 4);
   vertical-align: middle;
   display: inline-block;
+}
+
+/* ---------------------------------------------------------------- motion and Windows contrast themes */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows contrast themes replace our colours; keep focus rings, badges and the live dot visible as shapes. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 1px;
+  }
+  .zc-badge,
+  .zc-live-dot {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+  .chat-row[data-mention="true"] {
+    border-left: 3px solid Highlight;
+  }
+  .chat-row[data-highlighted="true"] {
+    border-left: 3px dashed Highlight;
+  }
 }

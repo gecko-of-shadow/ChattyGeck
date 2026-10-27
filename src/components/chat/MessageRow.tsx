@@ -1,5 +1,5 @@
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { CircleAlert, CornerDownRight, Info, LoaderCircle, Sparkles } from "lucide-react";
+import { CircleAlert, CornerDownRight, Highlighter, Info, LoaderCircle, Sparkles } from "lucide-react";
 import { GeckoEggIcon, GeckoTailIcon } from "@/components/mascots/icons";
 import { chat } from "@/lib/chat/controller";
 import { canReplyTo } from "@/lib/twitch/reply";
@@ -11,9 +11,12 @@ import { emoteBigUrl, emoteUrls, type Emote } from "@/lib/emotes/types";
 import { openExternal } from "@/lib/platform";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { cn } from "@/lib/utils";
+import type { ConcreteSkin } from "@/lib/themes";
 import type { EmoteAnimation } from "@/store/settings";
 
 export interface RowPrefs {
+  /** The theme showing now; chatter name colours are adjusted to read on it. */
+  skin: ConcreteSkin;
   showTimestamps: boolean;
   use24h: boolean;
   showBadges: boolean;
@@ -84,7 +87,7 @@ function renderFragment(fragment: Fragment, index: number, animation: EmoteAnima
           key={index}
           className={cn(
             "font-semibold",
-            fragment.login === selfLogin ? "text-mention" : "text-foreground/95",
+            fragment.login === selfLogin ? "font-bold text-foreground" : "text-foreground/95",
           )}
         >
           {fragment.text}
@@ -95,7 +98,7 @@ function renderFragment(fragment: Fragment, index: number, animation: EmoteAnima
         <a
           key={index}
           href={fragment.href}
-          className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary break-all"
+          className="text-accent-text underline decoration-primary/40 underline-offset-2 hover:decoration-primary break-all"
           onClick={(event) => {
             event.preventDefault();
             void openExternal(fragment.href);
@@ -131,7 +134,7 @@ function MessageRowInner({
   }, [message.text, message.twitchEmotes, message.channel, revision]);
 
   const time = prefs.showTimestamps ? (
-    <time className="mr-1.5 font-mono text-[0.78em] tabular-nums text-muted-foreground/70 select-none">
+    <time className="mr-1.5 font-mono text-[0.78em] tabular-nums text-muted-foreground select-none">
       {formatTime(message.ts, prefs.use24h)}
     </time>
   ) : null;
@@ -142,7 +145,7 @@ function MessageRowInner({
       <div
         className={cn(
           "chat-row flex items-center gap-2 px-3 py-1.5 text-[0.86em]",
-          warn ? "text-mention" : message.tone === "success" ? "text-primary" : "text-muted-foreground",
+          warn ? "text-warn" : message.tone === "success" ? "text-accent-text" : "text-muted-foreground",
         )}
       >
         <span className="h-px flex-1 bg-current opacity-20" />
@@ -157,7 +160,7 @@ function MessageRowInner({
     return (
       <div className="chat-row px-3 py-[3px] leading-[1.55] text-muted-foreground italic">
         {time}
-        <Info className="mr-1 inline size-3.5 -translate-y-px text-primary/70" />
+        <Info className="mr-1 inline size-3.5 -translate-y-px text-accent-text" />
         {message.text}
       </div>
     );
@@ -165,7 +168,7 @@ function MessageRowInner({
 
   const name = message.displayName ?? message.login ?? "";
   const showLogin = !!message.login && name.toLowerCase() !== message.login;
-  const nameColor = readableNameColor(message.color, message.login ?? name);
+  const nameColor = readableNameColor(message.color, message.login ?? name, prefs.skin);
   const isAction = message.kind === "action";
   const isEvent = message.kind === "event";
   const deleted = !!message.deleted;
@@ -198,21 +201,22 @@ function MessageRowInner({
       className={cn(
         "chat-row group relative px-3 py-[3px] leading-[1.6] break-words [overflow-wrap:anywhere]",
         replyable && "pr-8",
-        message.mention && "bg-[rgb(var(--mention-rgb)/0.10)] shadow-[inset_3px_0_0_var(--mention)]",
-        message.highlighted && "bg-primary/10 shadow-[inset_3px_0_0_var(--primary)]",
-        message.firstMsg && !message.mention && "shadow-[inset_3px_0_0_var(--mascot-belly)]",
+        message.mention && "bg-mention-bg shadow-[inset_3px_0_0_var(--mention)]",
+        message.highlighted && !message.mention && "bg-mention-bg shadow-[inset_3px_0_0_var(--zc-accent-2)]",
+        message.firstMsg && !message.mention && !message.highlighted && "shadow-[inset_3px_0_0_var(--zc-accent-2)]",
         isEvent && "my-0.5 bg-primary/[0.07] py-1.5 shadow-[inset_3px_0_0_var(--primary)]",
-        deleted && "chat-row-deleted opacity-50",
-        message.pending === "sending" && "opacity-60",
+        deleted && "chat-row-deleted text-muted-foreground",
+        message.pending === "sending" && "text-muted-foreground",
       )}
       data-deleted={deleted || undefined}
       data-mention={message.mention || undefined}
+      data-highlighted={(message.highlighted && !message.mention) || undefined}
     >
       {replyable ? (
         <button
           type="button"
           tabIndex={-1}
-          className="pointer-events-none absolute top-0.5 right-1 rounded-md p-1 text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-muted hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-80"
+          className="pointer-events-none absolute top-0.5 right-1 rounded-md p-1 text-muted-foreground opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-accent hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-80"
           aria-label={`Reply to ${name}`}
           title="Reply"
           onClick={() =>
@@ -238,7 +242,7 @@ function MessageRowInner({
         </div>
       ) : null}
       {isEvent && message.systemText ? (
-        <div className="mb-0.5 font-medium text-primary">
+        <div className="mb-0.5 font-medium text-accent-text">
           {time}
           {message.systemText}
         </div>
@@ -249,6 +253,13 @@ function MessageRowInner({
           {message.firstMsg ? (
             <span title="First message in this channel" className="mr-1 inline-flex -translate-y-px align-middle">
               <GeckoEggIcon />
+              <span className="sr-only">First message in this channel</span>
+            </span>
+          ) : null}
+          {message.highlighted && !message.mention ? (
+            <span title="Highlighted with channel points" className="mr-1 inline-flex -translate-y-px align-middle text-warn">
+              <Highlighter className="size-3.5" aria-hidden />
+              <span className="sr-only">Highlighted with channel points</span>
             </span>
           ) : null}
           {badges}
@@ -260,7 +271,7 @@ function MessageRowInner({
             title={message.login ? `Mention @${message.login}` : undefined}
           >
             {name}
-            {showLogin ? <span className="font-medium opacity-70"> ({message.login})</span> : null}
+            {showLogin ? <span className="font-medium text-muted-foreground"> ({message.login})</span> : null}
           </button>
           {isAction ? " " : <span className="mr-1 text-muted-foreground">:</span>}
           {hideText ? (
@@ -279,7 +290,7 @@ function MessageRowInner({
         </>
       )}
       {message.pending === "failed" ? (
-        <div className="mt-0.5 flex items-center gap-1 text-[0.82em] text-destructive">
+        <div className="mt-0.5 flex items-center gap-1 text-[0.82em] text-danger-text">
           <CircleAlert className="size-3.5 shrink-0" />
           Not sent: {message.failReason ?? "Twitch rejected the message."}
         </div>

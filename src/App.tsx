@@ -15,13 +15,14 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { setTrayStatus } from "@/lib/platform";
-import { THEMES } from "@/lib/themes";
+import { applySkinToDocument } from "@/lib/themes";
+import { useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { applyUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
 function BootScreen() {
-  const waking = useChat((s) => THEMES[s.settings.skin].waking);
+  const waking = useTheme().waking;
   return (
     <div className="zoo-texture flex h-full flex-col items-center justify-center gap-4">
       <Mascot anim="scurry" className="size-20" />
@@ -42,7 +43,7 @@ function MobileNav() {
   const close = () => useUi.setState({ navOpen: false });
   return (
     <div className="fixed inset-0 z-40 min-[900px]:hidden">
-      <button type="button" aria-label="Close channel list" className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={close} />
+      <button type="button" aria-label="Close channel list" className="absolute inset-0 bg-background/80 backdrop-blur-[2px]" onClick={close} />
       <div className="absolute inset-y-0 left-0 w-[min(18rem,85vw)] shadow-2xl animate-in slide-in-from-left duration-200">
         <Sidebar onNavigate={close} />
         <Button variant="ghost" size="icon-sm" className="absolute top-3 right-2" onClick={close} aria-label="Close">
@@ -97,7 +98,7 @@ function LiveRegion() {
 
 export default function App() {
   const ready = useChat((s) => s.ready);
-  const skin = useChat((s) => s.settings.skin);
+  const skin = useResolvedSkin();
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
   const count = useChat((s) => s.settings.channels.length);
@@ -111,7 +112,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.skin = skin;
+    applySkinToDocument(skin);
   }, [skin]);
 
   useEffect(() => {

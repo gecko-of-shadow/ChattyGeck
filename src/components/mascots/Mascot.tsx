@@ -1,5 +1,5 @@
 import { THEMES, type Skin } from "@/lib/themes";
-import { useChat } from "@/store/chat";
+import { useResolvedSkin } from "@/lib/useTheme";
 import { ElephantMascot } from "./ElephantMascot";
 import { GeckoMascot } from "./GeckoMascot";
 import { PenguinMascot } from "./PenguinMascot";
@@ -8,7 +8,7 @@ import type { MascotProps } from "./types";
 
 /** The current theme's animal. Pass `skin` to draw a specific theme's animal (e.g. in previews). */
 export function Mascot({ skin, ...props }: MascotProps & { skin?: Skin }) {
-  const current = useChat((s) => s.settings.skin);
+  const current = useResolvedSkin();
   switch (THEMES[skin ?? current]?.animal) {
     case "penguin":
       return <PenguinMascot {...props} />;

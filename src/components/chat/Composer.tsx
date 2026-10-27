@@ -12,7 +12,7 @@ import { loadSpellEngine, type SpellLanguageId } from "@/lib/spell/engine";
 import { findMisspellings, indexAtWidth, rankSuggestions, replaceSpellWord, type SpellSpan } from "@/lib/spell/misspellings";
 import { ignoreSpellWord, ignoredSpellWords, subscribeSpellIgnore } from "@/lib/spell/session";
 import { emoteKey, emoteUrls, type Emote } from "@/lib/emotes/types";
-import { THEMES } from "@/lib/themes";
+import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
@@ -215,7 +215,7 @@ function CompletionBar({
 export function Composer({ channel, compact = false }: { channel: string | null; compact?: boolean }) {
   const auth = useChat((s) => s.auth);
   const writeStatus = useChat((s) => s.write?.status);
-  const theme = useChat((s) => THEMES[s.settings.skin]);
+  const theme = useTheme();
   const tabComplete = useChat((s) => isFeatureOn(s.settings, channel, "tabComplete"));
   const emotePicker = useChat((s) => isFeatureOn(s.settings, channel, "emotePicker"));
   const confirmSwitch = useChat((s) => s.settings.confirmChannelSwitch);
@@ -527,7 +527,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
   return (
     <div className={cn("border-t border-border/80 bg-card", compact ? "px-2 py-1.5" : "px-3 pt-2.5 pb-3")}>
       {error ? (
-        <div role="alert" className={cn("flex items-start gap-1.5 text-destructive", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
+        <div role="alert" className={cn("flex items-start gap-1.5 text-danger-text", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
           {error}
         </div>
@@ -660,7 +660,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
             />
             {length > 400 ? (
               <span
-                className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-destructive" : "text-muted-foreground"}`}
+                className={`absolute top-1/2 right-2.5 -translate-y-1/2 font-mono text-[11px] ${length > 500 ? "text-danger-text" : "text-muted-foreground"}`}
               >
                 {500 - length}
               </span>

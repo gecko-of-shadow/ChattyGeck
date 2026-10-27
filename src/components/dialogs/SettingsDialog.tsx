@@ -35,6 +35,7 @@ import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
+import { useTheme } from "@/lib/useTheme";
 import {
   CHANNEL_FEATURES,
   SPELL_LANGUAGE_OPTIONS,
@@ -192,7 +193,7 @@ function SpellCheckRows() {
 function MentionSoundRow() {
   const enabled = useChat((s) => s.settings.mentionSound);
   const cooldown = useChat((s) => s.settings.mentionSoundCooldown);
-  const animal = useChat((s) => THEMES[s.settings.skin].animal);
+  const animal = useTheme().animal;
   const [draft, setDraft] = useState(String(cooldown));
   useEffect(() => setDraft(String(cooldown)), [cooldown]);
   const commit = () => {
@@ -350,7 +351,7 @@ function WordListField({
         placeholder={placeholder}
         rows={3}
         spellCheck={false}
-        className="zoo-scroll w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="zoo-scroll w-full resize-y rounded-lg border border-input bg-background px-2.5 py-1.5 font-mono text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring"
       />
     </div>
   );
@@ -531,7 +532,7 @@ function HistoryServerField() {
       </div>
       {saved && !remember ? <p className="text-xs text-muted-foreground">Turn on Remember chat history to use it.</p> : null}
       {status ? (
-        <p className={cn("text-xs", status.error ? "text-destructive" : "text-muted-foreground")} data-testid="history-server-status">
+        <p className={cn("text-xs", status.error ? "text-danger-text" : "text-muted-foreground")} data-testid="history-server-status">
           {status.text}
         </p>
       ) : null}
@@ -713,7 +714,7 @@ function ChannelOverridesSection() {
               Add
             </Button>
           </form>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          {error ? <p className="text-xs text-danger-text">{error}</p> : null}
           {joined.length && names.length === 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {joined.map((channel) => (
@@ -1038,16 +1039,18 @@ export function SettingsBody({
           <div className="grid grid-cols-2 gap-2">
             {SKIN_ORDER.map((id) => THEMES[id]).map((option) => (
               <Searchable key={option.id} section="Theme" id={option.id}>
+                {/* The button keeps the active theme (its focus ring and selected outline must read on this dialog);
+                    the inner panel shows the card's own theme. */}
                 <button
                   type="button"
-                  data-skin={option.id}
                   onClick={() => chat.updateSettings({ skin: option.id })}
                   aria-pressed={skin === option.id}
                   className={cn(
-                    "zoo-texture relative flex w-full flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-                    skin === option.id ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/50",
+                    "relative block w-full border p-0 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    skin === option.id ? "border-primary ring-2 ring-primary" : "border-border hover:border-foreground",
                   )}
                 >
+                  <span data-skin={option.id} className="zoo-texture flex w-full flex-col items-start gap-1.5 p-2.5">
                   {option.kind === "animal" ? (
                     <Mascot skin={option.id} className="size-9" anim={skin === option.id ? "idle" : "none"} />
                   ) : (
@@ -1057,12 +1060,13 @@ export function SettingsBody({
                     >
                       <span className="bg-background" />
                       <span className="bg-primary" />
-                      <span className="bg-mention" />
+                      <span className="bg-accent-2" />
                       <span className="bg-card" />
                     </span>
                   )}
                   <span className="text-[13px] font-semibold text-foreground">{option.name}</span>
                   <span className="text-[11px] leading-snug text-muted-foreground">{option.blurb}</span>
+                  </span>
                   {skin === option.id ? (
                     <span className="absolute top-2 right-2 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground">
                       <Check className="size-3" />

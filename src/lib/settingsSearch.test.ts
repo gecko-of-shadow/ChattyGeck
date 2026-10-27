@@ -8,6 +8,7 @@ import {
   queryTerms,
   type SettingsSearchSection,
 } from "./settingsSearch";
+import { SKIN_ORDER, THEMES } from "./themes";
 
 const sample: SettingsSearchSection[] = [
   {
@@ -124,5 +125,21 @@ describe("anySectionMatches", () => {
     expect(anySectionMatches(sample, "")).toBe(true);
     expect(anySectionMatches(sample, "window")).toBe(true);
     expect(anySectionMatches(sample, "zzzz-nope")).toBe(false);
+  });
+});
+
+describe("theme search", () => {
+  it("finds every one of the 13 themes by name", () => {
+    const theme = SETTINGS_SEARCH_CATALOG.find((s) => s.title === "Theme")!;
+    expect(theme.rows.map((r) => r.id)).toEqual(SKIN_ORDER);
+    for (const id of SKIN_ORDER) {
+      const result = filterSection(theme, THEMES[id].name);
+      expect(result, THEMES[id].name).not.toBeNull();
+      if (result?.kind === "rows") expect(result.ids.has(id)).toBe(true);
+    }
+    const paper = filterSection(theme, "paper");
+    expect(paper?.kind === "rows" && paper.ids.has("eyecomfort-light")).toBe(true);
+    const auto = filterSection(theme, "follows windows");
+    expect(auto?.kind === "rows" && auto.ids.has("auto")).toBe(true);
   });
 });

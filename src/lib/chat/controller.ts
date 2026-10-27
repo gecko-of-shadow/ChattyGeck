@@ -44,7 +44,7 @@ import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { isFeatureOn, clampGridSlots, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
-import { THEMES } from "@/lib/themes";
+import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
 import { replyParentMsgId, replySnippet } from "@/lib/twitch/reply";
 
@@ -902,7 +902,7 @@ class ChatController {
     const now = Date.now();
     if (!mentionDue(now, this.lastMentionSoundAt, settings.mentionSoundCooldown * 1000)) return;
     this.lastMentionSoundAt = now;
-    playMentionChime(THEMES[settings.skin].animal);
+    playMentionChime(THEMES[resolveSkin(settings.skin, settings.autoLightSkin, settings.autoDarkSkin, prefersDarkNow())].animal);
   }
 
   /** With history on: keep ~48h. Otherwise keep the short live buffer. */

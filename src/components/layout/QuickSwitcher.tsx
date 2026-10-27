@@ -47,7 +47,7 @@ export function QuickSwitcher() {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-start justify-center bg-black/50 pt-[15vh]" role="presentation" onMouseDown={close}>
+    <div className="fixed inset-0 z-50 grid place-items-start justify-center bg-background/80 pt-[15vh]" role="presentation" onMouseDown={close}>
       <div
         role="dialog"
         aria-label="Switch channel"
@@ -81,7 +81,7 @@ export function QuickSwitcher() {
           }}
           placeholder="Jump to a channel"
           aria-label="Channel search"
-          className="h-9 w-full rounded-lg border bg-card px-3 text-sm outline-none focus-visible:border-ring"
+          className="h-9 w-full rounded-lg border bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         />
         <ul role="listbox" aria-label="Followed channels" className="zoo-scroll mt-1 max-h-64 overflow-y-auto">
           {matches.map((name, i) => (

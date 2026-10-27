@@ -90,7 +90,7 @@ function EmoteRow({ emote, favourite, still, onPick }: { emote: Emote; favourite
         event.preventDefault();
         chat.updateSettings((s) => ({ favoriteEmotes: toggleInList(s.favoriteEmotes, emoteKey(emote)) }));
       }}
-      className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1 text-left transition hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 outline-none"
+      className="flex w-full items-center gap-2.5 rounded-md px-1.5 py-1 text-left transition hover:bg-accent hover:**:text-foreground focus-visible:ring-2 focus-visible:ring-ring outline-none"
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 36px" }}
     >
       <span className="grid size-9 shrink-0 place-items-center">

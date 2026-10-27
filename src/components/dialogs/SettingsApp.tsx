@@ -3,6 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
 import { isTauri } from "@/lib/platform";
+import { applySkinToDocument } from "@/lib/themes";
+import { useResolvedSkin } from "@/lib/useTheme";
 import { useChat } from "@/store/chat";
 import { closeSettingsWindow } from "@/store/ui";
 import { SettingsBody } from "./SettingsDialog";
@@ -10,7 +12,7 @@ import { SettingsBody } from "./SettingsDialog";
 /** Full-window Settings surface for the Tauri `settings` popout. */
 export function SettingsApp() {
   const ready = useChat((s) => s.ready);
-  const skin = useChat((s) => s.settings.skin);
+  const skin = useResolvedSkin();
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -18,7 +20,7 @@ export function SettingsApp() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.skin = skin;
+    applySkinToDocument(skin);
     document.title = "ZooChattr Settings";
   }, [skin]);
 

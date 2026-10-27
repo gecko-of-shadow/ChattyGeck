@@ -1,10 +1,9 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
-import { THEMES } from "@/lib/themes"
-import { useChat } from "@/store/chat"
+import { useTheme } from "@/lib/useTheme"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const surface = useChat((s) => THEMES[s.settings.skin]?.surface ?? "dark")
+  const surface = useTheme().surface
   return (
     <Sonner
       theme={surface}

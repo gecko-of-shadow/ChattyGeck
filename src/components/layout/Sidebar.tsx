@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
 import { channelColor } from "@/lib/colors";
 import { openExternal } from "@/lib/platform";
-import { THEMES } from "@/lib/themes";
+import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
@@ -89,7 +89,7 @@ export function AddChannelForm({ autoFocus, onAdded }: { autoFocus?: boolean; on
           <Plus className="size-4" />
         </Button>
       </div>
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="text-xs text-danger-text">{error}</p> : null}
     </form>
   );
 }
@@ -130,7 +130,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
         type="button"
         data-drag-channel={login}
         onClick={onSelect}
-        className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+        className="absolute inset-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         aria-label={`Open #${login}`}
         aria-current={active ? "page" : undefined}
         title="Drag onto a grid box to replace it"
@@ -142,7 +142,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
           className={cn(
             "absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-sidebar",
             view.status === "joined" && "bg-primary",
-            view.status === "joining" && "animate-pulse bg-mascot-eye",
+            view.status === "joining" && "animate-pulse bg-warn",
             view.status === "error" && "bg-destructive",
           )}
         />
@@ -152,11 +152,11 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
           {view.displayName ?? login}
         </span>
         {view.status === "error" ? (
-          <span className="block truncate text-[11px] text-destructive" title={view.error}>
+          <span className="block truncate text-[11px] text-danger-text" title={view.error}>
             {view.error}
           </span>
         ) : onGrid ? (
-          <span className="block truncate text-[10px] text-primary/90">On grid</span>
+          <span className="block truncate text-[10px] text-accent-text">On grid</span>
         ) : (
           <span className="block truncate text-[10px] text-muted-foreground">Following</span>
         )}
@@ -164,7 +164,7 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
 
       {view.mentions > 0 ? (
         <span
-          className="pointer-events-none flex items-center gap-1 rounded-full bg-[rgb(var(--mention-rgb)/0.16)] px-1.5 py-0.5 text-[11px] font-bold text-mention"
+          className="pointer-events-none flex items-center gap-1 rounded-full bg-mention/16 px-1.5 py-0.5 text-[11px] font-bold text-mention"
           title={`${view.mentions} mention${view.mentions === 1 ? "" : "s"}`}
         >
           <GeckoEyeIcon className="size-3" />
@@ -172,13 +172,13 @@ function ChannelItem({ login, active, onSelect }: { login: string; active: boole
         </span>
       ) : view.unread > 0 ? (
         <span
-          className="pointer-events-none rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-primary"
+          className="pointer-events-none rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-accent-text"
           title={`${view.unread} unread`}
         >
           {view.unread > 999 ? "999+" : view.unread}
         </span>
       ) : onGrid ? (
-        <LayoutGrid className="pointer-events-none size-3.5 shrink-0 text-primary/70" aria-hidden />
+        <LayoutGrid className="pointer-events-none size-3.5 shrink-0 text-accent-text" aria-hidden />
       ) : null}
 
       <DropdownMenu>
@@ -296,7 +296,7 @@ function AccountPanel() {
 }
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const theme = useChat((s) => THEMES[s.settings.skin]);
+  const theme = useTheme();
   const order = useChat((s) => s.settings.channels);
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
@@ -304,10 +304,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="zoo-texture flex h-full w-full flex-col border-r border-sidebar-border text-sidebar-foreground">
       <div className="flex items-center gap-2.5 px-3.5 pt-3.5 pb-3">
-        <Mascot anim="idle" className="size-9 shrink-0 drop-shadow-[0_0_10px_rgb(var(--glow-rgb)/0.35)]" title={`ZooChattr ${theme.name.toLowerCase()}`} />
+        <Mascot anim="idle" className="size-9 shrink-0" title={`ZooChattr ${theme.name.toLowerCase()}`} />
         <div className="min-w-0">
           <div className="zoo-text-glow text-[17px] leading-tight font-extrabold tracking-tight">
-            Zoo<span className="text-primary">Chattr</span>
+            Zoo<span className="text-accent-text">Chattr</span>
           </div>
           <div className="truncate text-[11px] text-muted-foreground">{theme.tagline}</div>
         </div>
@@ -333,7 +333,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60",
             )}
           >
-            <span className="grid size-7 place-items-center rounded-full bg-primary/15 text-primary">
+            <span className="grid size-7 place-items-center rounded-full bg-primary/15 text-accent-text">
               <LayoutGrid className="size-3.5" />
             </span>
             <span className="flex-1">Grid</span>

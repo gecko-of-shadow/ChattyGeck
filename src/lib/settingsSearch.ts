@@ -1,3 +1,4 @@
+import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import { TAB_COMPLETE_HINT, TAB_COMPLETE_LABEL } from "@/store/settings";
 
 /** One settings control that can be shown or hidden by search. */
@@ -76,34 +77,8 @@ export function anySectionMatches(sections: SettingsSearchSection[], query: stri
 export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
   {
     title: "Theme",
-    rows: [
-      { id: "crested", label: "Crested gecko", hint: "Warm tangerine with cream crests." },
-      { id: "penguin", label: "Penguin", hint: "Arctic blues with a bright orange beak." },
-      { id: "turtle", label: "Sea turtle", hint: "Deep-sea teal with a sandy shell." },
-      { id: "elephant", label: "Elephant", hint: "Savanna grey with soft lilac." },
-      { id: "dark", label: "Dark", hint: "Neutral dark surfaces with a cool accent." },
-      { id: "light", label: "Light", hint: "Light background with dark text." },
-      {
-        id: "deuteranopia",
-        label: "Deuteranopia",
-        hint: "Blue and orange cues — not red versus green alone.",
-      },
-      {
-        id: "protanopia",
-        label: "Protanopia",
-        hint: "Sky blue and amber, with weight on mentions.",
-      },
-      {
-        id: "tritanopia",
-        label: "Tritanopia",
-        hint: "Magenta and teal — not blue versus yellow alone.",
-      },
-      {
-        id: "eyecomfort",
-        label: "Eye comfort",
-        hint: "Warm, softer contrast with less blue light.",
-      },
-    ],
+    // Built from the theme list so a new theme can't be missing from search.
+    rows: SKIN_ORDER.map((id) => ({ id, label: THEMES[id].name, hint: `${THEMES[id].tag}. ${THEMES[id].blurb}` })),
   },
   {
     title: "Chat display",

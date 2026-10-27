@@ -1,4 +1,4 @@
-import { DEFAULT_SKIN, SKIN_ORDER, type Skin } from "@/lib/themes";
+import { CONCRETE_SKINS, DEFAULT_AUTO_DARK, DEFAULT_AUTO_LIGHT, DEFAULT_SKIN, SKIN_ORDER, type ConcreteSkin, type Skin } from "@/lib/themes";
 import { parseHistoryServer } from "@/lib/chat/remoteHistory";
 import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
@@ -43,6 +43,10 @@ export interface Settings {
   mode: ViewMode;
   focused: string | null;
   skin: Skin;
+  /** With skin "auto": the theme used while Windows is light. */
+  autoLightSkin: ConcreteSkin;
+  /** With skin "auto": the theme used while Windows is dark. */
+  autoDarkSkin: ConcreteSkin;
   showTimestamps: boolean;
   use24h: boolean;
   showBadges: boolean;
@@ -210,6 +214,8 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: "grid",
   focused: null,
   skin: DEFAULT_SKIN,
+  autoLightSkin: DEFAULT_AUTO_LIGHT,
+  autoDarkSkin: DEFAULT_AUTO_DARK,
   showTimestamps: true,
   use24h: true,
   showBadges: true,
@@ -326,6 +332,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     mode,
     focused,
     skin: pick(input.skin, SKIN_ORDER, DEFAULT_SETTINGS.skin),
+    autoLightSkin: pick(input.autoLightSkin, CONCRETE_SKINS, DEFAULT_SETTINGS.autoLightSkin),
+    autoDarkSkin: pick(input.autoDarkSkin, CONCRETE_SKINS, DEFAULT_SETTINGS.autoDarkSkin),
     showTimestamps: bool(input.showTimestamps, DEFAULT_SETTINGS.showTimestamps),
     use24h: bool(input.use24h, DEFAULT_SETTINGS.use24h),
     showBadges: bool(input.showBadges, DEFAULT_SETTINGS.showBadges),

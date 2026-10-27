@@ -44,7 +44,7 @@ export function EmptyState() {
   return (
     <div className="zoo-texture-soft flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
       <div className="w-full max-w-md space-y-6 text-center">
-        <Mascot anim="idle" className="mx-auto size-28 drop-shadow-[0_0_28px_rgb(var(--glow-rgb)/0.4)]" />
+        <Mascot anim="idle" className="mx-auto size-28" />
         <div className="space-y-2">
           <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
@@ -57,13 +57,13 @@ export function EmptyState() {
         </div>
         <ul className="mx-auto grid max-w-sm gap-2 text-left text-xs text-muted-foreground">
           <li className="flex items-center gap-2">
-            <Link2 className="size-3.5 text-primary" /> Paste a twitch.tv link, #channel, or just the name.
+            <Link2 className="size-3.5 text-accent-text" /> Paste a twitch.tv link, #channel, or just the name.
           </li>
           <li className="flex items-center gap-2">
-            <Smile className="size-3.5 text-primary" /> Twitch, 7TV, BetterTTV and FrankerFaceZ emotes load automatically.
+            <Smile className="size-3.5 text-accent-text" /> Twitch, 7TV, BetterTTV and FrankerFaceZ emotes load automatically.
           </li>
           <li className="flex items-center gap-2">
-            <UserRoundX className="size-3.5 text-primary" /> No login needed to read. Log in only to chat.
+            <UserRoundX className="size-3.5 text-accent-text" /> No login needed to read. Log in only to chat.
           </li>
         </ul>
       </div>
@@ -109,8 +109,8 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
           <Button
             variant="ghost"
             size="xs"
-            className={cn("gap-1 font-normal text-muted-foreground", failing && "text-mention", compact && "px-1")}
-            aria-label={`Emotes in #${channel}`}
+            className={cn("gap-1 font-normal text-muted-foreground", failing && "text-warn", compact && "px-1")}
+            aria-label={failing ? `Emotes in #${channel}: an emote source failed` : `Emotes in #${channel}`}
             title={`${total} channel emotes`}
           />
         }
@@ -134,10 +134,10 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
               return (
                 <tr key={p}>
                   <td className="py-0.5 pr-2 font-medium">{PROVIDER_LABELS[p]}</td>
-                  <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-mention")}>
+                  <td className={cn("py-0.5 pr-2", channelStatus?.[p].state === "error" && "text-warn")}>
                     {!on ? "off here" : channelStatus ? statusText(channelStatus[p]) : "waiting"}
                   </td>
-                  <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-mention")}>
+                  <td className={cn("py-0.5", globalStatus[p].state === "error" && "text-warn")}>
                     {!on ? "off here" : statusText(globalStatus[p])}
                   </td>
                 </tr>
@@ -300,7 +300,7 @@ function ChatBox({ login }: { login: string }) {
             className={cn(
               "absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card",
               view.status === "joined" && "bg-primary",
-              view.status === "joining" && "animate-pulse bg-mascot-eye",
+              view.status === "joining" && "animate-pulse bg-warn",
               view.status === "error" && "bg-destructive",
             )}
           />

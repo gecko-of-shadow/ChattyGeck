@@ -20,14 +20,14 @@ function ClientIdSetup() {
   const [draft, setDraft] = useState("");
   return (
     <div className="space-y-3 text-sm">
-      <div className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-primary/30 bg-transparent p-3 text-muted-foreground">
         <p className="mb-2 font-medium text-foreground">Twitch login needs a Client ID first.</p>
         <ol className="list-decimal space-y-1 pl-4 text-[13px]">
           <li>
             Open the{" "}
             <button
               type="button"
-              className="text-primary underline underline-offset-2"
+              className="text-accent-text underline underline-offset-2"
               onClick={() => void openExternal("https://dev.twitch.tv/console/apps/create")}
             >
               Twitch Developer Console
@@ -167,7 +167,7 @@ export function LoginDialog() {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
-            <KeyRound className="size-4.5 text-primary" /> Log in with Twitch
+            <KeyRound className="size-4.5 text-accent-text" /> Log in with Twitch
           </DialogTitle>
           <DialogDescription>
             ZooChattr uses Twitch's device login: you approve it on twitch.tv, and your password never touches this
@@ -183,7 +183,7 @@ export function LoginDialog() {
             <div>
               <p className="mb-2 text-sm text-muted-foreground">Approve this code on Twitch:</p>
               <div className="zoo-glow flex items-center gap-2 rounded-xl bg-background px-4 py-2.5">
-                <span className="font-mono text-2xl font-bold tracking-[0.25em] text-primary sm:text-3xl">
+                <span className="font-mono text-2xl font-bold tracking-[0.25em] text-accent-text sm:text-3xl">
                   {code?.userCode}
                 </span>
                 <Button
@@ -198,7 +198,7 @@ export function LoginDialog() {
                     });
                   }}
                 >
-                  {copied ? <Check className="size-4 text-primary" /> : <Copy className="size-4" />}
+                  {copied ? <Check className="size-4 text-accent-text" /> : <Copy className="size-4" />}
                 </Button>
               </div>
             </div>
@@ -215,7 +215,7 @@ export function LoginDialog() {
         ) : (
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-xl border bg-muted/40 p-3 text-sm">
-              <ShieldCheck className="mt-0.5 size-4.5 shrink-0 text-primary" />
+              <ShieldCheck className="mt-0.5 size-4.5 shrink-0 text-accent-text" />
               <div className="text-muted-foreground">
                 ZooChattr only asks for <code className="rounded bg-muted px-1 text-foreground">chat:read</code> and{" "}
                 <code className="rounded bg-muted px-1 text-foreground">chat:edit</code>: enough to read and send chat,
@@ -223,7 +223,7 @@ export function LoginDialog() {
               </div>
             </div>
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-danger-text">
                 {error}
               </p>
             ) : null}

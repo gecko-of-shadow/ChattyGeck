@@ -31,6 +31,24 @@ describe("sanitizeSettings", () => {
     expect(sanitizeSettings({ skin: "eyecomfort" }).skin).toBe("eyecomfort");
   });
 
+  it("accepts the new themes and Auto's two choices", () => {
+    for (const skin of ["auto", "eyecomfort-light", "highcontrast"]) {
+      expect(sanitizeSettings({ skin }).skin).toBe(skin);
+    }
+    const auto = sanitizeSettings({ skin: "auto", autoLightSkin: "eyecomfort-light", autoDarkSkin: "penguin" });
+    expect(auto.autoLightSkin).toBe("eyecomfort-light");
+    expect(auto.autoDarkSkin).toBe("penguin");
+  });
+
+  it("gives Auto its defaults when the file has none, or junk, or Auto itself", () => {
+    expect(sanitizeSettings({}).autoLightSkin).toBe("light");
+    expect(sanitizeSettings({}).autoDarkSkin).toBe("crested");
+    expect(sanitizeSettings({ autoLightSkin: "auto", autoDarkSkin: "nonsense" })).toMatchObject({
+      autoLightSkin: "light",
+      autoDarkSkin: "crested",
+    });
+  });
+
   it("defaults spell check on and keeps a saved dictionary through backup", () => {
     expect(sanitizeSettings({}).spellCheck).toBe(true);
     expect(sanitizeSettings({}).spellDictionary).toEqual([]);
@@ -158,6 +176,11 @@ describe("backups", () => {
     // Looks like settings only by accident (package.json, tsconfig…): must not reset everything.
     expect(readBackup(JSON.stringify({ name: "zoochattr", version: "0.3.0" }))).toBeNull();
     expect(readBackup(JSON.stringify({ mode: "production", channels: 4 }))).toBeNull();
+  });
+
+  it("restores a 0.5.0 backup that has no Auto theme keys", () => {
+    const old = JSON.stringify({ zoochattr: 1, savedAt: "2026-10-26T00:00:00Z", settings: { channels: ["xqc"], skin: "tritanopia" } });
+    expect(readBackup(old)).toMatchObject({ skin: "tritanopia", autoLightSkin: "light", autoDarkSkin: "crested" });
   });
 });
 

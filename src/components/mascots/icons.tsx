@@ -28,8 +28,8 @@ export function GeckoEyeIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" className={cn("size-3.5", className)} aria-hidden>
       <circle cx="8" cy="8" r="6.4" fill="var(--mention)" />
-      <ellipse cx="8" cy="8" rx="1.25" ry="4.8" fill="#0b0b0b" />
-      <circle cx="6.2" cy="5.6" r="1" fill="#fff" opacity="0.75" />
+      <ellipse cx="8" cy="8" rx="1.25" ry="4.8" fill="var(--zc-on-accent)" />
+      <circle cx="6.2" cy="5.6" r="1" fill="var(--zc-badge-ink)" opacity="0.75" />
     </svg>
   );
 }
@@ -40,12 +40,12 @@ export function GeckoEggIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 16 16" className={cn("size-3.5", className)} aria-hidden>
       <path
         d="M8 1.4 C 11 1.4, 13.2 6, 13.2 9.3 C 13.2 12.5, 10.9 14.6, 8 14.6 C 5.1 14.6, 2.8 12.5, 2.8 9.3 C 2.8 6, 5 1.4, 8 1.4 Z"
-        fill="var(--mascot-belly)"
+        fill="var(--zc-accent-2)"
       />
-      <path d="M4.2 8.4 L5.8 7.2 L7.2 8.6 L8.8 7.1 L10.2 8.5 L11.8 7.4" stroke="#3b3326" strokeWidth="0.9" fill="none" strokeLinejoin="round" />
-      <circle cx="6.2" cy="11" r="0.8" fill="var(--mascot-spot)" />
-      <circle cx="9.6" cy="11.8" r="0.6" fill="var(--mascot-spot)" />
-      <circle cx="9.2" cy="4.6" r="0.6" fill="var(--mascot-spot)" />
+      <path d="M4.2 8.4 L5.8 7.2 L7.2 8.6 L8.8 7.1 L10.2 8.5 L11.8 7.4" stroke="var(--zc-bg)" strokeWidth="0.9" fill="none" strokeLinejoin="round" />
+      <circle cx="6.2" cy="11" r="0.8" fill="var(--zc-bg)" />
+      <circle cx="9.6" cy="11.8" r="0.6" fill="var(--zc-bg)" />
+      <circle cx="9.2" cy="4.6" r="0.6" fill="var(--zc-bg)" />
     </svg>
   );
 }

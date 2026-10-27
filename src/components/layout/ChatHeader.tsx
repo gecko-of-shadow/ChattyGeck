@@ -4,7 +4,7 @@ import { BookOpen, LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Setting
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
-import { THEMES } from "@/lib/themes";
+import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import type { ViewMode } from "@/store/settings";
@@ -56,18 +56,18 @@ function ConnectionPill() {
     <div
       className={cn(
         "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-medium whitespace-nowrap",
-        tone === "ok" && "border-[rgb(var(--live-rgb)/0.35)] bg-[rgb(var(--live-rgb)/0.12)] text-live",
-        tone === "wait" && "border-[rgb(var(--live-rgb)/0.3)] bg-[rgb(var(--live-rgb)/0.1)] text-live",
-        tone === "bad" && "border-destructive/30 bg-destructive/10 text-destructive",
+        tone === "ok" && "border-live/60 text-foreground",
+        tone === "wait" && "border-warn/60 text-foreground",
+        tone === "bad" && "border-destructive/30 bg-destructive/10 text-danger-text",
       )}
       role="status"
       title={read.detail.reason}
     >
       <span
         className={cn(
-          "size-1.5 rounded-full bg-current",
-          tone === "ok" && "shadow-[0_0_6px_currentColor]",
-          tone === "wait" && "animate-pulse",
+          "zc-live-dot size-1.5 rounded-full bg-current",
+          tone === "ok" && "bg-live",
+          tone === "wait" && "animate-pulse bg-warn",
         )}
       />
       {label}
@@ -137,7 +137,7 @@ export function ChatHeader() {
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {mode === "grid" || !view ? (
           <>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/15 text-primary">
+            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/15 text-accent-text">
               <LayoutGrid className="size-3.5" />
             </span>
             <div className="min-w-0">
@@ -207,7 +207,7 @@ export function ChatHeader() {
 
 export function ConnectionBanner() {
   const read = useChat((s) => s.read);
-  const theme = useChat((s) => THEMES[s.settings.skin]);
+  const theme = useTheme();
   const retryAt = read.status === "reconnecting" && read.detail.retryInMs ? read.since + read.detail.retryInMs : null;
   const seconds = useCountdown(retryAt);
   if (read.status !== "reconnecting" && read.status !== "auth_failed") return null;
@@ -215,21 +215,21 @@ export function ConnectionBanner() {
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[rgb(var(--live-rgb)/0.3)] bg-[rgb(var(--live-rgb)/0.1)] px-3 py-2 text-xs"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warn bg-warn/10 px-3 py-2 text-xs"
     >
       {theme.kind === "animal" && theme.animal === "gecko" ? (
-        <GeckoTailIcon className="size-4 shrink-0 text-live" />
+        <GeckoTailIcon className="size-4 shrink-0 text-warn" />
       ) : (
-        <WifiOff className="size-4 shrink-0 text-live" />
+        <WifiOff className="size-4 shrink-0 text-warn" />
       )}
       <div className="min-w-0 flex-1">
-        <span className="font-semibold text-live">
+        <span className="font-semibold text-foreground">
           {read.status === "auth_failed" ? "Twitch rejected the login." : theme.dropped}
         </span>{" "}
         <span className="text-muted-foreground">
           {read.status === "auth_failed"
             ? "Trying to refresh it…"
-            : `${read.detail.reason ?? "Network error"}. Regrowing it${seconds > 0 ? ` in ${seconds}s` : " now"} (attempt ${read.detail.attempt ?? 1}).`}
+            : `${read.detail.reason ?? "Network error"}. Reconnecting${seconds > 0 ? ` in ${seconds}s` : " now"} (attempt ${read.detail.attempt ?? 1}).`}
         </span>
       </div>
       {read.status === "reconnecting" ? (
