@@ -5,6 +5,7 @@ import {
   clampTextSize,
   cleanChannelOverrides,
   fitGridToView,
+  focusOnGrid,
   isFeatureOn,
   makeBackup,
   parseWordList,
@@ -175,6 +176,25 @@ describe("sanitizeSettings", () => {
 describe("word lists", () => {
   it("splits on lines, commas and spaces", () => {
     expect(parseWordList("gecko\nlizard, newt  frog\n\n")).toEqual(["gecko", "lizard", "newt", "frog"]);
+  });
+});
+
+describe("focusOnGrid (the focused pane)", () => {
+  it("in the grid, keeps the focus on a pane that is on screen", () => {
+    expect(focusOnGrid("grid", "c", ["a", "b"])).toBe("a");
+    expect(focusOnGrid("grid", "b", ["a", "b"])).toBe("b");
+    expect(focusOnGrid("grid", null, ["a"])).toBe("a");
+    expect(focusOnGrid("grid", "c", [])).toBe("c");
+  });
+
+  it("leaves Single alone", () => {
+    expect(focusOnGrid("focused", "c", ["a", "b"])).toBe("c");
+  });
+
+  it("fixes a saved focus that is off the grid at load", () => {
+    const s = sanitizeSettings({ channels: ["alpha", "bravo", "charlie"], gridChannels: ["alpha", "bravo"], focused: "charlie", mode: "grid" });
+    expect(s.focused).toBe("alpha");
+    expect(sanitizeSettings({ channels: ["alpha", "bravo", "charlie"], gridChannels: ["alpha", "bravo"], focused: "charlie", mode: "focused" }).focused).toBe("charlie");
   });
 });
 

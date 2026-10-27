@@ -315,7 +315,7 @@ export function sanitizeSettings(raw: unknown): Settings {
       if (name && !channels.includes(name)) channels.push(name);
     }
   }
-  const focused = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
+  const savedFocus = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
   const gridSlots = clampGridSlots(input.gridSlots);
@@ -326,6 +326,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     gridSlots,
     false,
   );
+  // In the grid, the focused pane (underline, where the message box sends) must be one that is on screen.
+  const focused = focusOnGrid(mode, savedFocus, gridChannels);
   const textSize =
     typeof input.textSize === "number"
       ? clampTextSize(input.textSize)
@@ -436,6 +438,12 @@ export function clampGridSlots(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GRID_SLOTS;
   return Math.min(MAX_GRID_SLOTS, Math.max(1, Math.round(n)));
+}
+
+/** The focused channel, moved to the first pane when the grid is showing and it isn't on it. */
+export function focusOnGrid(mode: ViewMode, focused: string | null, gridChannels: readonly string[]): string | null {
+  if (mode !== "grid" || gridChannels.length === 0) return focused;
+  return focused && gridChannels.includes(focused) ? focused : gridChannels[0];
 }
 
 /** Followed channels from a saved list, unique, in order (unknown names dropped), at most {@link MAX_GRID_SLOTS}. */

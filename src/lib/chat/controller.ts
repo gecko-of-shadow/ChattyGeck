@@ -42,7 +42,7 @@ import {
 } from "@/lib/twitch/messages";
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
-import { fitGridToView, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { fitGridToView, focusOnGrid, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
 import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
@@ -1077,7 +1077,8 @@ class ChatController {
       this.announce(
         s.gridChannels.includes(incoming) ? `Swapped #${slot} with #${incoming}` : `Replaced #${slot} with #${incoming}`,
       );
-      return { gridChannels, gridParked };
+      // The channel that lands in the focused pane takes over the focus.
+      return { gridChannels, gridParked, focused: s.focused === slot ? incoming : s.focused };
     });
   }
 
@@ -1120,7 +1121,7 @@ class ChatController {
     if (settings.gridChannels.length >= cap) {
       return {
         ok: false,
-        error: `Grid is full (${cap}). Hide one from the grid first, or open this channel in Single.`,
+        error: `Grid is full (${cap}). Hide one from the grid first, or read this channel alone (view 1).`,
       };
     }
     this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name], gridParked: s.gridParked.filter((c) => c !== name) }));
@@ -1146,6 +1147,16 @@ class ChatController {
     if (mode !== "focused" || !leaving || leaving === entering) return;
     this.flush();
     this.patchChannel(leaving, (c) => ({ ...c, readMarker: c.messages[c.messages.length - 1]?.id }));
+  }
+
+  /**
+   * Makes a grid pane the focused one (teal underline; the message box sends there) without leaving the grid.
+   * Ctrl+G then opens this pane alone.
+   */
+  setActivePane(name: string): void {
+    const s = get().settings;
+    if (s.focused === name || !s.channels.includes(name)) return;
+    this.updateSettings({ focused: name });
   }
 
   focus(name: string): void {
@@ -1219,7 +1230,12 @@ class ChatController {
 
   updateSettings(patch: Partial<Settings> | ((settings: Settings) => Partial<Settings>)): void {
     const before = get().settings;
-    set((s) => ({ settings: { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) } }));
+    set((s) => {
+      const next = { ...s.settings, ...(typeof patch === "function" ? patch(s.settings) : patch) };
+      // Hiding, leaving or replacing the focused pane moves the focus to a pane that is still on screen.
+      next.focused = focusOnGrid(next.mode, next.focused, next.gridChannels);
+      return { settings: next };
+    });
     const after = get().settings;
     if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
     if (after.startOnLogin !== before.startOnLogin) {

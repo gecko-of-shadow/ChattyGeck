@@ -74,7 +74,7 @@ export function ViewHotkeys() {
         if (settings.mode === "grid") {
           const hovered = useUi.getState().hoveredChannel;
           const target =
-            (hovered && (settings.gridChannels.includes(hovered) || settings.channels.includes(hovered)) ? hovered : null) ??
+            (hovered && settings.gridChannels.includes(hovered) ? hovered : null) ??
             settings.focused ??
             settings.gridChannels[0] ??
             settings.channels[0];

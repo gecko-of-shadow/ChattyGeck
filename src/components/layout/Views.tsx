@@ -6,6 +6,7 @@ import {
   Link2,
   Lock,
   Maximize2,
+  Minus,
   MoreHorizontal,
   RefreshCw,
   RotateCw,
@@ -49,7 +50,7 @@ export function EmptyState() {
           <h1 className="text-2xl font-extrabold tracking-tight">Nothing in the zoo yet</h1>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Follow Twitch channels — up to {gridSlots} sit on this grid. Add more to keep them in the top strip, then pin
-            them here or open one in Single.
+            them here or read one alone (view 1).
           </p>
         </div>
         <div className="mx-auto max-w-sm text-left">
@@ -86,7 +87,20 @@ function statusText(status: ProviderStatus): string {
   }
 }
 
-export function EmoteStatusChip({ channel, compact = false }: { channel: string; compact?: boolean }) {
+export function EmoteStatusChip({
+  channel,
+  compact = false,
+  onlyWhenFailing = false,
+  open,
+  onOpenChange,
+}: {
+  channel: string;
+  compact?: boolean;
+  /** Grid panes: show the chip only as a warning, or while opened from the pane menu. */
+  onlyWhenFailing?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const version = useChat((s) => `${s.emoteVersions[channel] ?? 0}.${s.globalEmoteVersion}`);
   const settings = useChat((s) => s.settings);
   const [, force] = useState(0);
@@ -102,8 +116,9 @@ export function EmoteStatusChip({ channel, compact = false }: { channel: string;
     return sum + (c?.state === "ok" ? c.count : 0);
   }, 0);
 
+  if (onlyWhenFailing && !failing && !open) return null;
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
           <Button
@@ -274,7 +289,7 @@ function RoomIcons({ login }: { login: string }) {
   return (
     <>
       {icons.map(({ icon: Icon, label }) => (
-        <span key={label} title={label} aria-label={label} className="text-muted-foreground">
+        <span key={label} title={label} role="img" aria-label={label} className="text-muted-foreground">
           <Icon className="size-3" />
         </span>
       ))}
@@ -282,7 +297,16 @@ function RoomIcons({ login }: { login: string }) {
   );
 }
 
-/** One channel's chat inside the grid: header, its own log, its own message box. */
+/**
+ * Clicking or tabbing into a pane makes it the focused one, and also the one "under the pointer" that Ctrl+G,
+ * Alt+Shift+arrows and Ctrl+K's grid slot use, so keyboard and mouse agree.
+ */
+function activate(login: string): void {
+  chat.setActivePane(login);
+  if (useUi.getState().hoveredChannel !== login) useUi.setState({ hoveredChannel: login });
+}
+
+/** One channel's chat inside the grid: a slim header (drag to swap, double-click for Single), its log, its box. */
 function ChatBox({ login }: { login: string }) {
   const view = useChat(
     useShallow((s) => {
@@ -293,24 +317,36 @@ function ChatBox({ login }: { login: string }) {
   );
   const gridChannels = useChat((s) => s.settings.gridChannels);
   const readOnly = useChat((s) => s.settings.readOnly);
+  const active = useChat((s) => s.settings.focused === login);
   const dropTarget = useUi((s) => s.dropTarget);
+  const [emoteStatusOpen, setEmoteStatusOpen] = useState(false);
   if (!view) return null;
 
-  const statusTitle =
-    view.status === "joined" ? "Connected" : view.status === "joining" ? "Joining…" : (view.error ?? "Couldn't join");
+  const name = view.displayName ?? login;
+  const status = view.status === "joined" ? null : view.status === "joining" ? "joining…" : "couldn't join";
 
   return (
     <section
-      aria-label={`#${login} chat`}
+      aria-label={`#${name} chat${active ? " (focused)" : ""}${view.status === "error" ? `, couldn't join: ${view.error ?? "error"}` : ""}`}
       data-grid-channel={login}
+      data-active={active || undefined}
       onPointerEnter={() => useUi.setState({ hoveredChannel: login })}
+      // Clicking anywhere in a pane makes it the focused one (the message box sends there).
+      onPointerDownCapture={() => activate(login)}
+      onFocusCapture={() => activate(login)}
       className={cn(
-        "flex h-full min-h-0 w-full min-w-0 flex-col rounded-xl border bg-card/50 shadow-sm",
-        dropTarget === login ? "border-primary ring-2 ring-primary/50" : "border-border/80",
+        "relative flex h-full min-h-0 w-full min-w-0 flex-col bg-background",
+        // Drop target: an overlay ring drawn on top of the header, log and box (an inset shadow would sit under them).
+        dropTarget === login &&
+          "after:pointer-events-none after:absolute after:inset-0 after:z-20 after:shadow-[inset_0_0_0_2px_var(--primary)] after:content-['']",
       )}
     >
       <header
-        className="flex h-9 shrink-0 cursor-grab items-center gap-1.5 rounded-t-xl border-b border-border/70 bg-card/80 pr-1 pl-2 active:cursor-grabbing"
+        className={cn(
+          "flex h-9 shrink-0 cursor-grab items-center gap-2 border-b bg-surface pr-1 pl-3 active:cursor-grabbing",
+          // The focused pane: teal underline (and a word for screen readers in the section name).
+          active ? "border-b-2 border-accent-2" : "border-border",
+        )}
         data-testid={`grid-header-${login}`}
         onPointerDown={(event) => beginChannelDrag(event, login, "box")}
         onMouseDown={(event) => beginChannelDrag(event, login, "box")}
@@ -318,40 +354,30 @@ function ChatBox({ login }: { login: string }) {
           if (event.target instanceof Element && event.target.closest("button")) return;
           chat.focus(login);
         }}
-        title="Drag to swap. Double-click to open Single."
+        title={`#${name}. Drag to swap. Double-click to open alone.`}
       >
-        <span className="relative shrink-0">
-          <ChannelAvatar login={login} className="size-5 text-[10px]" />
-          <span
-            title={statusTitle}
-            className={cn(
-              "absolute -right-0.5 -bottom-0.5 size-2 rounded-full ring-2 ring-card",
-              view.status === "joined" && "bg-primary",
-              view.status === "joining" && "animate-pulse bg-warn",
-              view.status === "error" && "bg-destructive",
-            )}
-          />
-        </span>
-        <span className="min-w-0 truncate text-[13px] font-semibold">#{view.displayName ?? login}</span>
+        <h2 className="min-w-0 truncate text-[13px] font-semibold">#{name}</h2>
+        {status ? (
+          <span className={cn("shrink-0 text-xs", view.status === "error" ? "text-danger-text" : "text-muted-foreground")} title={view.error}>
+            {status}
+          </span>
+        ) : null}
         <RoomIcons login={login} />
         <span className="flex-1" />
-        <EmoteStatusChip channel={login} compact />
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => chat.focus(login)}
-          aria-label={`Focus #${login}`}
-          title="Open on its own"
-        >
-          <Maximize2 className="size-3.5" />
-        </Button>
+        <EmoteStatusChip channel={login} compact onlyWhenFailing open={emoteStatusOpen} onOpenChange={setEmoteStatusOpen} />
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon-xs" aria-label={`Options for #${login}`} />}
+            render={<Button variant="ghost" size="icon-xs" aria-label={`Options for #${name}`} title="More" />}
           >
             <MoreHorizontal className="size-3.5" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem onClick={() => chat.focus(login)}>
+              <Maximize2 /> Open alone (view 1)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setEmoteStatusOpen(true)}>
+              <Smile /> Emote status…
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => chat.reloadEmotes(login)}>
               <RefreshCw /> Reload emotes
             </DropdownMenuItem>
@@ -366,14 +392,23 @@ function ChatBox({ login }: { login: string }) {
                 </DropdownMenuItem>
               ))}
             <DropdownMenuItem onClick={() => chat.hideFromGrid(login)}>
-              <X /> Hide from grid
+              <Minus /> Hide from grid
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => chat.removeChannel(login)}>
-              Leave #{login}
+              <X /> Leave #{login}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => chat.hideFromGrid(login)}
+          aria-label={`Hide #${name} from the grid`}
+          title="Hide from the grid"
+        >
+          <Minus className="size-3.5" />
+        </Button>
       </header>
       {/* h-full chain matters: without a definite height the absolute ChatLog collapses to 0 (composer-only pane). */}
       <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden" data-testid={`grid-log-${login}`}>
@@ -386,7 +421,7 @@ function ChatBox({ login }: { login: string }) {
         />
       </div>
       {readOnly ? null : (
-        <div className="relative z-10 shrink-0 overflow-visible rounded-b-xl">
+        <div className="relative z-10 shrink-0 overflow-visible">
           <Composer channel={login} compact />
         </div>
       )}
@@ -400,8 +435,8 @@ function EmptyPane() {
   return (
     <div className="flex min-h-0 items-center justify-center bg-background p-4 text-center text-xs text-muted-foreground">
       {parked > 0
-        ? `Empty pane. ${parked} channel${parked === 1 ? "" : "s"} set aside: pick this view again at the top right to bring ${parked === 1 ? "it" : "them"} back, or show a channel in the grid.`
-        : "Empty pane. Show a channel in the grid to fill it."}
+        ? `Empty pane. ${parked} channel${parked === 1 ? "" : "s"} set aside: pick this view again at the top right to bring ${parked === 1 ? "it" : "them"} back, or press + on a channel above.`
+        : "Empty pane. Press + on a channel in the top strip to fill it."}
     </div>
   );
 }
@@ -446,7 +481,7 @@ export function GridView() {
           <p className="text-sm text-muted-foreground">
             {following === 0
               ? "Add a channel with the + at the end of the top strip to start."
-              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (this view has ${view} panes) or open one in Single.`}
+              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Press + on a channel in the top strip (this view has ${view} panes), or pick 1 at the top right to read one alone.`}
           </p>
           {parked > 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -454,6 +489,9 @@ export function GridView() {
               bring {parked === 1 ? "it" : "them"} back.
             </p>
           ) : null}
+          <div className="mx-auto max-w-xs pt-1 text-left">
+            <AddChannelForm />
+          </div>
         </div>
       </div>
     );
@@ -472,7 +510,7 @@ export function GridView() {
     >
       {layout.columns < viewColumns(view) ? (
         <p className="bg-background px-2 py-1 text-[11px] text-muted-foreground">
-          This window is narrow, so the panes are stacked in fewer columns. Pick 1 at the top right (or Ctrl+G) for Single.
+          This window is narrow, so the panes are stacked in fewer columns. Pick 1 at the top right (or Ctrl+G) to read one alone.
         </p>
       ) : null}
       <div
