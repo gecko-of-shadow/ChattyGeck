@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
 import { channelColor } from "@/lib/colors";
 import { openExternal } from "@/lib/platform";
+import { viewForSlots } from "@/lib/gridLayout";
 import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -300,6 +301,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const order = useChat((s) => s.settings.channels);
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
+  const gridView = useChat((s) => viewForSlots(s.settings.gridSlots));
 
   return (
     <aside className="zoo-texture flex h-full w-full flex-col border-r border-sidebar-border text-sidebar-foreground">
@@ -337,7 +339,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               <LayoutGrid className="size-3.5" />
             </span>
             <span className="flex-1">Grid</span>
-            <span className="font-mono text-[11px] text-muted-foreground">up to 4</span>
+            <span className="font-mono text-[11px] text-muted-foreground">{gridView} panes</span>
           </button>
         ) : null}
 
@@ -347,7 +349,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         ) : (
           <p className="px-2 pt-2 text-xs leading-relaxed text-muted-foreground">
-            No channels yet. Type a channel name above, or paste a twitch.tv link. Follow many — pin up to 4 on the grid.
+            No channels yet. Type a channel name above, or paste a twitch.tv link. Follow many — the grid shows up to 9.
           </p>
         )}
 

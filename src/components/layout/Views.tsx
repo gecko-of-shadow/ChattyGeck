@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { chat } from "@/lib/chat/controller";
 import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS, type ProviderStatus } from "@/lib/emotes/types";
-import { GRID_EDGE, GRID_GAP, layoutChatGrid } from "@/lib/gridLayout";
+import { GRID_EDGE, GRID_GAP, layoutViewGrid, viewColumns, viewForSlots } from "@/lib/gridLayout";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
@@ -40,7 +40,7 @@ import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 
 export function EmptyState() {
-  const gridSlots = useChat((s) => s.settings.gridSlots);
+  const gridSlots = useChat((s) => viewForSlots(s.settings.gridSlots));
   return (
     <div className="zoo-texture-soft flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
       <div className="w-full max-w-md space-y-6 text-center">
@@ -367,11 +367,24 @@ function ChatBox({ login }: { login: string }) {
   );
 }
 
-/** Up to four pinned channels in boxes; other follows stay in the sidebar. */
+/** Empty pane in a view that has more panes than pinned channels. */
+function EmptyPane() {
+  const parked = useChat((s) => s.settings.gridParked.length);
+  return (
+    <div className="flex min-h-0 items-center justify-center bg-background p-4 text-center text-xs text-muted-foreground">
+      {parked > 0
+        ? `Empty pane. ${parked} channel${parked === 1 ? "" : "s"} set aside: pick this view again at the top right to bring ${parked === 1 ? "it" : "them"} back, or show a channel in the grid.`
+        : "Empty pane. Show a channel in the grid to fill it."}
+    </div>
+  );
+}
+
+/** The grid views (2, 3, 4, 6, 9 panes): pinned channels in a fixed packing, empty panes after them. */
 export function GridView() {
   const channels = useChat((s) => s.settings.gridChannels);
   const following = useChat((s) => s.settings.channels.length);
-  const gridSlots = useChat((s) => s.settings.gridSlots);
+  const view = useChat((s) => viewForSlots(s.settings.gridSlots));
+  const parked = useChat((s) => s.settings.gridParked.length);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ width: 1200, height: 800 });
 
@@ -394,7 +407,8 @@ export function GridView() {
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, []);
+    // Re-measure when the grid appears after being empty (the scroller isn't rendered then).
+  }, [channels.length === 0]);
 
   if (channels.length === 0) {
     return (
@@ -405,24 +419,34 @@ export function GridView() {
           <p className="text-sm text-muted-foreground">
             {following === 0
               ? "Add a channel from the sidebar to start."
-              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (up to ${gridSlots}) or open one in Single.`}
+              : `You're following ${following} channel${following === 1 ? "" : "s"} off-grid. Use Show in grid (this view has ${view} panes) or open one in Single.`}
           </p>
+          {parked > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {parked} channel{parked === 1 ? " is" : "s are"} set aside from a bigger view: pick this view again at the top right to
+              bring {parked === 1 ? "it" : "them"} back.
+            </p>
+          ) : null}
         </div>
       </div>
     );
   }
 
-  const layout = layoutChatGrid(channels.length, area.width, area.height);
+  const layout = layoutViewGrid(view, area.width, area.height);
+  const shown = channels.slice(0, view);
+  const empty = Math.max(0, view - shown.length);
 
   return (
     <div
       ref={scrollRef}
       data-testid="grid-canvas"
-      className="zoo-scroll zoo-texture-soft min-h-0 flex-1 overflow-y-auto"
+      className="zoo-scroll min-h-0 flex-1 overflow-y-auto bg-gap"
       style={{ padding: GRID_EDGE }}
     >
-      {layout.suggestSingle && area.width < 480 && channels.length > 1 ? (
-        <p className="mb-1 px-1 text-[11px] text-muted-foreground">This window is narrow. Ctrl+G opens Single. The grid stays stacked.</p>
+      {layout.columns < viewColumns(view) ? (
+        <p className="bg-background px-2 py-1 text-[11px] text-muted-foreground">
+          This window is narrow, so the panes are stacked in fewer columns. Pick 1 at the top right (or Ctrl+G) for Single.
+        </p>
       ) : null}
       <div
         className="grid w-full justify-items-stretch"
@@ -433,9 +457,13 @@ export function GridView() {
         }}
         data-testid="chat-grid"
         data-grid-cols={layout.columns}
+        data-view={view}
       >
-        {channels.map((login) => (
+        {shown.map((login) => (
           <ChatBox key={login} login={login} />
+        ))}
+        {Array.from({ length: empty }, (_, i) => (
+          <EmptyPane key={`empty-${i}`} />
         ))}
       </div>
     </div>

@@ -196,7 +196,8 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "grid-slots",
         label: "Grid slots",
-        hint: "How many chats can sit on the grid. 4 by default, up to 9.",
+        hint: "How many chats show at once; 1 is a single chat. The same switch as at the top right.",
+        choices: ["1", "2", "3", "4", "6", "9"],
       },
       {
         id: "shortcuts",

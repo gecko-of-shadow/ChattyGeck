@@ -34,6 +34,7 @@ import { applyUpdate, fetchLatestRelease, isNewerVersion, type UpdateInfo } from
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
+import { ViewSwitch } from "@/components/layout/ViewSwitch";
 import { SKIN_ORDER, THEMES } from "@/lib/themes";
 import { useTheme } from "@/lib/useTheme";
 import {
@@ -47,7 +48,6 @@ import {
   TEXT_SIZE_MAX,
   TEXT_SIZE_MIN,
   TEXT_SIZE_PRESETS,
-  clampGridSlots,
   clampMentionCooldown,
   clampTextSize,
   makeBackup,
@@ -137,23 +137,17 @@ function Choice<T extends string | number>({
   );
 }
 
+/** The same switch as the top right, so the two always agree (1 is Single there too). */
 function GridSlotsRow() {
-  const slots = useChat((s) => s.settings.gridSlots);
   return (
     <div className="flex items-center justify-between gap-4">
-      <Label htmlFor="pref-grid-slots" className="flex flex-col items-start gap-0.5">
+      <div className="flex flex-col items-start gap-0.5">
         <span className="text-sm">Grid slots</span>
-        <span className="text-xs font-normal text-muted-foreground">How many chats can sit on the grid. 4 by default, up to 9.</span>
-      </Label>
-      <Input
-        id="pref-grid-slots"
-        type="number"
-        min={1}
-        max={9}
-        value={slots}
-        className="h-8 w-16"
-        onChange={(event) => chat.updateSettings({ gridSlots: clampGridSlots(event.target.value) })}
-      />
+        <span className="text-xs font-normal text-muted-foreground">
+          How many chats show at once; 1 is a single chat. The same switch as at the top right.
+        </span>
+      </div>
+      <ViewSwitch />
     </div>
   );
 }

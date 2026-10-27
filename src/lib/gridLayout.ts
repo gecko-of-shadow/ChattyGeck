@@ -1,110 +1,57 @@
-/** Narrowest a grid box gets before the layout drops a column. */
-export const BOX_MIN_WIDTH = 300;
-/** Shortest a grid box gets before the grid scrolls instead of squeezing. */
-export const BOX_MIN_HEIGHT = 260;
-/** Gap between chat panes. */
-export const GRID_GAP = 6;
-/** Outer padding around the whole grid (kept tight so panes reach the window edge). */
-export const GRID_EDGE = 2;
+/** Gap between chat panes (the design's 2px lines). */
+export const GRID_GAP = 2;
 
-export interface ChatGridLayout {
-  columns: number;
-  rows: number;
-  cellWidth: number;
-  cellHeight: number;
-  /** The window is a single column of chat, or under 480px. The UI may offer Single; it does not switch by itself. */
-  suggestSingle: boolean;
-}
+/** The views the top-right switch offers: 1 = Single, the rest are grids. */
+export const VIEW_SIZES = [1, 2, 3, 4, 6, 9] as const;
+export type ViewSize = (typeof VIEW_SIZES)[number];
 
-/** Wider than this is too narrow for two columns: stack and scroll. */
-const STACK_BELOW = 620;
-/** Below this width, Single is a better fit. */
-const SINGLE_BELOW = 480;
-const ULTRAWIDE = 21 / 9;
-/** Ultrawide rows should not stretch a box past this. */
-const MAX_CELL_WIDTH = 900;
+/** Fixed packing per view: 2 side by side, 3 in a row, 2x2, 3x2, 3x3. */
+const VIEW_GRID: Record<ViewSize, { columns: number; rows: number }> = {
+  1: { columns: 1, rows: 1 },
+  2: { columns: 2, rows: 1 },
+  3: { columns: 3, rows: 1 },
+  4: { columns: 2, rows: 2 },
+  6: { columns: 3, rows: 2 },
+  9: { columns: 3, rows: 3 },
+};
+
+/** Narrowest a pane in a fixed view gets before the view drops columns (and scrolls). */
+export const VIEW_MIN_WIDTH = 220;
+/** Shortest a pane gets before the grid scrolls. */
+export const VIEW_MIN_HEIGHT = 140;
 
 /**
- * Pick a multi-chat grid of square-ish panes.
- * Prefers packings near √n (4 → 2×2) and rejects short 1×n strips that leave a
- * huge empty band under the row. Cells may be landscape; never taller than wide
- * when a square fits.
+ * The offered view for a saved slot count. Older files may hold 5, 7 or 8 (any 1–9 was allowed): those show as the
+ * next bigger view, without rewriting what is saved.
  */
-export function layoutChatGrid(
-  count: number,
-  areaWidth: number,
-  areaHeight: number,
-  opts?: { gap?: number; minWidth?: number; minHeight?: number },
-): ChatGridLayout {
-  const gap = opts?.gap ?? GRID_GAP;
-  const minW = opts?.minWidth ?? BOX_MIN_WIDTH;
-  const minH = opts?.minHeight ?? BOX_MIN_HEIGHT;
-  const n = Math.max(1, count);
-  const idealCols = Math.max(1, Math.round(Math.sqrt(n)));
-  const narrow = areaWidth < STACK_BELOW;
-  const ultrawide = areaHeight > 0 && areaWidth / areaHeight >= ULTRAWIDE;
-  const suggestSingle = n === 1 || areaWidth < SINGLE_BELOW;
-  const neededForCap = ultrawide ? Math.max(1, Math.ceil((areaWidth + gap) / (MAX_CELL_WIDTH + gap))) : 1;
-  const columnLimit = narrow ? 1 : Math.min(9, Math.max(n, ultrawide ? neededForCap : n));
-
-  let best: { columns: number; rows: number; cellWidth: number; cellHeight: number; score: number } | null = null;
-
-  for (let columns = 1; columns <= columnLimit; columns++) {
-    const rows = Math.ceil(n / columns);
-    const cellWidth = (areaWidth - gap * (columns - 1)) / columns;
-    if (columns > 1 && cellWidth < minW - 0.5) continue;
-    if (ultrawide && columns < columnLimit && cellWidth > MAX_CELL_WIDTH + 0.5) continue;
-
-    const fillHeight = (areaHeight - gap * (rows - 1)) / rows;
-    // Cap height to width so panes stay squares or landscape, never tall skinny columns.
-    let cellHeight = Math.min(fillHeight, cellWidth);
-    if (cellHeight < minH) {
-      cellHeight = minH;
-    }
-
-    const usedH = rows * cellHeight + gap * (rows - 1);
-    const heightFill = Math.min(1, usedH / Math.max(1, areaHeight));
-    const emptySlots = rows * columns - n;
-    const squareness = cellHeight / cellWidth;
-    // Bran’s bug: four wide squares in one short row with empty window underneath.
-    const shortStrip = rows === 1 && columns >= n && heightFill < 0.82;
-    const portrait = areaHeight > areaWidth;
-
-    const score =
-      squareness * 1.2 +
-      (columns === idealCols ? 2 : 0) -
-      Math.abs(columns - idealCols) -
-      emptySlots * 0.5 -
-      (shortStrip ? 5 : 0) +
-      heightFill * 0.3 +
-      (portrait && rows >= columns ? 0.6 : 0);
-
-    if (!best || score > best.score) {
-      best = {
-        columns,
-        rows,
-        cellWidth: Math.floor(cellWidth),
-        cellHeight: Math.floor(cellHeight),
-        score,
-      };
-    }
-  }
-
-  if (best) {
-    return {
-      columns: best.columns,
-      rows: best.rows,
-      cellWidth: best.cellWidth,
-      cellHeight: best.cellHeight,
-      suggestSingle,
-    };
-  }
-
-  return {
-    columns: 1,
-    rows: n,
-    cellWidth: Math.max(minW, Math.floor(areaWidth)),
-    cellHeight: minH,
-    suggestSingle,
-  };
+export function viewForSlots(slots: number): ViewSize {
+  const n = Math.min(9, Math.max(1, Math.round(Number.isFinite(slots) ? slots : 4)));
+  return VIEW_SIZES.find((v) => v >= n) ?? 9;
 }
+
+/** Columns a view has when the window is wide enough. */
+export function viewColumns(view: ViewSize): number {
+  return VIEW_GRID[view].columns;
+}
+
+export interface ViewGridLayout {
+  columns: number;
+  rows: number;
+  /** Row height in px; the grid scrolls when rows × height is taller than the area. */
+  cellHeight: number;
+}
+
+/**
+ * Lay out a fixed view in the grid area. Panes fill the area exactly; a window too narrow for the view's columns
+ * keeps every pane but uses fewer columns and scrolls, and a too-short one scrolls at {@link VIEW_MIN_HEIGHT}.
+ */
+export function layoutViewGrid(view: ViewSize, areaWidth: number, areaHeight: number, gap = GRID_GAP): ViewGridLayout {
+  const fixed = VIEW_GRID[view];
+  const fit = Math.max(1, Math.floor((areaWidth + gap) / (VIEW_MIN_WIDTH + gap)));
+  const columns = Math.min(fixed.columns, fit);
+  const rows = Math.ceil(view / columns);
+  const fill = Math.floor((areaHeight - gap * (fixed.rows - 1)) / fixed.rows);
+  return { columns, rows, cellHeight: Math.max(VIEW_MIN_HEIGHT, fill) };
+}
+/** Outer padding around the whole grid: none, panes sit flush with the window edge. */
+export const GRID_EDGE = 0;

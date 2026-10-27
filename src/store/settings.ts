@@ -1,5 +1,6 @@
 import { CONCRETE_SKINS, DEFAULT_AUTO_DARK, DEFAULT_AUTO_LIGHT, DEFAULT_SKIN, SKIN_ORDER, type ConcreteSkin, type Skin } from "@/lib/themes";
 import { parseHistoryServer } from "@/lib/chat/remoteHistory";
+import { viewForSlots } from "@/lib/gridLayout";
 import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
@@ -40,6 +41,11 @@ export interface Settings {
   gridChannels: string[];
   /** How many boxes the grid may hold (1–{@link MAX_GRID_SLOTS}). Older files omit this and stay at 4. */
   gridSlots: number;
+  /**
+   * Pins set aside when the view switch went to fewer panes (say 4 → 2). Picking a bigger view brings them back in
+   * this order. Older files omit it.
+   */
+  gridParked: string[];
   mode: ViewMode;
   focused: string | null;
   skin: Skin;
@@ -211,6 +217,7 @@ export const DEFAULT_SETTINGS: Settings = {
   channels: [],
   gridChannels: [],
   gridSlots: DEFAULT_GRID_SLOTS,
+  gridParked: [],
   mode: "grid",
   focused: null,
   skin: DEFAULT_SKIN,
@@ -253,7 +260,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /** Settings that are the user's preferences (everything but the channel list and view). */
-export type PreferenceKey = Exclude<keyof Settings, "version" | "channels" | "gridChannels" | "focused">;
+export type PreferenceKey = Exclude<keyof Settings, "version" | "channels" | "gridChannels" | "gridParked" | "focused">;
 
 const pick = <T extends string | number>(value: unknown, allowed: readonly T[], fallback: T): T =>
   allowed.includes(value as T) ? (value as T) : fallback;
@@ -312,7 +319,13 @@ export function sanitizeSettings(raw: unknown): Settings {
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
   const gridSlots = clampGridSlots(input.gridSlots);
-  const gridChannels = sanitizeGridChannels(input.gridChannels, channels, gridSlots);
+  // Pins beyond the view are set aside (gridParked), not dropped.
+  const { gridChannels, gridParked } = fitGridToView(
+    sanitizeGridChannels(input.gridChannels, channels, Array.isArray(input.gridChannels) ? MAX_GRID_SLOTS : gridSlots),
+    cleanChannelList(input.gridParked, channels),
+    gridSlots,
+    false,
+  );
   const textSize =
     typeof input.textSize === "number"
       ? clampTextSize(input.textSize)
@@ -329,6 +342,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     channels,
     gridChannels,
     gridSlots,
+    gridParked,
     mode,
     focused,
     skin: pick(input.skin, SKIN_ORDER, DEFAULT_SETTINGS.skin),
@@ -422,6 +436,38 @@ export function clampGridSlots(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_GRID_SLOTS;
   return Math.min(MAX_GRID_SLOTS, Math.max(1, Math.round(n)));
+}
+
+/** Followed channels from a saved list, unique, in order (unknown names dropped), at most {@link MAX_GRID_SLOTS}. */
+function cleanChannelList(raw: unknown, channels: string[]): string[] {
+  if (!Array.isArray(raw)) return [];
+  const allowed = new Set(channels);
+  const out: string[] = [];
+  for (const entry of raw) {
+    const name = typeof entry === "string" ? normalizeChannelName(entry) : null;
+    if (name && allowed.has(name) && !out.includes(name)) out.push(name);
+    if (out.length >= MAX_GRID_SLOTS) break;
+  }
+  return out;
+}
+
+/**
+ * Fits the pins to a view size: the first `view` pins show, the rest are set aside (in order) so a bigger view brings
+ * them back. With `refill` (picking a view), set-aside pins fill free panes; without it (loading a file), they wait,
+ * so a pane you emptied on purpose stays empty. Old 5/7/8 slot counts use the next offered view.
+ */
+export function fitGridToView(
+  gridChannels: readonly string[],
+  gridParked: readonly string[],
+  slots: number,
+  refill = true,
+): { gridChannels: string[]; gridParked: string[] } {
+  const view = viewForSlots(slots);
+  const shown = [...new Set(gridChannels)];
+  const rest = [...shown.slice(view), ...gridParked].filter((name, i, list) => !shown.slice(0, view).includes(name) && list.indexOf(name) === i);
+  const grid = shown.slice(0, view);
+  while (refill && grid.length < view && rest.length) grid.push(rest.shift()!);
+  return { gridChannels: grid, gridParked: rest.slice(0, MAX_GRID_SLOTS) };
 }
 
 /** Pins that still exist, unique, at most `slots`. Missing list → the first slots (older builds). */

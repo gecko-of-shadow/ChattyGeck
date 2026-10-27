@@ -4,6 +4,7 @@ import {
   clampMentionCooldown,
   clampTextSize,
   cleanChannelOverrides,
+  fitGridToView,
   isFeatureOn,
   makeBackup,
   parseWordList,
@@ -95,6 +96,23 @@ describe("sanitizeSettings", () => {
     expect(sanitizeSettings({ gridSlots: 0 }).gridSlots).toBe(1);
   });
 
+  it("loads an old 5, 7 or 8 without rewriting it, and shows the next bigger view's panes", () => {
+    const many = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india"];
+    const five = sanitizeSettings({ channels: many, gridChannels: many.slice(0, 6), gridSlots: 5 });
+    expect(five.gridSlots).toBe(5);
+    expect(five.gridChannels).toHaveLength(6);
+    expect(sanitizeSettings({ channels: many, gridChannels: many, gridSlots: 7 }).gridChannels).toHaveLength(9);
+  });
+
+  it("sets extra pins aside instead of dropping them, and keeps set-aside pins tidy", () => {
+    const many = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    const loaded = sanitizeSettings({ channels: many, gridChannels: many, gridSlots: 4, gridParked: ["nope", "alpha"] });
+    expect(loaded.gridChannels).toEqual(["alpha", "bravo", "charlie", "delta"]);
+    expect(loaded.gridParked).toEqual(["echo", "foxtrot"]);
+    // Older files have no set-aside list.
+    expect(sanitizeSettings({ channels: many }).gridParked).toEqual([]);
+  });
+
   it("limits the grid to four channels and migrates older all-on-grid lists", () => {
     const many = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
     expect(sanitizeSettings({ channels: many }).gridChannels).toEqual(["alpha", "bravo", "charlie", "delta"]);
@@ -157,6 +175,24 @@ describe("sanitizeSettings", () => {
 describe("word lists", () => {
   it("splits on lines, commas and spaces", () => {
     expect(parseWordList("gecko\nlizard, newt  frog\n\n")).toEqual(["gecko", "lizard", "newt", "frog"]);
+  });
+});
+
+describe("fitGridToView (the view switch)", () => {
+  it("going down sets the extra pins aside; going back up brings them back in order", () => {
+    const down = fitGridToView(["a", "b", "c", "d"], [], 2);
+    expect(down).toEqual({ gridChannels: ["a", "b"], gridParked: ["c", "d"] });
+    expect(fitGridToView(down.gridChannels, down.gridParked, 4)).toEqual({ gridChannels: ["a", "b", "c", "d"], gridParked: [] });
+    expect(fitGridToView(down.gridChannels, down.gridParked, 3)).toEqual({ gridChannels: ["a", "b", "c"], gridParked: ["d"] });
+  });
+
+  it("without refill (loading a file) leaves an emptied pane empty", () => {
+    expect(fitGridToView(["a"], ["b"], 4, false)).toEqual({ gridChannels: ["a"], gridParked: ["b"] });
+  });
+
+  it("treats 5, 7 and 8 as the next offered view and never lists a channel twice", () => {
+    expect(fitGridToView(["a", "b", "c", "d", "e", "f", "g"], [], 5).gridChannels).toHaveLength(6);
+    expect(fitGridToView(["a", "b"], ["b", "c"], 2)).toEqual({ gridChannels: ["a", "b"], gridParked: ["c"] });
   });
 });
 

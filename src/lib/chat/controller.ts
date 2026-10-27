@@ -42,8 +42,9 @@ import {
 } from "@/lib/twitch/messages";
 import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
-import { isFeatureOn, clampGridSlots, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
+import { fitGridToView, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
+import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
 import { replyParentMsgId, replySnippet } from "@/lib/twitch/reply";
@@ -1032,8 +1033,9 @@ class ChatController {
       const index = s.channels.indexOf(name);
       const channels = s.channels.filter((c) => c !== name);
       const gridChannels = s.gridChannels.filter((c) => c !== name);
+      const gridParked = s.gridParked.filter((c) => c !== name);
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
-      return { channels, gridChannels, focused: s.focused === name ? fallback : s.focused };
+      return { channels, gridChannels, gridParked, focused: s.focused === name ? fallback : s.focused };
     });
     if (useUi.getState().armedComposer === name) useUi.setState({ armedComposer: null });
   }
@@ -1071,15 +1073,35 @@ class ChatController {
     this.updateSettings((s) => {
       const gridChannels = replaceGridSlot(s.gridChannels, slot, incoming);
       if (!gridChannels) return {};
+      const gridParked = s.gridParked.filter((c) => c !== incoming);
       this.announce(
         s.gridChannels.includes(incoming) ? `Swapped #${slot} with #${incoming}` : `Replaced #${slot} with #${incoming}`,
       );
-      return { gridChannels };
+      return { gridChannels, gridParked };
     });
   }
 
+  /** Panes in the current grid view (an old saved 5, 7 or 8 counts as the next offered view). */
   private gridCap(): number {
-    return clampGridSlots(get().settings.gridSlots);
+    return viewForSlots(get().settings.gridSlots);
+  }
+
+  /**
+   * The top-right view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
+   * sets the extra pins aside; going up brings them back.
+   */
+  setView(view: ViewSize): void {
+    if (view === 1) {
+      this.setMode("focused");
+      return;
+    }
+    this.setGridView(view);
+    this.setMode("grid");
+  }
+
+  /** Grid size without leaving Single (the Settings row). Extra pins are set aside, set-aside ones come back. */
+  setGridView(view: ViewSize): void {
+    this.updateSettings((s) => ({ gridSlots: view, ...fitGridToView(s.gridChannels, s.gridParked, view) }));
   }
 
   private announce(text: string): void {
@@ -1101,7 +1123,7 @@ class ChatController {
         error: `Grid is full (${cap}). Hide one from the grid first, or open this channel in Single.`,
       };
     }
-    this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name] }));
+    this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name], gridParked: s.gridParked.filter((c) => c !== name) }));
     this.setMode("grid");
     this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
     return { ok: true };
@@ -1115,7 +1137,7 @@ class ChatController {
       const last = get().channels[name]?.messages.at(-1)?.id;
       if (last) this.patchChannel(name, (c) => ({ ...c, readMarker: last }));
     }
-    this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name) }));
+    this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name), gridParked: s.gridParked.filter((c) => c !== name) }));
   }
 
   /** Remembers where the user stopped reading the channel they're leaving. */
@@ -1248,11 +1270,13 @@ class ChatController {
       const next: Partial<Settings> = { ...source };
       delete next.channels;
       delete next.gridChannels;
+      delete next.gridParked;
       delete next.focused;
       delete next.mode;
       delete next.version;
-      // Keep the view pointing at a channel we actually have.
-      return { ...next, focused: current.focused };
+      // Keep the view pointing at a channel we actually have, and the pins within the (possibly new) view size.
+      const slots = next.gridSlots ?? current.gridSlots;
+      return { ...next, focused: current.focused, ...fitGridToView(current.gridChannels, current.gridParked, slots) };
     });
   }
 

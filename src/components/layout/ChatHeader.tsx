@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { BookOpen, LayoutGrid, Menu, PanelLeftClose, PanelTop, RotateCw, Settings, WifiOff } from "lucide-react";
+import { BookOpen, LayoutGrid, Menu, PanelLeftClose, RotateCw, Settings, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
 import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import type { ViewMode } from "@/store/settings";
 import { openSettings, useUi } from "@/store/ui";
 import { ChannelAvatar } from "./Sidebar";
 import { EmoteStatusChip } from "./Views";
+import { ViewSwitch } from "./ViewSwitch";
 
 function useCountdown(targetMs: number | null): number {
   const [now, setNow] = useState(Date.now());
@@ -71,35 +71,6 @@ function ConnectionPill() {
         )}
       />
       {label}
-    </div>
-  );
-}
-
-function ModeToggle() {
-  const mode = useChat((s) => s.settings.mode);
-  const options: { value: ViewMode; label: string; icon: typeof LayoutGrid; hint: string }[] = [
-    { value: "grid", label: "Grid", icon: LayoutGrid, hint: "Every chat in its own box (Ctrl+G)" },
-    { value: "focused", label: "Focused", icon: PanelTop, hint: "Single chat (Ctrl+G). Esc returns to the grid." },
-  ];
-  return (
-    <div role="radiogroup" aria-label="Reading mode" className="flex rounded-lg border bg-muted/60 p-0.5">
-      {options.map(({ value, label, icon: Icon, hint }) => (
-        <button
-          key={value}
-          type="button"
-          role="radio"
-          aria-checked={mode === value}
-          title={hint}
-          onClick={() => chat.setMode(value)}
-          className={cn(
-            "flex h-6.5 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors",
-            mode === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <Icon className="size-3.5" />
-          <span className="hidden sm:inline">{label}</span>
-        </button>
-      ))}
     </div>
   );
 }
@@ -169,7 +140,6 @@ export function ChatHeader() {
       <div className="hidden sm:block">
         <ConnectionPill />
       </div>
-      <ModeToggle />
       <Button
         variant={readOnly ? "secondary" : "ghost"}
         size="icon-sm"
@@ -191,13 +161,14 @@ export function ChatHeader() {
       >
         <PanelLeftClose className="size-4" />
       </Button>
+      <ViewSwitch />
       <Button
         variant="ghost"
         size="icon-sm"
-        className="hidden md:inline-flex"
+        className="size-8 border border-border"
         onClick={() => void openSettings()}
         aria-label="Settings"
-        title="Settings"
+        title="Settings (also in the tray menu)"
       >
         <Settings className="size-4" />
       </Button>
