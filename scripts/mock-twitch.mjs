@@ -43,6 +43,10 @@ const FOLLOWS = [
   { login: "iguanaisland", followed_at: "2026-09-10T12:00:00Z" },
   { login: "chameleoncafe", followed_at: "2026-10-20T12:00:00Z" },
 ];
+// MOCK_FOLLOWS=500 adds that many older follows, to try a long strip (paging, rendering, pictures).
+for (let i = 0; i < Number(process.env.MOCK_FOLLOWS ?? 0); i++) {
+  FOLLOWS.unshift({ login: `follow${String(i).padStart(3, "0")}`, followed_at: new Date(Date.UTC(2024, 0, 1) - i * 86_400_000).toISOString() });
+}
 /** login -> viewer count of channels that are live. POST /__live and /__offline change it. */
 const live = new Map([
   ["geckotown", 1234],

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import { ArrowLeft, ArrowRight, ExternalLink, EyeOff, LayoutGrid, Maximize2, Minus, Plus, RefreshCw, Settings, X } from "lucide-react";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { chat } from "@/lib/chat/controller";
-import { liveLabel, mergeStrip, stripMoveOffset } from "@/lib/follows";
+import { liveLabel, mergeStrip, stripMoveOffsets } from "@/lib/follows";
 import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -117,12 +117,18 @@ function AvatarMenu({
  * One channel in the strip (added in the app, followed on Twitch, or both): round avatar, teal ring when in the grid,
  * +/− badge, mention or unread count, green dot while live.
  */
-function StripAvatar({
+// Memoized and fed by the strip (which knows joined / in-grid from one Set each), so a chat flush only redraws the
+// avatar whose channel changed, even with hundreds of follows in the strip.
+const StripAvatar = memo(function StripAvatar({
   login,
+  joined,
+  onGrid,
   moveLeft,
   moveRight,
 }: {
   login: string;
+  joined: boolean;
+  onGrid: boolean;
   moveLeft: number | null;
   moveRight: number | null;
 }) {
@@ -141,8 +147,6 @@ function StripAvatar({
   );
   const followName = useChat((s) => s.follows[login]?.displayName);
   const followed = followName !== undefined;
-  const joined = useChat((s) => s.settings.channels.includes(login));
-  const onGrid = useChat((s) => s.settings.gridChannels.includes(login));
   const active = useChat((s) => s.settings.mode === "focused" && s.settings.focused === login);
   // undefined: offline; null: not known (logged out, no dots).
   const viewers = useChat((s) => (s.live === null ? null : s.live[login]));
@@ -235,7 +239,7 @@ function StripAvatar({
       </ContextMenuPrimitive.Root>
     </li>
   );
-}
+});
 
 /** Logged in before ZooChattr asked to read follows: one click to log in again (until then the strip is the app list). */
 function FollowsLoginChip() {
@@ -286,9 +290,15 @@ function AddTile() {
 /** Channels added in the app plus Twitch follows (newest first), sideways scrolling, with the add tile at the end. */
 function ChannelStrip() {
   const channels = useChat((s) => s.settings.channels);
+  const gridChannels = useChat((s) => s.settings.gridChannels);
   const follows = useChat((s) => s.follows);
   const order = useMemo(() => mergeStrip(channels, follows), [channels, follows]);
-  const movable = (login: string) => channels.includes(login) && !(login in follows);
+  const joined = useMemo(() => new Set(channels), [channels]);
+  const onGrid = useMemo(() => new Set(gridChannels), [gridChannels]);
+  const moves = useMemo(
+    () => stripMoveOffsets(order, channels, (login) => joined.has(login) && !(login in follows)),
+    [order, channels, joined, follows],
+  );
   return (
     <nav
       aria-label="Channels"
@@ -306,8 +316,10 @@ function ChannelStrip() {
           <StripAvatar
             key={login}
             login={login}
-            moveLeft={stripMoveOffset(order, channels, movable, login, -1)}
-            moveRight={stripMoveOffset(order, channels, movable, login, 1)}
+            joined={joined.has(login)}
+            onGrid={onGrid.has(login)}
+            moveLeft={moves.get(login)?.left ?? null}
+            moveRight={moves.get(login)?.right ?? null}
           />
         ))}
         <AddTile />

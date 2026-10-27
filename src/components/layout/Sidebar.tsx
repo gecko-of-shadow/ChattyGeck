@@ -43,7 +43,8 @@ export function ChannelAvatar({ login, className }: { login: string; className?:
   const skin = useResolvedSkin();
   if (avatarUrl) {
     // Not draggable: the browser's own image drag would swallow the pointer-up of a strip-avatar-to-pane drag.
-    return <img src={avatarUrl} alt="" draggable={false} className={cn("size-7 shrink-0 rounded-full object-cover", className)} />;
+    // Lazy: a strip with hundreds of follows only loads the pictures scrolled into view.
+    return <img src={avatarUrl} alt="" draggable={false} loading="lazy" decoding="async" className={cn("size-7 shrink-0 rounded-full object-cover", className)} />;
   }
   // Letter colour is nudged per theme to read at 4.5:1 on its disc (tested in themeContrast.test.ts).
   const color = readableTagColor(login, skin);

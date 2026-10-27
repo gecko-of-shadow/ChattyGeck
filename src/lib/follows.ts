@@ -49,6 +49,26 @@ export function stripMoveOffset(
   return from < 0 || to < 0 ? null : to - from;
 }
 
+/** stripMoveOffset for every channel at once (one pass; the strip can hold hundreds of follows). */
+export function stripMoveOffsets(
+  order: readonly string[],
+  appChannels: readonly string[],
+  movable: (login: string) => boolean,
+): Map<string, { left: number | null; right: number | null }> {
+  const appIndex = new Map(appChannels.map((login, i) => [login, i]));
+  const group = order.filter(movable);
+  const offsets = new Map<string, { left: number | null; right: number | null }>();
+  group.forEach((login, i) => {
+    const from = appIndex.get(login);
+    const to = (neighbour: string | undefined) => {
+      const target = neighbour === undefined ? undefined : appIndex.get(neighbour);
+      return from === undefined || target === undefined ? null : target - from;
+    };
+    offsets.set(login, { left: to(group[i - 1]), right: to(group[i + 1]) });
+  });
+  return offsets;
+}
+
 const viewerFormat = new Intl.NumberFormat("en-US");
 
 /** "1,234 watching" while live, "offline" otherwise. */

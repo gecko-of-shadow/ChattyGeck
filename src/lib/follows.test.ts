@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { moveItem } from "./view/reorder";
-import { hasFollowsScope, liveLabel, mergeStrip, sameLive, stripMoveOffset, type FollowView } from "./follows";
+import { hasFollowsScope, liveLabel, mergeStrip, sameLive, stripMoveOffset, stripMoveOffsets, type FollowView } from "./follows";
 
 const follow = (followedAt: string): FollowView => ({ displayName: "x", followedAt });
 
@@ -34,6 +34,14 @@ describe("stripMoveOffset", () => {
     expect(moveItem(app, "b", offset!)).toEqual(["b", "a", "f1", "c"]);
     const right = stripMoveOffset(order, app, movable, "a", 1);
     expect(moveItem(app, "a", right!)).toEqual(["f1", "b", "a", "c"]);
+  });
+
+  it("gives the same answers for every channel in one pass", () => {
+    const all = stripMoveOffsets(order, app, movable);
+    for (const login of order) {
+      expect(all.get(login)?.left ?? null).toBe(stripMoveOffset(order, app, movable, login, -1));
+      expect(all.get(login)?.right ?? null).toBe(stripMoveOffset(order, app, movable, login, 1));
+    }
   });
 
   it("is null at the ends and for followed channels", () => {

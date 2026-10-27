@@ -118,9 +118,11 @@ async function typing(page) {
 }
 
 async function login(page) {
-  await page.getByRole("button", { name: /^Log in$/ }).click();
+  // The login prompt sits where the shared message box goes until you're logged in.
+  await page.getByRole("button", { name: "Log in with Twitch" }).first().click();
   await page.getByRole("button", { name: "Get a login code" }).click();
-  await page.getByText("Logged in · can chat").waitFor({ timeout: 20_000 });
+  await page.locator("[data-composer], [data-testid='channel-switch-unlock']").first().waitFor({ timeout: 20_000 });
+  await page.getByRole("dialog", { name: /Log in with Twitch/ }).waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
   // The mock login opens an /activate tab; headless Chrome then throttles the app tab to ~2 fps.
   for (const p of page.context().pages()) if (p !== page) await p.close();
   await page.bringToFront();
