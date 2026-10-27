@@ -1,5 +1,5 @@
-// Measures the mock UI. Rust/WebView2 numbers need a built ZooChattr.exe.
-//   node scripts/perf.mjs
+// Measures the mock UI (1, 4 and 9 chats). Rust/WebView2 numbers need a built ZooChattr.exe.
+//   node scripts/perf.mjs            (PERF_SHA names the output file, PERF_HEAVY_RATE sets busy msgs/s per channel)
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -14,6 +14,7 @@ const chromePath =
   process.env.CHROME_PATH ??
   ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "/usr/bin/google-chrome"].find((p) => fs.existsSync(p));
 const sha = process.env.PERF_SHA ?? "working-tree";
+const heavyRate = Number(process.env.PERF_HEAVY_RATE ?? 50);
 const outDir = "perf";
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -85,7 +86,12 @@ async function open(channels, extra = {}) {
   const t0 = Date.now();
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator(".chat-row").first().waitFor({ timeout: 20_000 });
-  return { context, page, errors, startupMs: Date.now() - t0 };
+  const dir = profileDir;
+  const close = async () => {
+    await context.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  };
+  return { context, page, errors, startupMs: Date.now() - t0, close };
 }
 
 async function typing(page) {
@@ -115,6 +121,9 @@ async function login(page) {
   await page.getByRole("button", { name: /^Log in$/ }).click();
   await page.getByRole("button", { name: "Get a login code" }).click();
   await page.getByText("Logged in · can chat").waitFor({ timeout: 20_000 });
+  // The mock login opens an /activate tab; headless Chrome then throttles the app tab to ~2 fps.
+  for (const p of page.context().pages()) if (p !== page) await p.close();
+  await page.bringToFront();
   const unlock = page.getByTestId("channel-switch-unlock");
   if (await unlock.count()) await unlock.first().click();
 }
@@ -127,12 +136,12 @@ const report = {
 const one = await open(["geckotown"]);
 report.startup1ChatMs = one.startupMs;
 report.idle1 = await cpuWindow(2500);
-await one.context.close();
+await one.close();
 
 const four = await open(["geckotown", "lizardlounge", "penguinpond", "elephantroom"]);
 report.startup4ChatMs = four.startupMs;
 report.idle4 = await cpuWindow(2500);
-await fetch("http://127.0.0.1:17423/__heavy?rate=50", { method: "POST" });
+await fetch(`http://127.0.0.1:17423/__heavy?rate=${heavyRate}`, { method: "POST" });
 report.busy4 = await cpuWindow(4000);
 await fetch("http://127.0.0.1:17423/__heavy/off", { method: "POST" });
 await login(four.page);
@@ -155,12 +164,29 @@ for (let i = 0; i < 30; i++) {
 }
 report.swapMs = summarize(swaps);
 report.pageErrors = four.errors;
-await four.context.close();
+await four.close();
+
+// Nine busy chats, the grid maximum. Heavy mode is per channel, so 9 x rate is the total message rate.
+const nineNames = [
+  "geckotown", "lizardlounge", "penguinpond", "elephantroom", "turtlecove",
+  "owlperch", "otterbank", "foxden", "badgerburrow",
+];
+const nine = await open(nineNames);
+report.startup9ChatMs = nine.startupMs;
+report.idle9 = await cpuWindow(2500);
+report.busy9Rate = heavyRate;
+await fetch(`http://127.0.0.1:17423/__heavy?rate=${heavyRate}`, { method: "POST" });
+report.busy9 = await cpuWindow(4000);
+await fetch("http://127.0.0.1:17423/__heavy/off", { method: "POST" });
+await login(nine.page);
+report.typing9 = await typing(nine.page);
+report.pageErrors9 = nine.errors;
+await nine.close();
 
 const spellOff = await open(["geckotown", "lizardlounge"], { spellCheck: false });
 await login(spellOff.page);
 report.typingSpellOff = await typing(spellOff.page);
-await spellOff.context.close();
+await spellOff.close();
 
 const outPath = `${outDir}/${sha}.json`;
 fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
