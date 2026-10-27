@@ -801,6 +801,14 @@ html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
   .zc-live-dot {
     box-shadow: 0 0 0 1px Canvas;
   }
+  /* Connection status rings (connecting = open ring, offline = closed ring) in the system text colour. */
+  .zc-status-ring {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+  }
+  .zc-status-ring.border-r-transparent {
+    border-right-color: transparent;
+  }
   .chat-row[data-mention="true"] {
     border-left: 3px solid Highlight;
   }

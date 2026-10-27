@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
-import { BookOpen, LayoutGrid, LoaderCircle, Menu, PanelLeftClose, RotateCw, Settings, Wifi, WifiOff } from "lucide-react";
+import { RotateCw, WifiOff } from "lucide-react";
 import { GeckoTailIcon } from "@/components/mascots/icons";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
 import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
-import { openSettings, useUi } from "@/store/ui";
-import { ChannelAvatar } from "./Sidebar";
-import { EmoteStatusChip } from "./Views";
-import { ViewSwitch } from "./ViewSwitch";
 
 function useCountdown(targetMs: number | null): number {
   const [now, setNow] = useState(Date.now());
@@ -22,7 +17,12 @@ function useCountdown(targetMs: number | null): number {
   return targetMs === null ? 0 : Math.max(0, Math.ceil((targetMs - now) / 1000));
 }
 
-export function ConnectionPill({ compact = false }: { compact?: boolean }) {
+/**
+ * Connection status as a small dot by the view switch (not a button). The shape changes too, so it doesn't rely on
+ * colour alone: a solid dot when live, an open ring while connecting, a closed ring when offline or the login is
+ * rejected. The words are in the tooltip and for screen readers; the banner under the strip has Retry now.
+ */
+export function ConnectionDot() {
   const read = useChat((s) => s.read);
   const auth = useChat((s) => s.auth);
   const retryAt = read.status === "reconnecting" && read.detail.retryInMs ? read.since + read.detail.retryInMs : null;
@@ -52,148 +52,28 @@ export function ConnectionPill({ compact = false }: { compact?: boolean }) {
       tone = "wait";
   }
 
-  if (compact) {
-    // Small status icon by the gear; the words are in the tooltip and for screen readers.
-    const Icon = tone === "ok" ? Wifi : tone === "wait" ? LoaderCircle : WifiOff;
-    return (
-      <span
-        role="status"
-        title={read.detail.reason ? `${label} · ${read.detail.reason}` : label}
-        data-testid="connection-status"
-        className={cn(
-          "grid size-8 shrink-0 place-items-center border border-border",
-          tone === "ok" && "text-live",
-          tone === "wait" && "text-warn",
-          tone === "bad" && "text-danger-text",
-        )}
-      >
-        <Icon className={cn("size-4", tone === "wait" && "motion-safe:animate-spin")} aria-hidden />
-        <span className="sr-only">{label}</span>
-      </span>
-    );
-  }
-
   return (
-    <div
-      className={cn(
-        "flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11.5px] font-medium whitespace-nowrap",
-        tone === "ok" && "border-live/60 text-foreground",
-        tone === "wait" && "border-warn/60 text-foreground",
-        tone === "bad" && "border-destructive/30 bg-destructive/10 text-danger-text",
-      )}
+    <span
       role="status"
-      title={read.detail.reason}
+      title={read.detail.reason ? `${label} · ${read.detail.reason}` : label}
+      data-testid="connection-status"
+      data-tone={tone}
+      // A little room around the dot so the tooltip is easy to hover; no border or background, so it isn't a button.
+      className="grid size-5 shrink-0 cursor-default place-items-center"
     >
       <span
+        aria-hidden
         className={cn(
-          "zc-live-dot size-1.5 rounded-full bg-current",
-          tone === "ok" && "bg-live",
-          tone === "wait" && "animate-pulse bg-warn",
+          "size-2.5 rounded-full",
+          tone === "ok" && "zc-live-dot bg-live",
+          // An open ring (it spins unless reduced motion is on): a different shape from both other states.
+          tone === "wait" && "zc-status-ring border-2 border-warn border-r-transparent motion-safe:animate-spin",
+          tone === "bad" && "zc-status-ring border-2 border-danger-text",
         )}
       />
-      {label}
-    </div>
-  );
-}
-
-export function ChatHeader() {
-  const mode = useChat((s) => s.settings.mode);
-  const focused = useChat((s) => s.settings.focused);
-  const gridCount = useChat((s) => s.settings.gridChannels.length);
-  const followCount = useChat((s) => s.settings.channels.length);
-  const readOnly = useChat((s) => s.settings.readOnly);
-  const view = useChat(
-    useShallow((s) => {
-      const channel = focused ? s.channels[focused] : undefined;
-      if (!channel) return null;
-      return { login: channel.login, displayName: channel.displayName, status: channel.status };
-    }),
-  );
-  const unreadElsewhere = useChat((s) =>
-    Object.values(s.channels).reduce((sum, c) => sum + (c.login === s.settings.focused ? 0 : c.mentions), 0),
-  );
-
-  return (
-    <header className="zoo-texture-soft flex h-12 shrink-0 items-center gap-2 border-b border-border/80 bg-card/40 px-2.5 sm:px-3">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="relative min-[900px]:hidden"
-        onClick={() => useUi.setState({ navOpen: true })}
-        aria-label="Open channel list"
-      >
-        <Menu className="size-4.5" />
-        {unreadElsewhere > 0 ? <span className="absolute top-0.5 right-0.5 size-2 rounded-full bg-mention" /> : null}
-      </Button>
-
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        {mode === "grid" || !view ? (
-          <>
-            <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary/15 text-accent-text">
-              <LayoutGrid className="size-3.5" />
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">Grid</div>
-              <div className="truncate text-[11px] text-muted-foreground">
-                {followCount === 0
-                  ? "No channels yet"
-                  : gridCount === 0
-                    ? `${followCount} followed · none on the grid`
-                    : `${gridCount} on grid` +
-                      (followCount > gridCount ? ` · ${followCount - gridCount} tucked` : "")}
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <ChannelAvatar login={view.login} />
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">#{view.displayName ?? view.login}</div>
-              <div className="truncate text-[11px] text-muted-foreground">
-                {view.status === "joined" ? "Connected" : view.status === "joining" ? "Joining…" : "Couldn't join"}
-              </div>
-            </div>
-            <EmoteStatusChip channel={view.login} />
-          </>
-        )}
-      </div>
-
-      <div className="hidden sm:block">
-        <ConnectionPill />
-      </div>
-      <Button
-        variant={readOnly ? "secondary" : "ghost"}
-        size="icon-sm"
-        onClick={() => chat.updateSettings({ readOnly: !readOnly })}
-        aria-label={readOnly ? "Turn off read only" : "Read only"}
-        aria-pressed={readOnly}
-        title={readOnly ? "Read only on — click to show the message box again" : "Read only — hide the message box on every pane"}
-        data-testid="read-only-toggle"
-      >
-        <BookOpen className="size-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => chat.updateSettings({ chromeHidden: true })}
-        aria-label="Hide sidebar and top bar"
-        title="More room for chat — hide the sidebar and top bar"
-        data-testid="hide-chrome"
-      >
-        <PanelLeftClose className="size-4" />
-      </Button>
-      <ViewSwitch />
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="size-8 border border-border"
-        onClick={() => void openSettings()}
-        aria-label="Settings"
-        title="Settings (also in the tray menu)"
-      >
-        <Settings className="size-4" />
-      </Button>
-    </header>
+      {/* No seconds here: a ticking countdown would be read out again every second. */}
+      <span className="sr-only">{tone === "wait" && read.status === "reconnecting" ? "Reconnecting" : label}</span>
+    </span>
   );
 }
 

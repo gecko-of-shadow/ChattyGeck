@@ -13,7 +13,7 @@ import { openExternal } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
-import { ConnectionPill } from "./ChatHeader";
+import { ConnectionDot } from "./ChatHeader";
 import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 import { StripEmoteStatus } from "./Views";
@@ -344,7 +344,7 @@ export function TopBar() {
       <img src={geckoLogo} alt="ZooChattr" title="ZooChattr" className="size-9 shrink-0" draggable={false} />
       <ChannelStrip />
       <StripEmoteStatus />
-      <ConnectionPill compact />
+      <ConnectionDot />
       <ViewSwitch />
       <Button
         variant={settingsOpen ? "default" : "ghost"}
