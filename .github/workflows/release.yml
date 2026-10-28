@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Without the built-in Client ID every user would have to paste one before the Twitch login
+      # (two setup steps instead of one), so a release stops here instead.
+      - name: Check the Twitch Client ID variable
+        shell: pwsh
+        env:
+          TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID }}
+        run: |
+          if (-not $env:TWITCH_CLIENT_ID) {
+            Write-Error "Repository variable TWITCH_CLIENT_ID is empty. Set it under Settings > Secrets and variables > Actions > Variables."
+            exit 1
+          }
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -35,7 +47,7 @@ jobs:
         run: npm run build:portable
         env:
           # Public Twitch Client ID (Settings > Secrets and variables > Actions > Variables).
-          # Without it the app still builds; people paste a Client ID in Settings to log in.
+          # Required: the "Check the Twitch Client ID variable" step above stops a release without it.
           TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID }}
           # History server (chat logger) address, built in so it needn't be pasted. Only the address:
           # its read token is a secret and never goes into the build.
