@@ -3,13 +3,13 @@
 
 use keyring::Entry;
 
-const SERVICE: &str = "ZooChattr";
 const ACCOUNT: &str = "twitch-session";
 /// READ_TOKEN for the chat logger (Settings → History server).
 const HISTORY_TOKEN: &str = "history-token";
 
 fn entry(account: &str) -> Result<Entry, String> {
-    Entry::new(SERVICE, account).map_err(|err| err.to_string())
+    // Verify mode uses ZooChattr-verify so it never reads or deletes twitch-session.ZooChattr.
+    Entry::new(crate::verify::credential_service(crate::verify::enabled()), account).map_err(|err| err.to_string())
 }
 
 fn load_from(account: &str) -> Result<Option<String>, String> {
@@ -52,12 +52,14 @@ pub fn save_history_token(token: &str) -> Result<(), String> {
     entry(HISTORY_TOKEN)?.set_password(token).map_err(|err| err.to_string())
 }
 
-pub fn store_name() -> &'static str {
-    if cfg!(target_os = "windows") {
+pub fn store_name() -> String {
+    let backend = if cfg!(target_os = "windows") {
         "Windows Credential Manager"
     } else if cfg!(target_os = "macos") {
         "macOS Keychain"
     } else {
         "Linux kernel keyring (cleared on logout)"
-    }
+    };
+    let service = crate::verify::credential_service(crate::verify::enabled());
+    format!("{backend} ({service})")
 }

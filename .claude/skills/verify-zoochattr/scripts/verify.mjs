@@ -8,7 +8,8 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import dns from "node:dns/promises";
 
 const W3C_ELEMENT = "element-6066-11e4-a52e-4f735466cecf";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,38 @@ function repoRoot() {
 const REPO = repoRoot();
 const POINTER_DIR = path.join(os.tmpdir(), "zoochattr-verify");
 const POINTER = path.join(POINTER_DIR, "current.json");
+const VERIFY_WINDOW_TITLE = "ZooChattr verify";
+
+/** True when `candidate` is a directory inside `root`, not the root itself and not a sibling prefix. */
+export function isInsideRoot(candidate, root, pathApi = path) {
+  if (typeof candidate !== "string" || candidate.trim() === "") return false;
+  if (typeof root !== "string" || root.trim() === "") return false;
+  const rootResolved = pathApi.resolve(root);
+  const resolved = pathApi.resolve(candidate);
+  const prefix = rootResolved.endsWith(pathApi.sep) ? rootResolved : rootResolved + pathApi.sep;
+  return resolved.startsWith(prefix);
+}
+
+export function verifyRuntimeRoot() {
+  return POINTER_DIR;
+}
+
+function removeRuntime(dir) {
+  const root = verifyRuntimeRoot();
+  if (!isInsideRoot(dir, root)) {
+    throw new Error(`Refusing to delete ${dir}. It is not inside ${root}.`);
+  }
+  let real = path.resolve(dir);
+  try {
+    real = fs.realpathSync(real);
+  } catch {
+    // The directory is already gone, or it never existed.
+  }
+  if (!isInsideRoot(real, root)) {
+    throw new Error(`Refusing to delete ${dir} (resolves to ${real}). It is not inside ${root}.`);
+  }
+  fs.rmSync(real, { recursive: true, force: true });
+}
 
 function readPointer() {
   if (!fs.existsSync(POINTER)) return null;
@@ -330,6 +363,29 @@ async function runDaemon() {
 
 function childEnv(rt) {
   const env = { ...process.env, ZOOCHATTR_DATA_DIR: rt.dataDir };
+  // The owner's shell may already point these at real Twitch. Vite lets process env win over .env.mock.
+  for (const key of Object.keys(env)) {
+    if (
+      key === "TWITCH_CLIENT_ID" ||
+      key === "TWITCH_CLIENT_SECRET" ||
+      key.startsWith("VITE_TWITCH_") ||
+      key.startsWith("VITE_7TV") ||
+      key.startsWith("VITE_BTTV") ||
+      key.startsWith("VITE_FFZ") ||
+      key.startsWith("VITE_HISTORY")
+    ) {
+      delete env[key];
+    }
+  }
+  env.ZOOCHATTR_VERIFY = "1";
+  env.VITE_ZOOCHATTR_VERIFY = "1";
+  env.TWITCH_CLIENT_ID = "mock-client-id";
+  env.VITE_TWITCH_IRC_URL = "ws://127.0.0.1:17422";
+  env.VITE_TWITCH_AUTH_BASE = "http://127.0.0.1:17423";
+  env.VITE_TWITCH_HELIX_BASE = "http://127.0.0.1:17423/helix";
+  env.VITE_7TV_API = "http://127.0.0.1:17423/7tv";
+  env.VITE_BTTV_API = "http://127.0.0.1:17423/bttv";
+  env.VITE_FFZ_API = "http://127.0.0.1:17423/ffz";
   if (process.platform === "linux") {
     env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
     env.GDK_BACKEND = env.GDK_BACKEND || "x11";
@@ -380,7 +436,20 @@ async function boot(rt) {
     const driver = tauriDriverPath();
     spawnLogged(rt, "tauri-driver", driver, ["--port", "4444", "--native-port", "4445", "--native-driver", "/usr/bin/WebKitWebDriver"], env);
     await waitPort(4444, 20_000);
-    await createSession(rt);
+    await waitPort(4445, 20_000);
+    let sessionError = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      try {
+        await createSession(rt);
+        sessionError = null;
+        break;
+      } catch (err) {
+        sessionError = err;
+        logLine(rt, `webdriver session attempt ${attempt} failed: ${err.message}`);
+        await new Promise((r) => setTimeout(r, 400));
+      }
+    }
+    if (sessionError) throw sessionError;
   }
 
   await waitForHeading(rt, "Nothing in the zoo yet", 90_000);
@@ -392,6 +461,21 @@ async function boot(rt) {
   const pageShot = path.join(rt.evidenceDir, "launch-page.png");
   await capturePage(rt, pageShot);
   logLine(rt, `saved page screenshot ${pageShot}`);
+  if (rt.surface === "desktop") {
+    const guardPath = path.join(rt.dataDir, "verify-guard.txt");
+    if (!fs.existsSync(guardPath)) throw new Error("verify-guard.txt was not written. ZOOCHATTR_VERIFY=1 did not reach the shell.");
+    const guard = fs.readFileSync(guardPath, "utf8");
+    assertVerifyGuard(guard);
+    fs.writeFileSync(path.join(rt.evidenceDir, "verify-guard.txt"), guard);
+    logLine(rt, "verify guard ok");
+  }
+  // Give a broken update check time to open api.github.com before we look at sockets.
+  await new Promise((r) => setTimeout(r, 2000));
+  const network = await githubTouch(rt);
+  fs.writeFileSync(path.join(rt.evidenceDir, "network-github.json"), JSON.stringify(network, null, 2));
+  if (network.contacted) throw new Error(`A verify process connected to GitHub: ${JSON.stringify(network.matches)}`);
+  const others = zooProcesses().filter((proc) => !ourPidSet(rt).has(proc.pid));
+  if (others.length) logLine(rt, `left other ZooChattr processes alone: ${others.map((item) => item.pid).join(", ")}`);
 }
 
 async function ensureDebugBinary(rt, env) {
@@ -442,12 +526,18 @@ async function startCdp(rt) {
 }
 
 async function wd(rt, method, urlPath, body, timeoutMs = 30_000) {
-  const res = await fetch(`http://127.0.0.1:${rt.wdPort}${urlPath}`, {
-    method,
-    headers: { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let res;
+  try {
+    res = await fetch(`http://127.0.0.1:${rt.wdPort}${urlPath}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    const cause = err?.cause?.message || err?.cause || err?.message || err;
+    throw new Error(`WebDriver ${method} ${urlPath} failed: ${cause}`);
+  }
   const text = await res.text();
   let json = null;
   try {
@@ -549,7 +639,7 @@ function xWindowId() {
       continue;
     }
     const width = Number(geo.match(/Geometry:\s+(\d+)x(\d+)/)?.[1] || 0);
-    if (name === "ZooChattr" && width > 400) best = { id, width };
+    if (name === VERIFY_WINDOW_TITLE && width > 400) best = { id, width, name };
   }
   return best;
 }
@@ -561,7 +651,7 @@ function commandExists(name) {
 
 function grabZooWindow(outPath) {
   const found = xWindowId();
-  if (!found) throw new Error("No on-screen ZooChattr window wider than 400px. The webview may be off-screen or the shell did not open.");
+  if (!found) throw new Error(`No on-screen window titled "${VERIFY_WINDOW_TITLE}" wider than 400px. A normal ZooChattr window is left alone.`);
   if (!commandExists("import")) throw new Error("ImageMagick import is not installed, so the X11 window cannot be grabbed.");
   execFileSync("import", ["-window", found.id, outPath], { env: process.env });
   return found;
@@ -992,8 +1082,27 @@ async function doDoctor(rt) {
   let windowInfo = null;
   if (process.platform === "linux" && rt.surface === "desktop") {
     windowInfo = xWindowId();
-    if (!windowInfo) problems.push("no on-screen window titled ZooChattr wider than 400px");
+    if (!windowInfo) problems.push(`no on-screen window titled "${VERIFY_WINDOW_TITLE}" wider than 400px`);
   }
+  const ours = ourPidSet(rt);
+  const otherZoo = zooProcesses().filter((proc) => !ours.has(proc.pid));
+  const guardPath = path.join(rt.dataDir, "verify-guard.txt");
+  let guard = null;
+  if (rt.surface === "desktop") {
+    if (!fs.existsSync(guardPath)) problems.push("verify-guard.txt is missing from the data dir");
+    else {
+      guard = fs.readFileSync(guardPath, "utf8");
+      fs.writeFileSync(path.join(rt.evidenceDir, "verify-guard.txt"), guard);
+      try {
+        assertVerifyGuard(guard);
+      } catch (err) {
+        problems.push(err.message);
+      }
+    }
+  }
+  const network = await githubTouch(rt);
+  fs.writeFileSync(path.join(rt.evidenceDir, "network-github.json"), JSON.stringify(network, null, 2));
+  if (network.contacted) problems.push(`a verify process connected to GitHub: ${JSON.stringify(network.matches)}`);
   const settings = fs.existsSync(settingsFile(rt));
   const report = {
     ok: problems.length === 0 && rt.ready,
@@ -1010,6 +1119,10 @@ async function doDoctor(rt) {
     viteStatus,
     window: windowInfo,
     pids: rt.pids,
+    otherZoo,
+    touchedOtherZoo: false,
+    verifyGuard: guard,
+    network,
     problems,
     standIn: rt.drive === "browser-stand-in",
   };
@@ -1098,7 +1211,7 @@ async function launch() {
     throw new Error(`A verification instance is already running (pid ${existing.daemonPid}, evidence ${existing.evidenceDir}). Run cleanup before launching another.`);
   }
   if (existing?.runtimeDir && fs.existsSync(existing.runtimeDir)) {
-    fs.rmSync(existing.runtimeDir, { recursive: true, force: true });
+    removeRuntime(existing.runtimeDir);
   }
   const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "daemon"], {
     cwd: REPO,
@@ -1166,13 +1279,21 @@ async function cleanup() {
       }
     }
   }
+  let removedRuntime = null;
+  let deleteError = null;
   if (pointer.runtimeDir && fs.existsSync(pointer.runtimeDir)) {
-    fs.rmSync(pointer.runtimeDir, { recursive: true, force: true });
+    try {
+      removeRuntime(pointer.runtimeDir);
+      removedRuntime = pointer.runtimeDir;
+    } catch (err) {
+      deleteError = String(err.message || err);
+    }
   }
   if (fs.existsSync(POINTER)) fs.rmSync(POINTER);
   if (fs.existsSync(POINTER_DIR) && fs.readdirSync(POINTER_DIR).length === 0) fs.rmdirSync(POINTER_DIR);
   const evidence = pointer.evidenceDir;
-  process.stdout.write(`${JSON.stringify({ ok: true, removedRuntime: pointer.runtimeDir, evidenceKept: evidence, evidenceStillThere: evidence ? fs.existsSync(evidence) : false }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: deleteError == null, removedRuntime, deleteError, evidenceKept: evidence, evidenceStillThere: evidence ? fs.existsSync(evidence) : false }, null, 2)}\n`);
+  if (deleteError) process.exitCode = 1;
 }
 
 function flagsToBody(flags) {
@@ -1241,4 +1362,127 @@ async function main() {
   }
 }
 
-await main();
+function assertVerifyGuard(text) {
+  const lines = String(text).split(/\r?\n/);
+  if (!lines.includes("credential_service=ZooChattr-verify")) {
+    throw new Error("verify-guard.txt is not using the ZooChattr-verify credential service");
+  }
+  if (!lines.includes("credential_target_session=twitch-session.ZooChattr-verify")) {
+    throw new Error("verify-guard.txt is not using twitch-session.ZooChattr-verify");
+  }
+  if (lines.includes("credential_service=ZooChattr") || lines.includes("credential_target_session=twitch-session.ZooChattr")) {
+    throw new Error("verify-guard.txt names the owner's credential target");
+  }
+  if (!lines.includes("startup_shortcut=skipped") || !lines.includes("updates=skipped")) {
+    throw new Error("verify-guard.txt did not skip the Startup shortcut and update checks");
+  }
+}
+
+function ourPidSet(rt) {
+  const ids = new Set();
+  const add = (pid) => {
+    if (!pid || ids.has(pid)) return;
+    ids.add(pid);
+    for (const child of descendants(pid)) ids.add(child);
+  };
+  add(rt.daemonPid);
+  for (const pid of Object.values(rt.pids ?? {})) add(pid);
+  return ids;
+}
+
+function zooProcesses() {
+  if (process.platform === "win32") {
+    try {
+      const out = execFileSync("tasklist", ["/FO", "CSV", "/NH"], { encoding: "utf8" });
+      const found = [];
+      for (const line of out.split(/\r?\n/)) {
+        const match = /^"([^"]+)","(\d+)"/.exec(line);
+        if (!match) continue;
+        if (match[1].toLowerCase() === "zoochattr.exe") found.push({ pid: Number(match[2]), exe: match[1] });
+      }
+      return found;
+    } catch {
+      return [];
+    }
+  }
+  if (!fs.existsSync("/proc")) return [];
+  const found = [];
+  for (const entry of fs.readdirSync("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    let raw = "";
+    try {
+      raw = fs.readFileSync(`/proc/${entry}/cmdline`).toString("utf8");
+    } catch {
+      continue;
+    }
+    const exe = raw.split("\0")[0] || "";
+    const base = path.basename(exe).toLowerCase();
+    if (base === "zoochattr" || base === "zoochattr.exe") found.push({ pid: Number(entry), exe });
+  }
+  return found;
+}
+
+function hexIPv4(hex) {
+  const value = Number.parseInt(hex, 16);
+  if (!Number.isFinite(value)) return null;
+  return [value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >> 24) & 0xff].join(".");
+}
+
+function socketInodes(pid) {
+  const inodes = new Set();
+  const dir = `/proc/${pid}/fd`;
+  if (!fs.existsSync(dir)) return inodes;
+  for (const fd of fs.readdirSync(dir)) {
+    try {
+      const target = fs.readlinkSync(path.join(dir, fd));
+      const match = /^socket:\[(\d+)\]$/.exec(target);
+      if (match) inodes.add(match[1]);
+    } catch {
+      // unreadable fd
+    }
+  }
+  return inodes;
+}
+
+function tcpRemotes(inodes) {
+  const remotes = [];
+  for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    if (!fs.existsSync(file)) continue;
+    const lines = fs.readFileSync(file, "utf8").split("\n").slice(1);
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 10) continue;
+      const inode = parts[9];
+      if (!inodes.has(inode)) continue;
+      const [addr, portHex] = (parts[2] || "").split(":");
+      const port = Number.parseInt(portHex, 16);
+      if (file.endsWith("tcp6")) {
+        remotes.push({ inode, remote: addr, port });
+      } else {
+        remotes.push({ inode, remote: hexIPv4(addr), port });
+      }
+    }
+  }
+  return remotes;
+}
+
+async function githubTouch(rt) {
+  const pids = [...ourPidSet(rt)];
+  const inodes = new Set();
+  for (const pid of pids) for (const inode of socketInodes(pid)) inodes.add(inode);
+  const remotes = tcpRemotes(inodes);
+  let github = [];
+  try {
+    github = [...new Set([...(await dns.resolve4("api.github.com")), ...(await dns.resolve4("github.com"))])];
+  } catch (err) {
+    github = [];
+    return { contacted: false, github, remotes, note: `could not resolve GitHub: ${err.message}` };
+  }
+  const matches = remotes.filter((row) => row.remote && github.includes(row.remote));
+  return { contacted: matches.length > 0, github, remotes, matches };
+}
+
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedDirectly) {
+  await main();
+}

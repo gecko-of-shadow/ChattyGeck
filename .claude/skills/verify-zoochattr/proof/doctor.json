@@ -5,7 +5,7 @@
   "drive": "tauri-driver",
   "platform": "linux",
   "version": "0.6.0",
-  "dataDir": "/tmp/zoochattr-verify/20261028-081659-cfxx/data",
+  "dataDir": "/tmp/zoochattr-verify/20261028-084323-9vad/data",
   "url": "http://127.0.0.1:17420",
   "heading": "Nothing in the zoo yet",
   "settingsJson": false,
@@ -13,12 +13,25 @@
   "viteStatus": 200,
   "window": {
     "id": "27262979",
-    "width": 1180
+    "width": 1180,
+    "name": "ZooChattr verify"
   },
   "pids": {
-    "mock": 14262,
-    "vite": 14270,
-    "tauri-driver": 14293
+    "mock": 16997,
+    "vite": 17005,
+    "tauri-driver": 17028
+  },
+  "otherZoo": [],
+  "touchedOtherZoo": false,
+  "verifyGuard": "verify=1\ncredential_service=ZooChattr-verify\ncredential_target_session=twitch-session.ZooChattr-verify\ncredential_target_history=history-token.ZooChattr-verify\nstartup_shortcut=skipped\nupdates=skipped\nsingle_instance=com.geckoofshadow.zoochattr.verify\nwindow_title=ZooChattr verify\n",
+  "network": {
+    "contacted": false,
+    "github": [
+      "140.82.114.6",
+      "140.82.114.4"
+    ],
+    "remote_count": 42,
+    "matches": []
   },
   "problems": [],
   "standIn": false

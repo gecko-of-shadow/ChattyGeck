@@ -29,13 +29,13 @@ Preconditions on either OS:
 - Repo root, dependencies installed (`npm ci`).
 - A debug shell already built with `npm run tauri:mock` (not `cargo build`, and not `npm run build:portable`). The binary is `src-tauri/target/debug/zoochattr` (`.exe` on Windows). `tauri dev` compiles it with the dev URL `http://127.0.0.1:17420`. A release binary loads embedded files and will not attach to the mock dev server. If the binary is missing, `launch` runs `npm run tauri:mock` until it exists, then stops that process and continues.
 - Ports `17420`, `17422`, `17423` free. Linux also needs `4444` and `4445`. Windows also needs `9222`. If one is taken, launch fails and does not kill the occupant.
-- No ZooChattr already running. On Windows the single-instance plugin focuses the existing window, and you would drive the user's real chats. On Linux the plugin is on only when `DBUS_SESSION_BUS_ADDRESS` starts with `unix:`.
+- Leave any ZooChattr the owner already has running. Do not quit it. `launch` sets `ZOOCHATTR_VERIFY=1`, which does not take the production single-instance key (`com.geckoofshadow.zoochattr` / the Windows mutex `{bundle-id}-sim`). On Linux a verify copy uses D-Bus name `com.geckoofshadow.zoochattr.verify`. On Windows this plugin cannot rename that mutex, so verify mode does not load the plugin and never focuses the owner's window. The verify window title is `ZooChattr verify`. Doctor lists any other `zoochattr` / `ZooChattr.exe` and does not signal it.
 
 What launch starts, in order:
 
 1. `node scripts/mock-twitch.mjs` — IRC `ws://127.0.0.1:17422`, HTTP `http://127.0.0.1:17423`. This is the production boundary stand-in from the README (`.env.mock`): Twitch IRC, device login, Helix, 7TV, BTTV, FFZ, and the history-server read API. It does not replace GitHub update checks.
 2. Vite in mock mode.
-3. The Tauri window, with `ZOOCHATTR_DATA_DIR` set to a new empty directory under the OS temp dir (`%TEMP%\zoochattr-verify\<runId>\data` on Windows, `/tmp/zoochattr-verify/<runId>/data` on Linux).
+3. The Tauri window, with `ZOOCHATTR_VERIFY=1` and `ZOOCHATTR_DATA_DIR` set to a new empty directory under the OS temp dir (`%TEMP%\zoochattr-verify\<runId>\data` on Windows, `/tmp/zoochattr-verify/<runId>/data` on Linux). Inherited `TWITCH_CLIENT_ID`, `VITE_TWITCH_*`, `VITE_7TV*`, `VITE_BTTV*`, `VITE_FFZ*`, and `VITE_HISTORY*` are removed and replaced with the mock values from `.env.mock`. `VITE_HISTORY_SERVER` is not set.
 
 Linux desktop (what a proof on Linux actually drives):
 
@@ -108,7 +108,7 @@ Stable handles used across the map:
 | Send | button `Send` (or `Squawk` / `Bloop` / `Trumpet` on animal themes) |
 | Connection | test id `connection-status` (`Connected · anonymous` or `Connected · <login>`) |
 | Emote menu | button `Emote menu`, test id `emote-picker-button` |
-| Quick switch | dialog `Switch channel`, test id `quick-switch` (Ctrl+K) |
+| Quick switch | dialog `Switch channel`, test id `quick-switch-dialog`; the text box is test id `quick-switch` and label `Channel search` (Ctrl+K) |
 | Show the top strip | test id `show-chrome`, button `Show UI` |
 
 `side-effect` copies `settings.json` from the data directory into the evidence directory and prints `channels`. On the stand-in it copies `localStorage` instead and says so. It refuses to write the copy if the text looks like an access token.
@@ -143,7 +143,7 @@ Proof standard:
 node .claude/skills/verify-zoochattr/scripts/verify.mjs cleanup
 ```
 
-This sends shutdown to the daemon started by `launch`, then signals that pid and its child processes (mock, Vite, `tauri-driver`, WebKitWebDriver, the `zoochattr` binary it spawned). It does not signal by process name. It deletes the temp runtime directory (data dir included) and leaves `verification-evidence/<runId>/` in place. After every failed launch, run cleanup before trying again so ports are free.
+This sends shutdown to the daemon started by `launch`, then signals that pid and its child processes (mock, Vite, `tauri-driver`, WebKitWebDriver, the `zoochattr` binary it spawned). It does not signal by process name, and it does not signal a ZooChattr it did not start. It deletes the temp runtime directory only when that path is inside `%TEMP%\zoochattr-verify` or `/tmp/zoochattr-verify` (a child of that directory, not the directory itself and not a sibling such as `zoochattr-verify-evil`). Otherwise it refuses and leaves the path in place. Evidence under `verification-evidence/<runId>/` stays. After every failed launch, run cleanup before trying again so ports are free.
 
 Confirm the evidence directory still exists after cleanup before calling the run done.
 

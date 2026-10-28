@@ -1,0 +1,8 @@
+verify=1
+credential_service=ZooChattr-verify
+credential_target_session=twitch-session.ZooChattr-verify
+credential_target_history=history-token.ZooChattr-verify
+startup_shortcut=skipped
+updates=skipped
+single_instance=com.geckoofshadow.zoochattr.verify
+window_title=ZooChattr verify

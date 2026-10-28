@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_FFZ_API?: string;
   /** Built-in history server address (an https origin). Never a token. */
   readonly VITE_HISTORY_SERVER?: string;
+  /** Set to "1" by the verify harness so the dev server skips GitHub. Off unless that harness started Vite. */
+  readonly VITE_ZOOCHATTR_VERIFY?: string;
 }
 
 interface ImportMeta {

@@ -2,6 +2,7 @@ mod secrets;
 mod startup;
 mod storage;
 mod update;
+mod verify;
 #[cfg(windows)]
 mod webview_menu;
 
@@ -60,8 +61,10 @@ struct AppInfo {
     version: String,
     data_dir: String,
     portable: bool,
-    token_store: &'static str,
+    token_store: String,
     platform: &'static str,
+    /// True only when the process was started with ZOOCHATTR_VERIFY=1.
+    verify: bool,
 }
 
 #[tauri::command]
@@ -72,6 +75,7 @@ fn app_info(app: tauri::AppHandle, state: State<'_, AppState>) -> AppInfo {
         portable: state.data.portable,
         token_store: secrets::store_name(),
         platform: std::env::consts::OS,
+        verify: verify::enabled(),
     }
 }
 
@@ -244,11 +248,18 @@ fn get_launch_at_login() -> Result<bool, String> {
 
 #[tauri::command]
 fn set_launch_at_login(enabled: bool) -> Result<(), String> {
+    // Verify mode must not create or delete the owner's Startup\ZooChattr.lnk.
+    if !verify::startup_shortcut_mutable() {
+        return Ok(());
+    }
     startup::set_launch_at_login(enabled)
 }
 
 #[tauri::command]
 fn check_for_update() -> Result<Option<update::UpdateInfo>, String> {
+    if !verify::updates_allowed() {
+        return Ok(None);
+    }
     update::check_for_update()
 }
 
@@ -465,10 +476,26 @@ pub fn run() {
     let mut builder = tauri::Builder::default();
     // A second launch just brings the running copy (maybe hidden in the tray) forward. This plugin must
     // be registered first. On Linux it needs a `unix:` session D-Bus address and panics on anything else.
-    let single_instance = cfg!(not(target_os = "linux"))
-        || std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok_and(|address| address.starts_with("unix:"));
-    if single_instance {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)));
+    let unix_bus = std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok_and(|address| address.starts_with("unix:"));
+    // Verify mode must not take the production single-instance key. On Windows that key is the
+    // bundle id (`com.geckoofshadow.zoochattr-sim`); this plugin cannot rename it, so the plugin
+    // stays off and a verify process never focuses the owner's window. On Linux the plugin can
+    // use a different D-Bus name, so a second verify launch focuses the verify window only.
+    if verify::enabled() {
+        #[cfg(target_os = "linux")]
+        if unix_bus {
+            builder = builder.plugin(
+                tauri_plugin_single_instance::Builder::new()
+                    .dbus_id(verify::VERIFY_DBUS_ID)
+                    .callback(|app, _args, _cwd| show_main_window(app))
+                    .build(),
+            );
+        }
+    } else {
+        let single_instance = cfg!(not(target_os = "linux")) || unix_bus;
+        if single_instance {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)));
+        }
     }
     builder
         .plugin(tauri_plugin_opener::init())
@@ -476,6 +503,9 @@ pub fn run() {
             let data = storage::resolve_data_dir(app.handle());
             let saved_geom = storage::load_window_geom(&data);
             let webview_dir = data.portable.then(|| data.path.join("webview"));
+            if verify::enabled() {
+                let _ = std::fs::write(data.path.join("verify-guard.txt"), verify::guard_note());
+            }
             app.manage(AppState {
                 data,
                 save_lock: Mutex::new(()),
@@ -503,6 +533,9 @@ pub fn run() {
                 builder = builder.data_directory(dir);
             }
             let window = builder.build()?;
+            if verify::enabled() {
+                let _ = window.set_title(verify::WINDOW_TITLE);
+            }
             #[cfg(windows)]
             webview_menu::tame_webview_menu(&window);
             if let Some(geom) = &saved_geom {

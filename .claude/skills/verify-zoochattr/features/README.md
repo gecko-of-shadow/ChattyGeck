@@ -9,7 +9,7 @@ This directory is the maintained source for verifying ZooChattr's user-facing be
 - The heading is `Nothing in the zoo yet` until a recipe adds a channel.
 - The mock Twitch from `scripts/mock-twitch.mjs` is the chat, login, emote, and history-server boundary. Real Twitch credentials are not in the repo.
 - Never drive a ZooChattr window this launch did not start.
-- On Windows, quit any ZooChattr already running before launch. A second launch focuses that copy.
+- Leave a ZooChattr the owner already started. Verification runs beside it under `ZOOCHATTR_VERIFY=1` and must not quit, focus, or drive that process.
 
 ## Driving conventions
 

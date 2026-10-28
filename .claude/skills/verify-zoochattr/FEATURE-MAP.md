@@ -25,6 +25,6 @@ The index with shared preconditions is [features/README.md](features/README.md).
 | History server | Settings → Account & history saves the mock logger address. The status says whether that channel is recorded. The read token is not in `settings.json`. | [features/history-server.md](features/history-server.md) |
 | Settings search | The gear opens Settings. The search box filters rows and says when nothing matches. | [features/settings-search.md](features/settings-search.md) |
 | Backup and reset | Back up writes a JSON file with channels and preferences and without a Twitch token. Reset returns the theme and switches to defaults. | [features/backup-and-reset.md](features/backup-and-reset.md) |
-| Updates | Check now talks to GitHub. Install stays disabled until a real newer portable build is offered. Do not install. | [features/updates.md](features/updates.md) |
+| Updates | In verify mode, Check now says GitHub was not contacted and does not add an Install button. Do not install. | [features/updates.md](features/updates.md) |
 | Window, tray, and startup | Close to tray, Quit confirmation, and Start with Windows. The Startup shortcut exists only on Windows. | [features/window-and-tray.md](features/window-and-tray.md) |
 | Reply | Hover a chat line, choose Reply, and the box shows "Replying to @TokayTom". | [features/reply.md](features/reply.md) |

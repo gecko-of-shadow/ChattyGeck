@@ -19,12 +19,19 @@ fn shortcut_path() -> Result<PathBuf, String> {
 
 #[cfg(windows)]
 pub fn get_launch_at_login() -> Result<bool, String> {
+    // Don't even stat the owner's shortcut during a verify run.
+    if !crate::verify::startup_shortcut_mutable() {
+        return Ok(false);
+    }
     Ok(shortcut_path()?.exists())
 }
 
 /// Creates or removes a Startup-folder shortcut to this exe (VBScript, no extra crates).
 #[cfg(windows)]
 pub fn set_launch_at_login(enabled: bool) -> Result<(), String> {
+    if !crate::verify::startup_shortcut_mutable() {
+        return Ok(());
+    }
     let link = shortcut_path()?;
     if !enabled {
         if link.exists() {
@@ -71,5 +78,10 @@ pub fn get_launch_at_login() -> Result<bool, String> {
 
 #[cfg(not(windows))]
 pub fn set_launch_at_login(_enabled: bool) -> Result<(), String> {
+    // A verify run on Linux must not report a failure that the UI then "fixes" by rewriting settings.
+    // There is no Startup folder here either way.
+    if !crate::verify::startup_shortcut_mutable() {
+        return Ok(());
+    }
     Err("Start on login is only available on Windows.".into())
 }

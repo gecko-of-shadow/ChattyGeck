@@ -20,7 +20,7 @@ import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify"
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
 import { channelFromParam, type IrcMessage } from "@/lib/irc/parser";
 import * as platform from "@/lib/platform";
-import { fetchLatestRelease, installUpdate, isNewerVersion } from "@/lib/updates";
+import { fetchLatestRelease, inVerifyMode, installUpdate, isNewerVersion, setVerifyMode } from "@/lib/updates";
 import { refreshSession, revokeToken, validateToken, type Session } from "@/lib/twitch/auth";
 import {
   HelixUnauthorizedError,
@@ -198,8 +198,10 @@ class ChatController {
       platform.getAppInfo().catch(() => null),
     ]);
     const settings = sanitizeSettings(rawSettings);
+    if (appInfo?.verify) setVerifyMode(true);
     void platform.setCloseToTray(settings.closeToTray).catch(() => undefined);
-    void platform.setLaunchAtLogin(settings.startOnLogin).catch(() => undefined);
+    // Verify mode must not delete or create the owner's Startup shortcut. Default startOnLogin is false.
+    if (!inVerifyMode()) void platform.setLaunchAtLogin(settings.startOnLogin).catch(() => undefined);
     emoteRegistry.setPrefs(emotePrefsFrom(settings));
     set({
       settings,
@@ -258,7 +260,7 @@ class ChatController {
     void this.listenForExitFlush();
     setInterval(() => this.tick(), 5_000);
     setInterval(() => void this.validateHourly(), 60 * 60_000);
-    this.armUpdateChecks(settings.autoCheckUpdates);
+    this.armUpdateChecks(inVerifyMode() ? false : settings.autoCheckUpdates);
   }
 
   /** Preferences-only boot for the Settings popout (no second IRC connection). */
@@ -274,6 +276,7 @@ class ChatController {
       platform.loadAuthDisplay().catch(() => null),
     ]);
     const settings = sanitizeSettings(rawSettings);
+    if (appInfo?.verify) setVerifyMode(true);
     emoteRegistry.setPrefs(emotePrefsFrom(settings));
     set({
       settings,
@@ -298,7 +301,9 @@ class ChatController {
     set({ settings: next });
     emoteRegistry.setPrefs(emotePrefsFrom(next));
     if (next.closeToTray !== before.closeToTray) void platform.setCloseToTray(next.closeToTray).catch(() => undefined);
-    if (next.startOnLogin !== before.startOnLogin) void platform.setLaunchAtLogin(next.startOnLogin).catch(() => undefined);
+    if (next.startOnLogin !== before.startOnLogin && !inVerifyMode()) {
+      void platform.setLaunchAtLogin(next.startOnLogin).catch(() => undefined);
+    }
     if (next.autoCheckUpdates !== before.autoCheckUpdates) this.armUpdateChecks(next.autoCheckUpdates);
     for (const name of next.channels) {
       if (get().channels[name]) continue;
@@ -1298,7 +1303,7 @@ class ChatController {
     });
     const after = get().settings;
     if (after.closeToTray !== before.closeToTray) void platform.setCloseToTray(after.closeToTray).catch(() => undefined);
-    if (after.startOnLogin !== before.startOnLogin) {
+    if (after.startOnLogin !== before.startOnLogin && !inVerifyMode()) {
       void platform.setLaunchAtLogin(after.startOnLogin).catch((err) => {
         toast.error("Couldn't change start on login", { description: errorText(err) });
         set((s) => ({ settings: { ...s.settings, startOnLogin: before.startOnLogin } }));
@@ -1653,14 +1658,14 @@ class ChatController {
       clearInterval(this.updateCheckTimer);
       this.updateCheckTimer = null;
     }
-    if (!enabled) return;
+    if (!enabled || inVerifyMode()) return;
     void this.checkForUpdateQuietly();
     this.updateCheckTimer = setInterval(() => void this.checkForUpdateQuietly(), UPDATE_CHECK_GAP_MS);
   }
 
   /** Background check — toast only when a newer portable build exists. */
   private async checkForUpdateQuietly(): Promise<void> {
-    if (!get().settings.autoCheckUpdates) return;
+    if (inVerifyMode() || !get().settings.autoCheckUpdates) return;
     const version = get().appInfo?.version;
     if (!version || version === "dev") return;
     try {

@@ -8,6 +8,8 @@ export interface AppInfo {
   portable: boolean;
   tokenStore: string;
   platform: string;
+  /** Set when the desktop process was started with ZOOCHATTR_VERIFY=1. */
+  verify?: boolean;
 }
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -27,6 +29,7 @@ export async function getAppInfo(): Promise<AppInfo> {
     portable: false,
     tokenStore: "Browser session storage (dev mode only)",
     platform: "browser",
+    verify: import.meta.env.VITE_ZOOCHATTR_VERIFY === "1",
   };
 }
 

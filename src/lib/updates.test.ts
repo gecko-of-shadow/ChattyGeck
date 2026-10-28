@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SAFETY_CHECK_FAILED, isNewerVersion, isTrustedReleaseUrl, updateErrorText } from "./updates";
+import { SAFETY_CHECK_FAILED, VERIFY_UPDATES_OFF, fetchLatestRelease, isNewerVersion, isTrustedReleaseUrl, setVerifyMode, shouldContactGitHub, updateErrorText } from "./updates";
 
 describe("isTrustedReleaseUrl (same cases as update.rs)", () => {
   it("accepts only this repo's portable zip", () => {
@@ -24,6 +24,28 @@ describe("isTrustedReleaseUrl (same cases as update.rs)", () => {
     expect(updateErrorText(SAFETY_CHECK_FAILED)).toBe(SAFETY_CHECK_FAILED);
     expect(updateErrorText(new Error("Couldn't reach GitHub"))).toBe("Couldn't reach GitHub");
     expect(updateErrorText(undefined)).toBe("Couldn't install the update.");
+  });
+});
+
+describe("verify mode update guard", () => {
+  it("does not contact GitHub when verify mode is on", async () => {
+    setVerifyMode(true);
+    let called = false;
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      called = true;
+      return new Response("nope", { status: 500 });
+    }) as typeof fetch;
+    try {
+      expect(shouldContactGitHub(true)).toBe(false);
+      expect(shouldContactGitHub(false)).toBe(true);
+      await expect(fetchLatestRelease()).resolves.toBeNull();
+      expect(called).toBe(false);
+      expect(VERIFY_UPDATES_OFF).toContain("GitHub was not contacted");
+    } finally {
+      globalThis.fetch = original;
+      setVerifyMode(false);
+    }
   });
 });
 
