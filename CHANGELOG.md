@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.0
+
+### Changed
+
+- New look. Channel avatars across the top replace the sidebar, with Twitch follows, live dots and viewer counts. A view switch (1 · 2 · 3 · 4 · 6 · 9) sits next to the gear. Panes are flush with a slim header and an underline on the focused pane.
+- One shared message box at the bottom for the focused pane, centered with a max width. A new emote panel sits next to Send.
+- Settings open in the window, with search and 7 sections.
+- 13 themes, plus Auto, which follows Windows live. The saved theme loads before the first paint.
+- New teal gecko icon for the taskbar, window, tray and exe. A small connection dot replaces the Wi-Fi icon.
+- The pane menu keeps Open alone, Open on twitch.tv and Hide from grid. Emote status is on the channel's right-click menu in the top strip.
+- Emotes (7TV, BTTV, FFZ) refresh about once an hour, so new or renamed emotes show without a restart.
+
+### Added
+
+- Chat missed while ZooChattr was closed fills in from the history server. The address comes with the app; the read token is pasted once in Settings → Account & history.
+
+### Fixed
+
+- The newest chat message is no longer cut off when a pane gets shorter.
+- The same chat line can no longer show up twice.
+- The login tab no longer steals focus.
+- Updates install only releases from this repo whose SHA-256 fingerprint matches.
+
 ## 0.5.0
 
 ### Fixed
