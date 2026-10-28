@@ -2,9 +2,11 @@
 """Fail when a diff or its changed files contain personal strings or obvious secrets.
 
 PRIVACY_PATTERNS (environment variable, newline-separated, case-insensitive
-regular expressions) comes from a GitHub Actions secret. This process never
-prints those patterns or the text that matched. A hit is reported as a file
-path and a line number only.
+regular expressions) comes from a GitHub Actions secret. Before any other
+output, each non-empty line is registered with ::add-mask:: so a multiline
+secret is hidden in the Actions log. The script does not otherwise print
+those patterns or the text that matched. A hit is reported as a file path
+and a line number only.
 
 An empty or missing PRIVACY_PATTERNS skips the personal-string check with a
 warning. Obvious secrets are always checked.
@@ -33,6 +35,21 @@ MESSAGES = {
 }
 
 ZERO_SHA = "0" * 40
+
+
+def mask_privacy_patterns() -> None:
+    """Register each pattern with the Actions log before anything else is printed.
+
+    GitHub does not reliably auto-mask a multiline secret. %, CR, and LF are
+    escaped so a pattern cannot be read as another workflow command.
+    """
+    raw = os.environ.get("PRIVACY_PATTERNS", "")
+    for line in raw.splitlines():
+        pattern = line.strip()
+        if not pattern:
+            continue
+        encoded = pattern.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::add-mask::{encoded}", flush=True)
 
 
 def warn(message: str) -> None:
@@ -163,25 +180,31 @@ def scan_diff(
     old_line = 0
     new_line = 0
     binary = False
+    in_hunk = False
     hits = 0
     for line in diff.splitlines():
         if line.startswith("diff --git "):
             old_path = None
             new_path = None
             binary = False
+            in_hunk = False
             continue
         if line.startswith("Binary files ") or line.startswith("GIT binary patch"):
             binary = True
             continue
         if binary:
             continue
-        if line.startswith("--- "):
+        # Headers are only `--- ` / `+++ ` before the hunk. An added line whose
+        # text starts with `++ /` is itself `+++ /...` in the diff, and a
+        # removed line starting with `-- /` is `--- /...`.
+        if not in_hunk and line.startswith("--- "):
             old_path = unquote_path(line[4:])
             continue
-        if line.startswith("+++ "):
+        if not in_hunk and line.startswith("+++ "):
             new_path = unquote_path(line[4:])
             continue
         if line.startswith("@@"):
+            in_hunk = True
             match = re.match(r"@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
             if match:
                 old_line = int(match.group(1))
@@ -260,6 +283,7 @@ def resolve_base() -> str | None:
 
 
 def main() -> int:
+    mask_privacy_patterns()
     personal, secret_missing = load_personal()
     if personal is None:
         return 1
