@@ -128,12 +128,14 @@ describe("chat controller view and history", () => {
       write: unknown;
       sentLog: number[];
       chatterLists: Map<string, unknown>;
+      seenIds: Map<string, Set<string>>;
     };
     internal.session = null;
     internal.pendingSends = [];
     internal.write = null;
     internal.sentLog = [];
     internal.chatterLists.clear();
+    internal.seenIds.clear();
     resetHistoryBookkeeping();
   });
 
@@ -399,6 +401,58 @@ describe("chat controller view and history", () => {
     expect(messages[0]?.id).toBe("twitch-late");
     expect(messages[0]?.pending).toBeUndefined();
     internal.session = null;
+  });
+
+  it("shows a live PRIVMSG once when Twitch delivers it twice", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"] });
+    const internal = chat as unknown as { onReadMessage: (message: IrcMessage) => void };
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const privmsg = (id: string | undefined, text: string): IrcMessage => ({
+      raw: "",
+      tags: { ...(id ? { id } : {}), login: "ada", "display-name": "Ada", "tmi-sent-ts": String(Date.now()) },
+      prefix: "ada!ada@ada.tmi.twitch.tv",
+      nick: "ada",
+      command: "PRIVMSG",
+      params: ["#geckotown", text],
+    });
+    try {
+      internal.onReadMessage(privmsg("twice-1", "hello"));
+      internal.onReadMessage(privmsg("twice-1", "hello"));
+      // No id: never checked, so both show.
+      internal.onReadMessage(privmsg(undefined, "no id"));
+      internal.onReadMessage(privmsg(undefined, "no id"));
+      await vi.advanceTimersByTimeAsync(100);
+      const texts = useChat.getState().channels.geckotown.messages.map((message) => message.text);
+      expect(texts).toEqual(["hello", "no id", "no id"]);
+      expect(debug).toHaveBeenCalledWith("[zoochattr] dropped duplicate", "geckotown", "twice-1", "ada");
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it("drops a live line the history server already filled in", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    useHistoryServer();
+    vi.stubGlobal("fetch", async () => serverAnswer([serverLine("gap-1", Date.now() - 1_000, "said while closed")]));
+    const internal = chat as unknown as ServerInternals & { onReadMessage: (message: IrcMessage) => void };
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    try {
+      await internal.restoreHistory(["geckotown"]);
+      internal.applyServerHistory(await internal.fetchServerHistory(["geckotown"]));
+      internal.onReadMessage({
+        raw: "",
+        tags: { id: "gap-1", login: "ada", "display-name": "Ada", "tmi-sent-ts": String(Date.now()) },
+        prefix: "ada!ada@ada.tmi.twitch.tv",
+        nick: "ada",
+        command: "PRIVMSG",
+        params: ["#geckotown", "said while closed"],
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      const ids = useChat.getState().channels.geckotown.messages.map((message) => message.id);
+      expect(ids.filter((id) => id === "gap-1")).toHaveLength(1);
+    } finally {
+      debug.mockRestore();
+    }
   });
 
   it("remembers people who spoke, newest first, and forgets them when you leave", async () => {

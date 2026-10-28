@@ -333,7 +333,7 @@ const httpServer = http.createServer(async (req, res) => {
       const channel = url.searchParams.get("channel") ?? "";
       const text = url.searchParams.get("text") ?? "";
       const who = chatters[Number(url.searchParams.get("who") ?? 0) % chatters.length];
-      const id = `mock-say-${++msgCounter}`;
+      const id = `mock-say-${runId}-${++msgCounter}`;
       const ts = Date.now();
       const extra = { id, "tmi-sent-ts": ts };
       const reply = url.searchParams.get("reply");
@@ -355,7 +355,7 @@ const httpServer = http.createServer(async (req, res) => {
       const count = Math.max(1, Number(url.searchParams.get("n") ?? 3));
       const ids = [];
       for (let i = 1; i <= count; i++) {
-        const id = `mock-hist-${++msgCounter}`;
+        const id = `mock-hist-${runId}-${++msgCounter}`;
         const ts = Date.now() - (count - i) * 1_000;
         record(channel, id, ts, privmsgLine(channel, chatters[i % chatters.length], `${text} ${i}`, { id, "tmi-sent-ts": ts }));
         ids.push(id);
@@ -437,6 +437,8 @@ const httpServer = http.createServer(async (req, res) => {
 const clients = new Set();
 const sentMessages = [];
 let msgCounter = 0;
+/** Message ids must differ between mock runs: the app drops a live line whose id it saved before. */
+const runId = Date.now().toString(36);
 
 function tagString(tags) {
   return Object.entries(tags)
@@ -463,7 +465,7 @@ function privmsgLine(channel, user, text, extra = {}) {
     color: user.color ?? "",
     "display-name": user.displayName,
     emotes: kappaTag(text),
-    id: `mock-${++msgCounter}`,
+    id: `mock-${runId}-${++msgCounter}`,
     "room-id": roomId(channel),
     "tmi-sent-ts": Date.now(),
     "user-id": user.id,

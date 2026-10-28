@@ -61,6 +61,8 @@ const REFRESH_MARGIN_MS = 5 * 60_000;
 /** How often a busy channel appends the lines still only in memory. */
 export const HISTORY_FLUSH_MS = 30_000;
 const UPDATE_CHECK_GAP_MS = 6 * 60 * 60_000;
+/** Twitch message ids remembered per channel to drop a live line that already came in. */
+const SEEN_IDS_PER_CHANNEL = 2000;
 
 interface PendingSend {
   id: string;
@@ -127,6 +129,8 @@ class ChatController {
   private sentLog: number[] = [];
   /** Recent chatters per channel, newest first. Not in the store, so a new line does not redraw the message box. */
   private chatterLists = new Map<string, ActiveUser[]>();
+  /** Recent Twitch message ids per channel, oldest first (live, saved and history-server lines). */
+  private seenIds = new Map<string, Set<string>>();
   private globalBadges: BadgeMap = new Map();
   private channelBadges = new Map<string, BadgeMap>();
   private emoteLoadedAt = new Map<string, number>();
@@ -579,13 +583,17 @@ class ChatController {
     switch (message.command) {
       case "PRIVMSG": {
         const chat = privmsgToChat(message, self);
+        if (this.alreadyShown(chat, message.tags.id)) return;
         if (chat.self && this.resolvePending(chat)) return;
         this.enqueue(this.withHighlight(chat));
         return;
       }
-      case "USERNOTICE":
-        this.enqueue(this.withHighlight(usernoticeToChat(message, self)));
+      case "USERNOTICE": {
+        const chat = usernoticeToChat(message, self);
+        if (this.alreadyShown(chat, message.tags.id)) return;
+        this.enqueue(this.withHighlight(chat));
         return;
+      }
       case "ROOMSTATE":
         this.onRoomState(message);
         return;
@@ -777,6 +785,28 @@ class ChatController {
       if (next.length) this.chatterLists.set(channel, next);
       else this.chatterLists.delete(channel);
     }
+  }
+
+  /** Notes a line's Twitch id; drops the oldest once a channel holds SEEN_IDS_PER_CHANNEL. */
+  private rememberId(channel: string, message: ChatMessage): void {
+    if (message.kind === "system" || message.id.startsWith("send-")) return;
+    let seen = this.seenIds.get(channel);
+    if (!seen) this.seenIds.set(channel, (seen = new Set()));
+    seen.delete(message.id);
+    seen.add(message.id);
+    if (seen.size > SEEN_IDS_PER_CHANNEL) seen.delete(seen.values().next().value as string);
+  }
+
+  /** True when a live line with this Twitch id already came in for its channel (live, saved or history server). */
+  private alreadyShown(message: ChatMessage, twitchId: string | undefined): boolean {
+    // A late line for a channel you left is dropped by flush; don't start a new id list for it.
+    if (!twitchId || twitchId.startsWith("send-") || !get().channels[message.channel]) return false;
+    if (this.seenIds.get(message.channel)?.has(twitchId)) {
+      console.debug("[zoochattr] dropped duplicate", message.channel, twitchId, message.login);
+      return true;
+    }
+    this.rememberId(message.channel, message);
+    return false;
   }
 
   /** Twitch echoes our message on the read connection with full emote tags; swap it in. */
@@ -1047,6 +1077,7 @@ class ChatController {
     this.flush();
     this.dropHistoryChannel(name);
     this.chatterLists.delete(name);
+    this.seenIds.delete(name);
     clearReplyTarget(name);
     set((s) => {
       const channels = { ...s.channels };
@@ -1377,6 +1408,7 @@ class ChatController {
             const seen = new Set<string>();
             const merged: ChatMessage[] = [];
             for (const message of history) {
+              this.rememberId(channel, message);
               const live = liveById.get(message.id);
               if (live && !live.pending) {
                 merged.push(live);
@@ -1468,6 +1500,7 @@ class ChatController {
     this.patchChannel(channel, (view) => {
       const merged = mergeServerMessages(view.messages, incoming, channel, (fresh) => fillNote(channel, fresh, result.truncated));
       added = merged.added.length;
+      for (const message of merged.added) this.rememberId(channel, message);
       return added ? { ...view, messages: this.capMessages(merged.messages) } : view;
     });
     if (!added) return;
