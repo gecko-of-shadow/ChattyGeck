@@ -33,7 +33,7 @@ Preconditions on either OS:
 
 What launch starts, in order:
 
-1. `node scripts/mock-twitch.mjs` — IRC `ws://127.0.0.1:17422`, HTTP `http://127.0.0.1:17423`. This is the production boundary stand-in from the README (`.env.mock`): Twitch IRC, device login, Helix, 7TV, BTTV, FFZ, and the history-server read API. It does not replace GitHub update checks.
+1. `node scripts/mock-twitch.mjs` — IRC `ws://127.0.0.1:17422`, HTTP `http://127.0.0.1:17423`. This is the production boundary stand-in from the README (`.env.mock`): Twitch IRC, device login, Helix, 7TV, BTTV, FFZ, and the history-server read API. GitHub update checks are not mocked. `ZOOCHATTR_VERIFY=1` skips them, so this launch does not call `api.github.com`.
 2. Vite in mock mode.
 3. The Tauri window, with `ZOOCHATTR_VERIFY=1` and `ZOOCHATTR_DATA_DIR` set to a new empty directory under the OS temp dir (`%TEMP%\zoochattr-verify\<runId>\data` on Windows, `/tmp/zoochattr-verify/<runId>/data` on Linux). Inherited `TWITCH_CLIENT_ID`, `VITE_TWITCH_*`, `VITE_7TV*`, `VITE_BTTV*`, `VITE_FFZ*`, and `VITE_HISTORY*` are removed and replaced with the mock values from `.env.mock`. `VITE_HISTORY_SERVER` is not set.
 
@@ -127,7 +127,9 @@ Every run writes to `verification-evidence/<runId>/` in the repo. That directory
 | `settings.json` | copy taken by `side-effect` after a real preference change |
 | paths passed to `--out` | screenshots and aria snapshots |
 
-On Linux desktop, `browser screenshot` also writes a sibling `*-window.png` grabbed from the X11 window titled `ZooChattr`. The page screenshot and the window grab should show the same screen. A page image with no window grab does not prove the shell was on screen.
+On Linux desktop, `browser screenshot` also writes a sibling `*-window.png` grabbed from the X11 window titled `ZooChattr verify`. The page screenshot and the window grab should show the same screen. A page image with no window grab does not prove the shell was on screen.
+
+`doctor.json` field `network` comes from `githubTouch`. On Linux it lists `remotes` (sockets owned by this run, from `/proc/<pid>/fd` matched to `/proc/net/tcp`) and `remote_count`. `contacted: false` there means none of those sockets were to `api.github.com` or `github.com`. That check is not evidence on Windows: there is no `/proc`, so the harness cannot see which process owns a TCP connection. An empty `remotes` list on Windows would look like a pass even if the process had called GitHub. On Windows `network.evidence` is false and `contacted` is null. Use the verify-mode status text and `verify-guard.txt` (`updates=skipped`) there, not `githubTouch`.
 
 Proof standard:
 

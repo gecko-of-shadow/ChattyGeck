@@ -52,6 +52,16 @@ pub fn save_history_token(token: &str) -> Result<(), String> {
     entry(HISTORY_TOKEN)?.set_password(token).map_err(|err| err.to_string())
 }
 
+/// Credential-store label shown in Settings. Verify mode adds the separate service name.
+/// A normal launch stays the plain backend name, including exactly `Windows Credential Manager`.
+pub fn format_store_name(backend: &str, verify: bool) -> String {
+    if verify {
+        format!("{backend} (ZooChattr-verify)")
+    } else {
+        backend.to_string()
+    }
+}
+
 pub fn store_name() -> String {
     let backend = if cfg!(target_os = "windows") {
         "Windows Credential Manager"
@@ -60,6 +70,23 @@ pub fn store_name() -> String {
     } else {
         "Linux kernel keyring (cleared on logout)"
     };
-    let service = crate::verify::credential_service(crate::verify::enabled());
-    format!("{backend} ({service})")
+    format_store_name(backend, crate::verify::enabled())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_store_name;
+
+    #[test]
+    fn windows_store_name_is_exact_until_verify_mode() {
+        assert_eq!(format_store_name("Windows Credential Manager", false), "Windows Credential Manager");
+        assert_eq!(
+            format_store_name("Windows Credential Manager", true),
+            "Windows Credential Manager (ZooChattr-verify)"
+        );
+        assert_eq!(
+            format_store_name("Linux kernel keyring (cleared on logout)", false),
+            "Linux kernel keyring (cleared on logout)"
+        );
+    }
 }

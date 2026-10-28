@@ -1466,7 +1466,30 @@ function tcpRemotes(inodes) {
   return remotes;
 }
 
+function networkReport(extra) {
+  const remotes = extra.remotes ?? [];
+  return {
+    contacted: extra.contacted,
+    evidence: extra.evidence,
+    github: extra.github ?? [],
+    remotes,
+    remote_count: remotes.length,
+    matches: extra.matches ?? [],
+    ...(extra.note ? { note: extra.note } : {}),
+  };
+}
+
 async function githubTouch(rt) {
+  // /proc/<pid>/fd plus /proc/net/tcp is how Linux ties a socket to a process.
+  // Windows has no /proc, so an empty list would look like "no GitHub" even after a real request.
+  if (process.platform !== "linux") {
+    return networkReport({
+      contacted: null,
+      evidence: false,
+      remotes: [],
+      note: "Not evidence on Windows: socket ownership is read from /proc, which Windows does not have.",
+    });
+  }
   const pids = [...ourPidSet(rt)];
   const inodes = new Set();
   for (const pid of pids) for (const inode of socketInodes(pid)) inodes.add(inode);
@@ -1475,11 +1498,16 @@ async function githubTouch(rt) {
   try {
     github = [...new Set([...(await dns.resolve4("api.github.com")), ...(await dns.resolve4("github.com"))])];
   } catch (err) {
-    github = [];
-    return { contacted: false, github, remotes, note: `could not resolve GitHub: ${err.message}` };
+    return networkReport({
+      contacted: null,
+      evidence: false,
+      github,
+      remotes,
+      note: `could not resolve GitHub: ${err.message}`,
+    });
   }
   const matches = remotes.filter((row) => row.remote && github.includes(row.remote));
-  return { contacted: matches.length > 0, github, remotes, matches };
+  return networkReport({ contacted: matches.length > 0, evidence: true, github, remotes, matches });
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;

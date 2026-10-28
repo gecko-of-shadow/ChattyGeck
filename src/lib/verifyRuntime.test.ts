@@ -44,10 +44,10 @@ describe("verify cleanup path guard", () => {
 
   it("uses the same rule for a Windows temp path", () => {
     const win = { resolve: resolveWin32, sep: "\\" };
-    const winRoot = "C:\\Users\\Bran\\AppData\\Local\\Temp\\zoochattr-verify";
+    const winRoot = "C:\\Users\\tester\\AppData\\Local\\Temp\\zoochattr-verify";
     expect(isInsideRoot(`${winRoot}\\run-1`, winRoot, win)).toBe(true);
-    expect(isInsideRoot("C:\\Users\\Bran\\AppData\\Local\\Temp\\zoochattr-verify-not", winRoot, win)).toBe(false);
-    expect(isInsideRoot("C:\\Users\\Bran\\Meow\\ZooChattr", winRoot, win)).toBe(false);
+    expect(isInsideRoot("C:\\Users\\tester\\AppData\\Local\\Temp\\zoochattr-verify-not", winRoot, win)).toBe(false);
+    expect(isInsideRoot("C:\\Users\\tester\\Projects\\ZooChattr", winRoot, win)).toBe(false);
     expect(isInsideRoot(`${winRoot}\\..\\secrets`, winRoot, win)).toBe(false);
   });
 });
