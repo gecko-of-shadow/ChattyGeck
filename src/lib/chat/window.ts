@@ -9,6 +9,22 @@ export const HISTORY_PAGE = 200;
 /** DOM cap while paused. Older rows stay in memory and load as you scroll up. */
 export const MAX_PAUSED_ROWS = 800;
 
+/** A log within this many px of the bottom counts as following live chat. */
+export const LIVE_SLACK_PX = 40;
+
+/** A scroll this soon after wheel, touch, pointer or key input inside the log is the person's own. */
+export const GESTURE_MS = 600;
+
+/**
+ * Whether a scroll event means the person scrolled up to read, so the feed should pause.
+ * `liveTop` is scrollTop the last time the log was at the bottom, so a slow drag that moves
+ * less than a pixel per event still adds up. Layout shifts never pause it: a box that got
+ * shorter keeps its scrollTop, and a top the browser clamps lands back at the bottom.
+ */
+export function isUserScrollUp(liveTop: number, top: number, distanceFromBottom: number, sinceGestureMs: number): boolean {
+  return distanceFromBottom >= LIVE_SLACK_PX && top < liveTop - 1 && sinceGestureMs < GESTURE_MS;
+}
+
 /**
  * Rows to paint while stuck to the bottom.
  * A nearby "new since you left" marker stays in the window. An old one does not

@@ -9,7 +9,15 @@ import { usePrefersDark, useTheme } from "@/lib/useTheme";
 import type { ChatMessage } from "@/lib/twitch/types";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
-import { HISTORY_PAGE, countNewer, liveSlice, MAX_PAUSED_ROWS, pausedSlice } from "@/lib/chat/window";
+import {
+  HISTORY_PAGE,
+  countNewer,
+  isUserScrollUp,
+  liveSlice,
+  LIVE_SLACK_PX,
+  MAX_PAUSED_ROWS,
+  pausedSlice,
+} from "@/lib/chat/window";
 import { MessageRow, type RowPrefs } from "./MessageRow";
 
 interface HoverEmote {
@@ -84,6 +92,8 @@ export function ChatLog({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const lastInteraction = useRef(0);
+  /** scrollTop the last time the log sat at the bottom (following live chat). */
+  const liveTop = useRef(0);
   const [pause, setPause] = useState<Pause | null>(null);
   const pauseRef = useRef(pause);
   pauseRef.current = pause;
@@ -125,10 +135,12 @@ export function ChatLog({
     }
   }, [visible, pause, prefs.textSize, prefs.emoteSize]);
 
-  // Emotes load after the row renders and grow it; keep pinned to the bottom while live.
+  // Emotes load after the row renders and grow it, and the box itself gets shorter when a reply bar
+  // opens or the window shrinks; keep pinned to the bottom while live.
   useEffect(() => {
     const content = contentRef.current;
-    if (!content) return;
+    const box = scrollRef.current;
+    if (!content || !box) return;
     let frame = 0;
     const observer = new ResizeObserver(() => {
       if (pauseRef.current) return;
@@ -138,6 +150,7 @@ export function ChatLog({
       });
     });
     observer.observe(content);
+    observer.observe(box);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
@@ -148,13 +161,14 @@ export function ChatLog({
     const el = scrollRef.current;
     if (!el) return;
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distance < 40) {
+    if (distance < LIVE_SLACK_PX) {
+      liveTop.current = el.scrollTop;
       if (pauseRef.current) setPause(null);
       return;
     }
     const held = pauseRef.current;
-    // Only a person scrolling up pauses the feed; layout shifts from images don't.
-    if (!held && Date.now() - lastInteraction.current < 600) {
+    // Only a person scrolling up pauses the feed; layout shifts from images or a shorter box don't.
+    if (!held && isUserScrollUp(liveTop.current, el.scrollTop, distance, Date.now() - lastInteraction.current)) {
       const snapshot = liveRef.current;
       const shown = Math.min(snapshot.length, visibleCount.current);
       setPause({ snapshot, start: snapshot.length - shown, end: snapshot.length });

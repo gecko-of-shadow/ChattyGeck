@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countNewer, liveSlice, MAX_LIVE_WINDOW, pausedSlice } from "./window";
+import { countNewer, isUserScrollUp, liveSlice, MAX_LIVE_WINDOW, pausedSlice } from "./window";
 import type { ChatMessage } from "@/lib/twitch/types";
 
 const row = (id: string): ChatMessage => ({
@@ -47,5 +47,48 @@ describe("live chat window", () => {
     const echoed = [row("a"), row("twitch-1"), row("b")];
     expect(countNewer(snapshot, echoed)).toBe(2);
     expect(countNewer([], echoed)).toBe(echoed.length);
+  });
+});
+
+describe("isUserScrollUp", () => {
+  /** A pinned log: 2000 px of rows in a 600 px box, scrolled to the bottom. */
+  const pinned = { scrollHeight: 2000, clientHeight: 600, scrollTop: 1400 };
+  const distance = (box: typeof pinned) => box.scrollHeight - box.scrollTop - box.clientHeight;
+
+  it("pauses when the person scrolls up with the wheel", () => {
+    const up = { ...pinned, scrollTop: 1200 };
+    expect(isUserScrollUp(pinned.scrollTop, up.scrollTop, distance(up), 50)).toBe(true);
+  });
+
+  it("does not pause when the box gets shorter right after a click (reply bar, smaller window)", () => {
+    // The box loses 200 px; the browser keeps scrollTop, so the newest rows sit below the edge.
+    const shorter = { ...pinned, clientHeight: 400 };
+    expect(distance(shorter)).toBe(200);
+    expect(isUserScrollUp(pinned.scrollTop, shorter.scrollTop, distance(shorter), 50)).toBe(false);
+  });
+
+  it("pauses on a slow drag that moves under a pixel per event once it adds up", () => {
+    // Middle-click autoscroll or a slow touchpad: the last step was 0.5 px, the total is 41 px.
+    const up = { ...pinned, scrollTop: pinned.scrollTop - 41 };
+    expect(isUserScrollUp(pinned.scrollTop, up.scrollTop, distance(up), 50)).toBe(true);
+  });
+
+  it("does not pause when the box gets taller (reply bar closes) and the browser lowers scrollTop", () => {
+    const taller = { ...pinned, clientHeight: 632, scrollTop: 1368 };
+    expect(distance(taller)).toBe(0);
+    expect(isUserScrollUp(pinned.scrollTop, taller.scrollTop, distance(taller), 50)).toBe(false);
+  });
+
+  it("does not pause for an upward move long after any input", () => {
+    const up = { ...pinned, scrollTop: 1200 };
+    expect(isUserScrollUp(pinned.scrollTop, up.scrollTop, distance(up), 5_000)).toBe(false);
+  });
+
+  it("does not pause near the bottom or when scrolling down", () => {
+    const nearBottom = { ...pinned, scrollTop: 1380 };
+    expect(isUserScrollUp(pinned.scrollTop, nearBottom.scrollTop, distance(nearBottom), 50)).toBe(false);
+    const from = { ...pinned, scrollTop: 900 };
+    const down = { ...pinned, scrollTop: 1000 };
+    expect(isUserScrollUp(from.scrollTop, down.scrollTop, distance(down), 50)).toBe(false);
   });
 });
