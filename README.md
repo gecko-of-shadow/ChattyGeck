@@ -120,6 +120,8 @@ That commit and tag carry your git name and email. To keep your real email out o
 
 To bake your Twitch Client ID into release builds, add it as a repository variable named `TWITCH_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables). It's public by design, so a variable is fine; no secret is needed.
 
+To build your history server's address in too, add a repository variable named `HISTORY_SERVER` with its https address. Never add its read token there: anyone could pull it out of the exe. The token is pasted once per computer in Settings → Account & history.
+
 ### Cross-compiling from Linux or macOS (experimental)
 
 Tauri can build the Windows exe without Windows using [cargo-xwin](https://github.com/rust-cross/cargo-xwin). It produces the same portable `ZooChattr.exe`, but try it on a Windows machine before sharing it.
@@ -162,6 +164,7 @@ The e2e and soak scripts use `playwright-core` with an installed Chrome. Set `CH
 | `VITE_TWITCH_AUTH_BASE` | `.env` / `.env.mock` | OAuth endpoint. Defaults to `https://id.twitch.tv`. |
 | `VITE_TWITCH_HELIX_BASE` | `.env` / `.env.mock` | Helix API. Defaults to `https://api.twitch.tv/helix`. |
 | `VITE_7TV_API`, `VITE_BTTV_API`, `VITE_FFZ_API` | `.env` | Emote API overrides (rarely needed). |
+| `VITE_HISTORY_SERVER` | `.env` | Built-in history server address (https). Settings can override it or turn it off. Never put the read token here. |
 | `ZOOCHATTR_DATA_DIR` | runtime env | Forces the data folder, e.g. for testing a clean profile. |
 
 Only `.env.example` and `.env.mock` are committed. `.env` is git-ignored.

@@ -3,6 +3,7 @@ import { historyBoundary, isHistoryBoundary } from "@/lib/chat/history";
 import {
   MAX_PAGES,
   PAGE_LIMIT,
+  activeHistoryServer,
   checkHistoryServer,
   fetchServerLines,
   fillNote,
@@ -56,6 +57,20 @@ function fakeServer(lines: string[], options: { token?: string; recorded?: boole
   }) as typeof fetch;
   return { calls, fetchImpl };
 }
+
+describe("activeHistoryServer", () => {
+  it("uses the typed address, else the built-in one, and nothing when switched off", () => {
+    const mine = "https://mine.example";
+    expect(activeHistoryServer({ historyServer: "", historyServerOff: false }, SERVER)).toBe(SERVER);
+    expect(activeHistoryServer({ historyServer: mine, historyServerOff: false }, SERVER)).toBe(mine);
+    expect(activeHistoryServer({ historyServer: "", historyServerOff: true }, SERVER)).toBe("");
+    expect(activeHistoryServer({ historyServer: mine, historyServerOff: true }, SERVER)).toBe("");
+    expect(activeHistoryServer({ historyServer: "", historyServerOff: false }, "")).toBe("");
+    // A built-in address the token could leak to is never used (plain http only on this computer, for the mock).
+    expect(activeHistoryServer({ historyServer: "", historyServerOff: false }, "http://logger.example")).toBe("");
+    expect(activeHistoryServer({ historyServer: "", historyServerOff: false }, "http://127.0.0.1:17423")).toBe("http://127.0.0.1:17423");
+  });
+});
 
 describe("parseHistoryServer", () => {
   it("keeps only the origin of an https address", () => {

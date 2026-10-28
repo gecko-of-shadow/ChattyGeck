@@ -1,3 +1,4 @@
+import { config } from "@/lib/config";
 import { historyBoundary, isHistoryBoundary } from "@/lib/chat/history";
 import { parseIrcLine } from "@/lib/irc/parser";
 import { privmsgToChat, systemMessage } from "@/lib/twitch/messages";
@@ -36,6 +37,18 @@ export function parseHistoryServer(text: string): string | null {
   if (url.protocol === "https:") return url.origin;
   if (url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost")) return url.origin;
   return null;
+}
+
+/**
+ * The logger ZooChattr asks: the address typed in Settings, else the one built into this release.
+ * "" when switched off or when there is neither.
+ */
+export function activeHistoryServer(
+  settings: { historyServer: string; historyServerOff: boolean },
+  builtIn: string = config.builtInHistoryServer,
+): string {
+  if (settings.historyServerOff) return "";
+  return settings.historyServer || (parseHistoryServer(builtIn) ?? "");
 }
 
 export type HistoryServerProblem = "unauthorized" | "unreachable" | "bad-response";

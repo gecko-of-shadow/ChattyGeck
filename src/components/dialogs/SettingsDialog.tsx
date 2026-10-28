@@ -436,7 +436,11 @@ function describeCheck(check: ServerCheck, channel: string | undefined): FieldSt
 
 /** The chat logger's address (settings.json) and read token (credential store; Settings can save it, not read it). */
 function HistoryServerField() {
-  const saved = useChat((s) => s.settings.historyServer);
+  const typedServer = useChat((s) => s.settings.historyServer);
+  const off = useChat((s) => s.settings.historyServerOff);
+  const builtIn = parseHistoryServer(config.builtInHistoryServer) ?? "";
+  /** What the box shows: off = empty, else the typed address or the one built into this release. */
+  const saved = off ? "" : typedServer || builtIn;
   const remember = useChat((s) => s.settings.rememberChatHistory);
   const firstChannel = useChat((s) => s.settings.channels[0]);
   const tokenStore = useChat((s) => s.appInfo?.tokenStore ?? "the credential store");
@@ -479,8 +483,10 @@ function HistoryServerField() {
         setToken("");
       }
       setAddress(server);
-      if (server !== saved) chat.updateSettings({ historyServer: server });
-      if (!server) setStatus({ error: false, text: "History server off." });
+      // The built-in address is stored as "" so a later release with a new address is followed.
+      if (server !== saved) chat.updateSettings({ historyServer: server === builtIn ? "" : server, historyServerOff: !server });
+      // With a built-in address the "History server is off." line below already says so.
+      if (!server) setStatus(builtIn ? null : { error: false, text: "History server off." });
       // Only a freshly pasted token is tested; a saved one is never shown or sent anywhere but the history server at startup.
       else if (!typed) setStatus({ error: false, text: "Saved. Missed chat fills in each time ZooChattr starts." });
       else setStatus(describeCheck(await checkHistoryServer(server, typed, firstChannel ?? "zoochattr"), firstChannel));
@@ -495,6 +501,8 @@ function HistoryServerField() {
     try {
       await saveHistoryToken("");
       setHasToken(false);
+      // The Remove button goes away; keep the keyboard on the token box.
+      document.getElementById("pref-history-token")?.focus();
       setStatus({ error: false, text: "Read token removed." });
     } catch (err) {
       setStatus({ error: true, text: `Couldn't remove the token: ${err instanceof Error ? err.message : String(err)}` });
@@ -513,6 +521,7 @@ function HistoryServerField() {
         <span className="text-sm">History server</span>
         <span className="text-xs font-normal text-muted-foreground">
           Your own chat logger. At startup ZooChattr fills in what was said while it was closed.
+          {builtIn && !off && !typedServer ? " The address comes with ZooChattr. Clear it and save to turn this off." : null}
         </span>
       </Label>
       <Input
@@ -545,12 +554,29 @@ function HistoryServerField() {
         <span>
           {hasToken ? `Read token saved in ${tokenStore}.` : `The read token is kept in ${tokenStore}, never in settings or backups.`}
         </span>
-        {hasToken ? (
-          <Button type="button" variant="outline" size="xs" onClick={() => void forget()}>
-            Remove token
-          </Button>
-        ) : null}
+        <span className="flex flex-wrap gap-2">
+          {builtIn && !address.trim() ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setAddress(builtIn);
+                // The button goes away once the box is filled; keep the keyboard on the box.
+                document.getElementById("pref-history-server")?.focus();
+              }}
+            >
+              Use the built-in address
+            </Button>
+          ) : null}
+          {hasToken ? (
+            <Button type="button" variant="outline" size="xs" onClick={() => void forget()}>
+              Remove token
+            </Button>
+          ) : null}
+        </span>
       </div>
+      {off && builtIn ? <p className="text-xs text-muted-foreground">History server is off.</p> : null}
       {saved && !remember ? <p className="text-xs text-muted-foreground">Turn on Remember chat history to use it.</p> : null}
       {status ? (
         <p className={cn("text-xs", status.error ? "text-danger-text" : "text-muted-foreground")} data-testid="history-server-status">

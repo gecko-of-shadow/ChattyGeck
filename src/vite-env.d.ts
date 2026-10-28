@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_7TV_API?: string;
   readonly VITE_BTTV_API?: string;
   readonly VITE_FFZ_API?: string;
+  /** Built-in history server address (an https origin). Never a token. */
+  readonly VITE_HISTORY_SERVER?: string;
 }
 
 interface ImportMeta {

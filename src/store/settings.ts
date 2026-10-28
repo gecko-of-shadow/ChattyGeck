@@ -82,6 +82,11 @@ export interface Settings {
    * said while it was closed. The read token lives in the credential store, never in this file.
    */
   historyServer: string;
+  /**
+   * History server switched off. When false and historyServer is "", the address built into this
+   * release (config.builtInHistoryServer) is used.
+   */
+  historyServerOff: boolean;
   /** Ask GitHub for a newer portable build when ZooChattr starts (and every few hours). */
   autoCheckUpdates: boolean;
   /**
@@ -240,6 +245,7 @@ export const DEFAULT_SETTINGS: Settings = {
   startOnLogin: false,
   rememberChatHistory: true,
   historyServer: "",
+  historyServerOff: false,
   autoCheckUpdates: true,
   confirmChannelSwitch: true,
   clientId: "",
@@ -368,6 +374,12 @@ export function sanitizeSettings(raw: unknown): Settings {
     startOnLogin: bool(input.startOnLogin, DEFAULT_SETTINGS.startOnLogin),
     rememberChatHistory: bool(input.rememberChatHistory, DEFAULT_SETTINGS.rememberChatHistory),
     historyServer: typeof input.historyServer === "string" ? (parseHistoryServer(input.historyServer) ?? "") : "",
+    // Before the built-in address, a field without a usable address meant "off": files saved then keep
+    // that choice. A file without the key (fresh install) uses the built-in address.
+    historyServerOff:
+      typeof input.historyServerOff === "boolean"
+        ? input.historyServerOff
+        : "historyServer" in input && !(typeof input.historyServer === "string" && parseHistoryServer(input.historyServer)),
     autoCheckUpdates: bool(input.autoCheckUpdates, DEFAULT_SETTINGS.autoCheckUpdates),
     confirmChannelSwitch: bool(input.confirmChannelSwitch, DEFAULT_SETTINGS.confirmChannelSwitch),
     clientId: typeof input.clientId === "string" ? input.clientId.trim() : "",

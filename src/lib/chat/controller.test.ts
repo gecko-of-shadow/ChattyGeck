@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chat, HISTORY_FLUSH_MS, ALL_CHANNELS } from "@/lib/chat/controller";
+import { config } from "@/lib/config";
 import { newChannelView, useChat } from "@/store/chat";
 import { DEFAULT_SETTINGS } from "@/store/settings";
 import { useUi } from "@/store/ui";
@@ -136,6 +137,8 @@ describe("chat controller view and history", () => {
     internal.sentLog = [];
     internal.chatterLists.clear();
     internal.seenIds.clear();
+    // A developer's .env may build a history server in; these tests choose their own.
+    (config as { builtInHistoryServer: string }).builtInHistoryServer = "";
     resetHistoryBookkeeping();
   });
 
@@ -357,6 +360,66 @@ describe("chat controller view and history", () => {
     } finally {
       internal.read.join = realJoin;
     }
+  });
+
+  it("uses the built-in history server quietly: nothing asked without a token, filled in with one", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    const built = config as { builtInHistoryServer: string };
+    const before = built.builtInHistoryServer;
+    built.builtInHistoryServer = "https://logger.test";
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      asked.push(String(input));
+      return serverAnswer([serverLine("gap-1", Date.now() - 1_000, "said while closed")]);
+    });
+    const internal = chat as unknown as ServerInternals;
+    try {
+      // No token saved: no request and no warning (no fill result to report).
+      expect(await internal.fetchServerHistory(["geckotown"])).toEqual([]);
+      expect(asked).toEqual([]);
+
+      tabMemory.set("zoochattr.historyToken", "secret");
+      internal.applyServerHistory(await internal.fetchServerHistory(["geckotown"]));
+      expect(asked[0]?.startsWith("https://logger.test/")).toBe(true);
+      expect(useChat.getState().channels.geckotown.messages.some((message) => message.id === "gap-1")).toBe(true);
+
+      // The credential store can't be read: still no warning for the built-in address.
+      tabMemory.delete("zoochattr.historyToken");
+      vi.stubGlobal("sessionStorage", {
+        getItem: () => {
+          throw new Error("store locked");
+        },
+        setItem: () => undefined,
+        removeItem: () => undefined,
+        clear: () => undefined,
+      });
+      asked.length = 0;
+      expect(await internal.fetchServerHistory(["geckotown"])).toEqual([]);
+      expect(asked).toEqual([]);
+      installStorage();
+
+      // Switched off in Settings: the built-in address isn't used either.
+      useChat.setState((s) => ({ settings: { ...s.settings, historyServerOff: true } }));
+      asked.length = 0;
+      expect(await internal.fetchServerHistory(["geckotown"])).toEqual([]);
+      expect(asked).toEqual([]);
+    } finally {
+      built.builtInHistoryServer = before;
+    }
+  });
+
+  it("still warns when a typed history server has no token", async () => {
+    seed({ mode: "focused", focused: "geckotown", gridChannels: ["geckotown"], channels: ["geckotown"], remember: true });
+    useChat.setState((s) => ({ settings: { ...s.settings, historyServer: "https://logger.test" } }));
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
+      asked.push(String(input));
+      return serverAnswer([]);
+    });
+    const fills = (await (chat as unknown as ServerInternals).fetchServerHistory(["geckotown"])) as { error?: unknown }[];
+    expect(asked).toEqual([]);
+    expect(fills).toHaveLength(1);
+    expect((fills[0].error as { problem?: string }).problem).toBe("unauthorized");
   });
 
   it("flushes a message still waiting in the paint queue", async () => {

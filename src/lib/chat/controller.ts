@@ -5,6 +5,7 @@ import { historyBoundary, sanitizeHistory, trimLiveBuffer } from "@/lib/chat/his
 import {
   HistoryServerError,
   OVERLAP_MS,
+  activeHistoryServer,
   fetchServerLines,
   fillNote,
   mergeServerMessages,
@@ -1457,12 +1458,16 @@ class ChatController {
 
   /** Asks the history server (Settings → History server) for each channel's lines since the newest saved one. */
   private async fetchServerHistory(channels: string[]): Promise<ServerFill[]> {
-    const { historyServer: server, rememberChatHistory } = get().settings;
-    if (!server || !rememberChatHistory || !channels.length) return [];
+    const settings = get().settings;
+    const server = activeHistoryServer(settings);
+    if (!server || !settings.rememberChatHistory || !channels.length) return [];
     const token = await platform.loadHistoryToken().then(
       (value) => value || new HistoryServerError("unauthorized", "No read token is saved on this computer."),
       (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
     );
+    // The built-in address without a token is the normal state for anyone but the logger's owner:
+    // don't ask the server, don't warn at every start (not even when the credential store can't be read).
+    if (token instanceof Error && !settings.historyServer) return [];
     if (token instanceof Error) return channels.map((channel) => ({ channel, error: token }));
     return Promise.all(
       channels.map(async (channel): Promise<ServerFill> => {
@@ -1487,7 +1492,7 @@ class ChatController {
     if (problem === undefined) return;
     const tokenProblem = problem instanceof HistoryServerError && problem.problem === "unauthorized";
     toast.warning("Couldn't fill in missed chat", {
-      description: tokenProblem ? `${errorText(problem)} Check it in Settings → Window → History server.` : errorText(problem),
+      description: tokenProblem ? `${errorText(problem)} Check it in Settings → Account & history → History server.` : errorText(problem),
     });
   }
 

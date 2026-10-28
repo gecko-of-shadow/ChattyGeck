@@ -37,6 +37,9 @@ jobs:
           # Public Twitch Client ID (Settings > Secrets and variables > Actions > Variables).
           # Without it the app still builds; people paste a Client ID in Settings to log in.
           TWITCH_CLIENT_ID: ${{ vars.TWITCH_CLIENT_ID }}
+          # History server (chat logger) address, built in so it needn't be pasted. Only the address:
+          # its read token is a secret and never goes into the build.
+          VITE_HISTORY_SERVER: ${{ vars.HISTORY_SERVER }}
 
       # The app's updater installs a zip only when its SHA-256 matches this file (src-tauri/src/update.rs).
       - name: Write SHA-256 fingerprint

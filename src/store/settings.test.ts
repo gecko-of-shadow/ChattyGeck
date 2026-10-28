@@ -66,6 +66,21 @@ describe("sanitizeSettings", () => {
     expect(readBackup(JSON.stringify(makeBackup(saved)))?.spellDictionary).toEqual(["recieve", "Kappa"]);
   });
 
+  it("uses the built-in history server on a fresh install but keeps an old empty field off", () => {
+    expect(sanitizeSettings({}).historyServerOff).toBe(false);
+    // Saved before the built-in address existed: an empty field meant "off".
+    expect(sanitizeSettings({ historyServer: "" }).historyServerOff).toBe(true);
+    expect(sanitizeSettings({ historyServer: "https://zoochattr-logger.gecko.workers.dev" }).historyServerOff).toBe(false);
+    // Values older builds also cleaned to "" (no usable address) meant "off" too.
+    for (const junk of ["http://logger.example", "  ", null, 42]) {
+      expect(sanitizeSettings({ historyServer: junk }).historyServerOff).toBe(true);
+    }
+    // Saved by this version with the defaults: the built-in address stays on.
+    expect(sanitizeSettings({ historyServer: "", historyServerOff: false }).historyServerOff).toBe(false);
+    const off = sanitizeSettings({ historyServer: "", historyServerOff: true });
+    expect(readBackup(JSON.stringify(makeBackup(off)))?.historyServerOff).toBe(true);
+  });
+
   it("keeps a history server address as its https origin and drops anything else", () => {
     expect(sanitizeSettings({}).historyServer).toBe("");
     expect(sanitizeSettings({ historyServer: "https://zoochattr-logger.gecko.workers.dev/" }).historyServer).toBe(
