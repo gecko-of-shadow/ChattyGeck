@@ -1804,7 +1804,7 @@ class ChatController {
     // Another account: don't show the previous one's follows or dots while the new ones load.
     if (this.followsUser !== userId) set({ follows: {}, live: null });
     this.followsUser = userId;
-    set({ followsState: "off" });
+    set({ followsState: "loading" });
     void this.refreshFollows();
     this.liveTimer = setInterval(() => {
       if (document.hidden) return;
@@ -1845,6 +1845,13 @@ class ChatController {
     }, 1_500);
   }
 
+  /** The picker's Retry after the follow list couldn't be fetched. Same fetch as the timer's. */
+  retryFollows(): void {
+    if (!this.session || !this.liveTimer) return;
+    if (get().followsState !== "ok") set({ followsState: "loading" });
+    void this.refreshFollows();
+  }
+
   private async refreshFollows(): Promise<void> {
     const generation = this.followsGeneration;
     // A token that's about to expire is refreshed first, so the check itself doesn't hit a 401.
@@ -1875,7 +1882,11 @@ class ChatController {
     } catch (err) {
       unauthorized = err instanceof HelixUnauthorizedError;
       // Failed (offline, timeout, 401): try the follow list again in 5 minutes; live dots keep updating meanwhile.
-      if (generation === this.followsGeneration) this.followsFetchedAt = Date.now() - FOLLOWS_REFRESH_MS + 5 * 60_000;
+      if (generation === this.followsGeneration) {
+        this.followsFetchedAt = Date.now() - FOLLOWS_REFRESH_MS + 5 * 60_000;
+        // A list fetched earlier stays up; only a first fetch that failed shows the error (with Retry).
+        if (get().followsState !== "ok") set({ followsState: "error" });
+      }
     }
     // A 401 to a request made before a logout or login switch says nothing about the current login.
     if (unauthorized && generation === this.followsGeneration && this.session) await this.onHelixPollUnauthorized();

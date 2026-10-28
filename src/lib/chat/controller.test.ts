@@ -702,3 +702,75 @@ describe("chat controller view and history", () => {
     expect(useUi.getState().replyTo).toBeNull();
   });
 });
+
+describe("follow list states for the channel picker", () => {
+  const session = {
+    clientId: "cid",
+    login: "me",
+    userId: "42",
+    accessToken: "test-only",
+    expiresAt: Date.now() + 3_600_000,
+    scopes: ["chat:read", "chat:edit", "user:read:follows"],
+  };
+  const internal = chat as unknown as {
+    session: unknown;
+    liveTimer: ReturnType<typeof setInterval> | null;
+    followsGeneration: number;
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal("document", { hasFocus: () => true, hidden: false });
+    internal.session = session;
+    internal.liveTimer = setInterval(() => undefined, 1_000_000);
+    useChat.setState({ follows: {}, followsState: "loading", live: null });
+  });
+
+  afterEach(() => {
+    if (internal.liveTimer) clearInterval(internal.liveTimer);
+    internal.liveTimer = null;
+    internal.session = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("shows an error when the first fetch fails, and Retry loads the list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+    chat.retryFollows();
+    expect(useChat.getState().followsState).toBe("loading");
+    await vi.waitFor(() => expect(useChat.getState().followsState).toBe("error"));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        new Response(
+          JSON.stringify({
+            data: url.includes("/channels/followed")
+              ? [{ broadcaster_id: "1", broadcaster_login: "geckotown", broadcaster_name: "GeckoTown", followed_at: "2026-01-01T00:00:00Z" }]
+              : [],
+            pagination: {},
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    chat.retryFollows();
+    await vi.waitFor(() => expect(useChat.getState().followsState).toBe("ok"));
+    expect(Object.keys(useChat.getState().follows)).toEqual(["geckotown"]);
+  });
+
+  it("keeps a list it already has when a later fetch fails", async () => {
+    useChat.setState({ follows: { geckotown: { displayName: "GeckoTown", followedAt: "2026-01-01T00:00:00Z" } }, followsState: "ok" });
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+    chat.retryFollows();
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useChat.getState().followsState).toBe("ok");
+    expect(Object.keys(useChat.getState().follows)).toEqual(["geckotown"]);
+  });
+
+  it("does nothing while logged out", () => {
+    internal.session = null;
+    useChat.setState({ followsState: "off" });
+    chat.retryFollows();
+    expect(useChat.getState().followsState).toBe("off");
+  });
+});
