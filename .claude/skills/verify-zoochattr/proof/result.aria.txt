@@ -1,0 +1,17 @@
+BUTTON  #geckotown, in the grid
+BUTTON  Hide #geckotown from the grid
+BUTTON  Add a channel
+SPAN status Connected · anonymous
+BUTTON radio 1 chat (single). Ctrl+G switches; Esc returns to the grid.
+BUTTON radio 2 chats side by side
+BUTTON radio 3 chats in a row
+BUTTON radio 4 chats, 2 by 2
+BUTTON radio 6 chats, 3 by 2
+BUTTON radio 9 chats, 3 by 3
+BUTTON  Settings
+H2  #geckotown
+BUTTON  Options for #geckotown
+BUTTON  Hide #geckotown from the grid
+BUTTON  Reply to TokayTom
+BUTTON  TokayTom
+BUTTON  Log in with Twitch

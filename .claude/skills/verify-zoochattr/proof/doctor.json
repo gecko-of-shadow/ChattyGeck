@@ -1,0 +1,25 @@
+{
+  "ok": true,
+  "worthDriving": true,
+  "surface": "desktop",
+  "drive": "tauri-driver",
+  "platform": "linux",
+  "version": "0.6.0",
+  "dataDir": "/tmp/zoochattr-verify/20261028-081659-cfxx/data",
+  "url": "http://127.0.0.1:17420",
+  "heading": "Nothing in the zoo yet",
+  "settingsJson": false,
+  "mockUp": true,
+  "viteStatus": 200,
+  "window": {
+    "id": "27262979",
+    "width": 1180
+  },
+  "pids": {
+    "mock": 14262,
+    "vite": 14270,
+    "tauri-driver": 14293
+  },
+  "problems": [],
+  "standIn": false
+}

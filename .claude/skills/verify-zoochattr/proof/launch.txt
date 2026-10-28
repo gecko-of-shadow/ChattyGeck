@@ -1,0 +1,13 @@
+[2026-10-28T08:16:59.983Z] daemon listening on 127.0.0.1:36237
+[2026-10-28T08:16:59.987Z] started mock pid 14262: /exec-daemon/node /workspace/scripts/mock-twitch.mjs
+[2026-10-28T08:17:00.241Z] mock HTTP is accepting connections on 17423 (GET / is 404; that is enough)
+[2026-10-28T08:17:00.241Z] debug shell present: /workspace/src-tauri/target/debug/zoochattr
+[2026-10-28T08:17:00.243Z] started vite pid 14270: /exec-daemon/node /workspace/node_modules/vite/bin/vite.js --mode mock --port 17420 --host 127.0.0.1 --strictPort
+[2026-10-28T08:17:00.577Z] started tauri-driver pid 14293: /usr/local/cargo/bin/tauri-driver --port 4444 --native-port 4445 --native-driver /usr/bin/WebKitWebDriver
+[2026-10-28T08:17:00.830Z] creating tauri-driver session for /workspace/src-tauri/target/debug/zoochattr
+[2026-10-28T08:17:01.010Z] webdriver session ac4e506a-20a0-44aa-98f6-e328fa30325c
+[2026-10-28T08:17:01.742Z] webview location http://127.0.0.1:17420/
+[2026-10-28T08:17:02.245Z] saved X11 window grab /workspace/verification-evidence/20261028-081659-cfxx/launch-window.png (window 27262979, 1180px wide)
+[2026-10-28T08:17:02.284Z] saved page screenshot /workspace/verification-evidence/20261028-081659-cfxx/launch-page.png
+[2026-10-28T08:17:02.284Z] ready surface=desktop drive=tauri-driver
+[2026-10-28T08:17:51.068Z] shutdown
