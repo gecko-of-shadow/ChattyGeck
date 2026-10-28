@@ -34,6 +34,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useChat } from "@/store/chat";
 import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer, useUi } from "@/store/ui";
+import { paneChannels } from "@/lib/view/panes";
 import { beginChannelDrag } from "./gridDrag";
 import { AddChannelForm, ChannelAvatar } from "./Sidebar";
 
@@ -466,7 +467,8 @@ function EmptyPane() {
 
 /** The grid views (2, 3, 4, 6, 9 panes): pinned channels in a fixed packing, empty panes after them. */
 export function GridView() {
-  const channels = useChat((s) => s.settings.gridChannels);
+  const panes = useChat((s) => s.settings.gridChannels);
+  const channels = paneChannels(panes);
   const following = useChat((s) => s.settings.channels.length);
   const view = useChat((s) => viewForSlots(s.settings.gridSlots));
   const parked = useChat((s) => s.settings.gridParked.length);
@@ -521,7 +523,8 @@ export function GridView() {
   }
 
   const layout = layoutViewGrid(view, area.width, area.height);
-  const shown = channels.slice(0, view);
+  // Panes keep their place: "" is a pane emptied with "−".
+  const shown = panes.slice(0, view);
   const empty = Math.max(0, view - shown.length);
 
   return (
@@ -547,9 +550,7 @@ export function GridView() {
         data-grid-cols={layout.columns}
         data-view={view}
       >
-        {shown.map((login) => (
-          <ChatBox key={login} login={login} />
-        ))}
+        {shown.map((login, i) => (login ? <ChatBox key={login} login={login} /> : <EmptyPane key={`empty-at-${i}`} />))}
         {Array.from({ length: empty }, (_, i) => (
           <EmptyPane key={`empty-${i}`} />
         ))}

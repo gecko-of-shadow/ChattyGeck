@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { chat } from "@/lib/chat/controller";
+import { paneChannels } from "@/lib/view/panes";
 import { cycleChannel } from "@/lib/view/reorder";
 import { viewShortcut } from "@/lib/view/shortcuts";
 import { useChat } from "@/store/chat";
@@ -87,7 +88,7 @@ export function ViewHotkeys() {
           const target =
             (hovered && settings.gridChannels.includes(hovered) ? hovered : null) ??
             settings.focused ??
-            settings.gridChannels[0] ??
+            paneChannels(settings.gridChannels)[0] ??
             settings.channels[0];
           if (target) chat.focus(target);
           else chat.setMode("focused");
@@ -109,7 +110,8 @@ export function ViewHotkeys() {
 
       if (shortcut.type === "cycle") {
         if (settings.mode !== "focused") return;
-        const order = settings.gridChannels.length ? settings.gridChannels : settings.channels;
+        const onGrid = paneChannels(settings.gridChannels);
+        const order = onGrid.length ? onGrid : settings.channels;
         const next = cycleChannel(order, settings.focused, shortcut.direction);
         if (!next || next === settings.focused) return;
         event.preventDefault();
@@ -124,7 +126,7 @@ export function ViewHotkeys() {
             ? hovered
             : settings.focused && settings.gridChannels.includes(settings.focused)
               ? settings.focused
-              : settings.gridChannels[0];
+              : paneChannels(settings.gridChannels)[0];
         if (!name) return;
         event.preventDefault();
         chat.moveGridChannel(name, shortcut.direction);

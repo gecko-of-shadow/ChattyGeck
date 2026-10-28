@@ -4,6 +4,7 @@ import { chat } from "@/lib/chat/controller";
 import { toast } from "sonner";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { fuzzyChannels } from "@/lib/view/fuzzy";
+import { paneChannels } from "@/lib/view/panes";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
@@ -49,7 +50,7 @@ export function QuickSwitcher() {
           ? hovered
           : focused && settings.gridChannels.includes(focused)
             ? focused
-            : (settings.gridChannels[0] ?? null);
+            : (paneChannels(settings.gridChannels)[0] ?? null);
       if (slot) chat.replaceInGrid(slot, name);
       else {
         const result = chat.showInGrid(name);

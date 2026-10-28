@@ -200,6 +200,52 @@ describe("chat controller view and history", () => {
     expect(state.channels.lizardlounge.readMarker).toBe("liz-1");
   });
 
+  it("\"−\" empties a pane in place: the panes after it don't move and the channel stays joined", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "b", "c", "d"], channels: ["a", "b", "c", "d"] });
+    chat.hideFromGrid("b");
+    const state = useChat.getState();
+    expect(state.settings.gridChannels).toEqual(["a", "", "c", "d"]);
+    expect(state.settings.channels).toContain("b");
+    expect(state.channels.b).toBeDefined();
+  });
+
+  it("the picker loads a channel into an empty pane, replaces a pane, or swaps with the pane already showing it", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "b", "c", "d"] });
+    chat.setPaneChannel(1, "b");
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b", "c"]);
+    expect(useChat.getState().settings.focused).toBe("b");
+    chat.setPaneChannel(3, "d");
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b", "c", "d"]);
+    chat.setPaneChannel(0, "c");
+    expect(useChat.getState().settings.gridChannels).toEqual(["c", "b", "a", "d"]);
+    // Past the view (4 panes) or a channel not in the app: nothing happens.
+    chat.setPaneChannel(4, "a");
+    chat.setPaneChannel(0, "nope");
+    expect(useChat.getState().settings.gridChannels).toEqual(["c", "b", "a", "d"]);
+  });
+
+  it("a new channel fills the first empty pane; leaving a channel leaves its pane empty", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "c"] });
+    (chat as unknown as { settingsUiOnly: boolean }).settingsUiOnly = true;
+    try {
+      chat.addChannel("newone");
+    } finally {
+      (chat as unknown as { settingsUiOnly: boolean }).settingsUiOnly = false;
+    }
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "newone", "c"]);
+    chat.removeChannel("a");
+    expect(useChat.getState().settings.gridChannels).toEqual(["", "newone", "c"]);
+    expect(useChat.getState().settings.focused).not.toBe("a");
+  });
+
+  it("\"−\" in view 1 shows nothing until a channel is picked", () => {
+    seed({ mode: "focused", focused: "a", gridChannels: ["a"], channels: ["a", "b"] });
+    chat.clearSingle();
+    expect(useChat.getState().settings).toMatchObject({ mode: "focused", focused: null });
+    chat.focus("b");
+    expect(useChat.getState().settings).toMatchObject({ mode: "focused", focused: "b" });
+  });
+
   it("writes a replaced pending line after the history timer already stripped it", async () => {
     seed({
       mode: "focused",

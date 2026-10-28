@@ -48,6 +48,7 @@ import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { fitGridToView, focusOnGrid, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
+import { clearPaneOf, fillFreePane, paneChannels, placeInPane } from "@/lib/view/panes";
 import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
@@ -1036,10 +1037,9 @@ class ChatController {
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
     if (this.settingsUiOnly) {
       if (get().settings.channels.includes(name)) return { ok: true, channel: name };
-      const gridFull = get().settings.gridChannels.length >= this.gridCap();
       this.updateSettings((s) => ({
         channels: [...s.channels, name],
-        gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+        gridChannels: fillFreePane(s.gridChannels, name, this.gridCap()) ?? s.gridChannels,
         focused: s.mode === "focused" || !s.focused ? name : s.focused,
       }));
       return { ok: true, channel: name };
@@ -1049,10 +1049,11 @@ class ChatController {
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
-    const gridFull = toGrid && get().settings.gridChannels.length >= this.gridCap();
+    const placed = toGrid ? fillFreePane(get().settings.gridChannels, name, this.gridCap()) : null;
+    const gridFull = toGrid && !placed;
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
-      gridChannels: !toGrid || gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+      gridChannels: placed ?? s.gridChannels,
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
     this.openChannel(name);
@@ -1062,7 +1063,7 @@ class ChatController {
     }
     if (gridFull) {
       toast(`Added #${name}`, {
-        description: `Grid is full (${this.gridCap()}). It's in the top strip: hide a pane to make room, or open it alone anytime.`,
+        description: `Grid is full (${this.gridCap()}). Empty a pane with − and pick it there, or open it alone anytime.`,
       });
     }
     return { ok: true, channel: name };
@@ -1090,7 +1091,8 @@ class ChatController {
     this.updateSettings((s) => {
       const index = s.channels.indexOf(name);
       const channels = s.channels.filter((c) => c !== name);
-      const gridChannels = s.gridChannels.filter((c) => c !== name);
+      // Its pane stays where it is, empty.
+      const gridChannels = clearPaneOf(s.gridChannels, name);
       const gridParked = s.gridParked.filter((c) => c !== name);
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
       return { channels, gridChannels, gridParked, focused: s.focused === name ? fallback : s.focused };
@@ -1176,19 +1178,20 @@ class ChatController {
       return { ok: true };
     }
     const cap = this.gridCap();
-    if (settings.gridChannels.length >= cap) {
+    const gridChannels = fillFreePane(settings.gridChannels, name, cap);
+    if (!gridChannels) {
       return {
         ok: false,
-        error: `Grid is full (${cap}). Hide one from the grid first, or read this channel alone (view 1).`,
+        error: `Grid is full (${cap}). Empty a pane with − first, or read this channel alone (view 1).`,
       };
     }
-    this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name], gridParked: s.gridParked.filter((c) => c !== name) }));
+    this.updateSettings((s) => ({ gridChannels, gridParked: s.gridParked.filter((c) => c !== name) }));
     this.setMode("grid");
     this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
     return { ok: true };
   }
 
-  /** Keep following, but tuck the channel off the grid. */
+  /** "−" on a pane: the channel stays joined (it counts unread), its pane stays where it is, empty. */
   hideFromGrid(name: string): void {
     const { mode, gridChannels } = get().settings;
     if (mode === "grid" && gridChannels.includes(name)) {
@@ -1196,7 +1199,32 @@ class ChatController {
       const last = get().channels[name]?.messages.at(-1)?.id;
       if (last) this.patchChannel(name, (c) => ({ ...c, readMarker: last }));
     }
-    this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name), gridParked: s.gridParked.filter((c) => c !== name) }));
+    this.updateSettings((s) => ({ gridChannels: clearPaneOf(s.gridChannels, name), gridParked: s.gridParked.filter((c) => c !== name) }));
+  }
+
+  /**
+   * The channel picker in grid pane `index` loaded `name` (a channel already in the app). A channel already on screen
+   * swaps places with what the pane showed. The pane becomes the focused one, so the message box sends there.
+   */
+  setPaneChannel(index: number, name: string): void {
+    const settings = get().settings;
+    if (!settings.channels.includes(name) || index < 0 || index >= this.gridCap()) return;
+    const replaced = settings.gridChannels[index];
+    this.updateSettings((s) => ({
+      gridChannels: placeInPane(s.gridChannels, index, name),
+      gridParked: s.gridParked.filter((c) => c !== name),
+      focused: name,
+    }));
+    if (replaced && replaced !== name) this.announce(`Replaced #${replaced} with #${name}`);
+    if (settings.mode === "grid") this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
+  }
+
+  /** "−" in view 1: nothing is shown until a channel is picked (it stays joined). */
+  clearSingle(): void {
+    const { mode, focused } = get().settings;
+    if (mode !== "focused" || !focused) return;
+    this.markRead(focused, null);
+    this.updateSettings({ focused: null });
   }
 
   /** Remembers where the user stopped reading the channel they're leaving. */
@@ -1234,7 +1262,7 @@ class ChatController {
   setMode(mode: ViewMode): void {
     if (mode === "focused") {
       const { focused, channels, gridChannels } = get().settings;
-      const target = focused ?? gridChannels[0] ?? channels[0];
+      const target = focused ?? paneChannels(gridChannels)[0] ?? channels[0];
       if (target) this.focus(target);
       else this.updateSettings({ mode });
       return;
