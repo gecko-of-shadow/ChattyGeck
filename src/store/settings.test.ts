@@ -66,6 +66,26 @@ describe("sanitizeSettings", () => {
     expect(readBackup(JSON.stringify(makeBackup(saved)))?.spellDictionary).toEqual(["recieve", "Kappa"]);
   });
 
+  it("starts a new user with Start with Windows off and Close to tray on (Bran's first-run defaults)", () => {
+    expect(DEFAULT_SETTINGS.startOnLogin).toBe(false);
+    expect(DEFAULT_SETTINGS.closeToTray).toBe(true);
+    // No settings file yet (first run), an unreadable one, or a backup without these keys.
+    for (const fresh of [undefined, null, {}, { channels: ["geckotown"] }]) {
+      expect(sanitizeSettings(fresh).startOnLogin).toBe(false);
+      expect(sanitizeSettings(fresh).closeToTray).toBe(true);
+    }
+    expect(readBackup(JSON.stringify({ zoochattr: 1, settings: { channels: ["geckotown"], skin: "crested" } }))).toMatchObject({
+      startOnLogin: false,
+      closeToTray: true,
+    });
+  });
+
+  it("never changes Start with Windows or Close to tray that a user already saved", () => {
+    const saved = sanitizeSettings({ startOnLogin: true, closeToTray: false });
+    expect(saved).toMatchObject({ startOnLogin: true, closeToTray: false });
+    expect(readBackup(JSON.stringify(makeBackup(saved)))).toMatchObject({ startOnLogin: true, closeToTray: false });
+  });
+
   it("uses the built-in history server on a fresh install but keeps an old empty field off", () => {
     expect(sanitizeSettings({}).historyServerOff).toBe(false);
     // Saved before the built-in address existed: an empty field meant "off".
