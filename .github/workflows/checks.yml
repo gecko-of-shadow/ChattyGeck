@@ -1,0 +1,86 @@
+name: Checks
+
+# Tests and a privacy scan. Runs for every pull request, and again when commits
+# land on ui-redesign or main. The Windows portable bundle stays in release.yml.
+on:
+  pull_request:
+  push:
+    branches:
+      - ui-redesign
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux libraries for cargo check
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            pkg-config \
+            libssl-dev
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+      - name: Cargo check
+        working-directory: src-tauri
+        run: cargo check
+
+  privacy:
+    name: Privacy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the commits being compared
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            sha="${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            sha="${{ github.event.before }}"
+          else
+            sha=""
+          fi
+          if [ -n "$sha" ] && ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+            git fetch --no-tags origin "$sha"
+          fi
+
+      # Do not enable shell tracing on this step. It would copy the secret into the log.
+      - name: Scan the diff and changed files
+        env:
+          PRIVACY_PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 .github/scripts/privacy_scan.py
