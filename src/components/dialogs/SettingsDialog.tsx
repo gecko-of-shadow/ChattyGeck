@@ -31,7 +31,7 @@ import { emoteRegistry } from "@/lib/emotes/registry";
 import { PROVIDER_LABELS, THIRD_PARTY_PROVIDERS } from "@/lib/emotes/types";
 import { historyTokenSaved, isTauri, openExternal, saveHistoryToken } from "@/lib/platform";
 import { SETTINGS_SEARCH_CATALOG, settingsSearchHelpers, type SettingsSearchHelpers } from "@/lib/settingsSearch";
-import { applyUpdate, fetchLatestRelease, isNewerVersion, updateErrorText, type UpdateInfo } from "@/lib/updates";
+import { VERIFY_UPDATES_OFF, applyUpdate, fetchLatestRelease, inVerifyMode, isNewerVersion, updateErrorText, type UpdateInfo } from "@/lib/updates";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
@@ -898,6 +898,12 @@ function UpdateRow() {
   const check = async () => {
     setBusy("check");
     setStatus("");
+    if (inVerifyMode()) {
+      setStatus(VERIFY_UPDATES_OFF);
+      setLatest(null);
+      setBusy(null);
+      return;
+    }
     try {
       const info = await fetchLatestRelease();
       setLatest(info);

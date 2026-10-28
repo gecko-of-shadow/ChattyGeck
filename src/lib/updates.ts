@@ -2,6 +2,24 @@ import { toast } from "sonner";
 import { isTauri, openExternal } from "./platform";
 
 export const RELEASES_URL = "https://github.com/gecko-of-shadow/ZooChattr/releases";
+/** Shown instead of a GitHub result while ZOOCHATTR_VERIFY=1. */
+export const VERIFY_UPDATES_OFF = "Update checks are off in verify mode. GitHub was not contacted.";
+
+let verifyMode = import.meta.env.VITE_ZOOCHATTR_VERIFY === "1";
+
+export function inVerifyMode(): boolean {
+  return verifyMode;
+}
+
+/** The desktop shell sets this from app_info.verify before the first update check. */
+export function setVerifyMode(on: boolean): void {
+  verifyMode = on;
+}
+
+/** Verify mode must not call api.github.com. A normal launch (flag off) still does. */
+export function shouldContactGitHub(verify: boolean): boolean {
+  return !verify;
+}
 /** Same text as SAFETY_CHECK_FAILED in src-tauri/src/update.rs. */
 export const SAFETY_CHECK_FAILED = "This update didn't pass its safety check. Nothing was changed.";
 
@@ -60,6 +78,7 @@ export function isNewerVersion(latest: string, current: string): boolean {
  * (no CORS). In the browser mock it hits the public API directly.
  */
 export async function fetchLatestRelease(): Promise<UpdateInfo | null> {
+  if (!shouldContactGitHub(inVerifyMode())) return null;
   if (isTauri) {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<UpdateInfo | null>("check_for_update");

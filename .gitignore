@@ -41,3 +41,7 @@ src-tauri/icons/ios/
 # Test output
 test-results/
 soak/
+
+# Verification runs from .claude/skills/verify-zoochattr. The handover
+# proof snapshot lives in that skill folder; later runs stay untracked.
+verification-evidence/

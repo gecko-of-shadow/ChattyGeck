@@ -1,0 +1,251 @@
+{
+  "ok": true,
+  "worthDriving": true,
+  "surface": "desktop",
+  "drive": "tauri-driver",
+  "platform": "linux",
+  "version": "0.6.0",
+  "dataDir": "/tmp/zoochattr-verify/20261028-084323-9vad/data",
+  "url": "http://127.0.0.1:17420",
+  "heading": "Nothing in the zoo yet",
+  "settingsJson": false,
+  "mockUp": true,
+  "viteStatus": 200,
+  "window": {
+    "id": "27262979",
+    "width": 1180,
+    "name": "ZooChattr verify"
+  },
+  "pids": {
+    "mock": 16997,
+    "vite": 17005,
+    "tauri-driver": 17028
+  },
+  "otherZoo": [],
+  "touchedOtherZoo": false,
+  "verifyGuard": "verify=1\ncredential_service=ZooChattr-verify\ncredential_target_session=twitch-session.ZooChattr-verify\ncredential_target_history=history-token.ZooChattr-verify\nstartup_shortcut=skipped\nupdates=skipped\nsingle_instance=com.geckoofshadow.zoochattr.verify\nwindow_title=ZooChattr verify\n",
+  "network": {
+    "contacted": false,
+    "evidence": true,
+    "github": [
+      "140.82.114.6",
+      "140.82.114.4"
+    ],
+    "remotes": [
+      {
+        "inode": "33729",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "36285",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "36939",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "36934",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "35671",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "36952",
+        "remote": "0.0.0.0",
+        "port": 0
+      },
+      {
+        "inode": "33733",
+        "remote": "127.0.0.1",
+        "port": 38030
+      },
+      {
+        "inode": "33736",
+        "remote": "127.0.0.1",
+        "port": 50976
+      },
+      {
+        "inode": "33732",
+        "remote": "127.0.0.1",
+        "port": 4444
+      },
+      {
+        "inode": "36354",
+        "remote": "127.0.0.1",
+        "port": 53774
+      },
+      {
+        "inode": "37891",
+        "remote": "127.0.0.1",
+        "port": 17422
+      },
+      {
+        "inode": "36356",
+        "remote": "127.0.0.1",
+        "port": 53806
+      },
+      {
+        "inode": "33778",
+        "remote": "127.0.0.1",
+        "port": 4444
+      },
+      {
+        "inode": "35708",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "36360",
+        "remote": "127.0.0.1",
+        "port": 46670
+      },
+      {
+        "inode": "36975",
+        "remote": "127.0.0.1",
+        "port": 53786
+      },
+      {
+        "inode": "33792",
+        "remote": "127.0.0.1",
+        "port": 53818
+      },
+      {
+        "inode": "36393",
+        "remote": "127.0.0.1",
+        "port": 53828
+      },
+      {
+        "inode": "36965",
+        "remote": "127.0.0.1",
+        "port": 48130
+      },
+      {
+        "inode": "33789",
+        "remote": "127.0.0.1",
+        "port": 48132
+      },
+      {
+        "inode": "36355",
+        "remote": "127.0.0.1",
+        "port": 53796
+      },
+      {
+        "inode": "33791",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "36363",
+        "remote": "127.0.0.1",
+        "port": 46688
+      },
+      {
+        "inode": "36964",
+        "remote": "127.0.0.1",
+        "port": 36263
+      },
+      {
+        "inode": "33735",
+        "remote": "127.0.0.1",
+        "port": 4445
+      },
+      {
+        "inode": "33779",
+        "remote": "127.0.0.1",
+        "port": 38038
+      },
+      {
+        "inode": "33790",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "36361",
+        "remote": "127.0.0.1",
+        "port": 46676
+      },
+      {
+        "inode": "36357",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "37958",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "37892",
+        "remote": "127.0.0.1",
+        "port": 17423
+      },
+      {
+        "inode": "37889",
+        "remote": "127.0.0.1",
+        "port": 17423
+      },
+      {
+        "inode": "35707",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "36963",
+        "remote": "127.0.0.1",
+        "port": 48116
+      },
+      {
+        "inode": "37956",
+        "remote": "127.0.0.1",
+        "port": 57084
+      },
+      {
+        "inode": "35706",
+        "remote": "127.0.0.1",
+        "port": 17420
+      },
+      {
+        "inode": "37890",
+        "remote": "127.0.0.1",
+        "port": 17423
+      },
+      {
+        "inode": "33788",
+        "remote": "127.0.0.1",
+        "port": 36263
+      },
+      {
+        "inode": "35690",
+        "remote": "127.0.0.1",
+        "port": 36263
+      },
+      {
+        "inode": "36976",
+        "remote": "127.0.0.1",
+        "port": 53792
+      },
+      {
+        "inode": "36933",
+        "remote": "00000000000000000000000000000000",
+        "port": 0
+      },
+      {
+        "inode": "36362",
+        "remote": "0000000000000000FFFF00000100007F",
+        "port": 47388
+      }
+    ],
+    "remote_count": 42,
+    "matches": []
+  },
+  "problems": [],
+  "standIn": false
+}

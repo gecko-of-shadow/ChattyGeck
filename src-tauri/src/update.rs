@@ -146,6 +146,9 @@ fn http_get(url: &str) -> Result<Vec<u8>, String> {
 }
 
 pub fn check_for_update() -> Result<Option<UpdateInfo>, String> {
+    if !crate::verify::updates_allowed() {
+        return Ok(None);
+    }
     let bytes = http_get(&format!("https://api.github.com/repos/{REPO}/releases/latest"))?;
     let body: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|err| format!("GitHub's reply wasn't JSON: {err}"))?;
@@ -207,6 +210,9 @@ fn find_exe_in_zip(archive: &mut zip::ZipArchive<Cursor<Vec<u8>>>) -> Result<usi
 /// Downloads the portable zip and schedules a swap of the running exe, keeping ZooChattr-data.
 /// Returns after spawning the helper; the process should then exit.
 pub fn apply_update(download_url: &str) -> Result<(), String> {
+    if !crate::verify::updates_allowed() {
+        return Err("Updates are off in verify mode. Nothing was downloaded.".into());
+    }
     let dir = exe_dir()?;
     let exe_name = if cfg!(windows) { "ZooChattr.exe" } else { "ZooChattr" };
     let current = dir.join(exe_name);
