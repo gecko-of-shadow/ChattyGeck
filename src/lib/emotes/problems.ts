@@ -4,6 +4,8 @@ import type { EmoteScope, ThirdPartyProvider } from "./types";
 
 const KEY = "zoochattr.problems";
 const MAX = 20;
+/** The same failure again within this time isn't listed twice (just over the hourly emote refresh). */
+const REPEAT_GAP_MS = 65 * 60_000;
 
 export interface EmoteProblem {
   /** Stable id for React keys. */
@@ -72,15 +74,26 @@ class ProblemLog {
 
   record(provider: ThirdPartyProvider, scope: EmoteScope, message: string, channel?: string): void {
     this.ensure();
-    const entry: EmoteProblem = {
-      id: `${Date.now()}-${provider}-${scope}-${channel ?? ""}-${Math.random().toString(36).slice(2, 7)}`,
-      at: Date.now(),
-      provider,
-      scope,
-      channel,
-      message,
-    };
-    this.entries = [...this.entries, entry].slice(-MAX);
+    // The hourly emote refresh would log the same outage again and again and push older entries out:
+    // a repeat within REPEAT_GAP_MS only moves the existing entry's time forward.
+    const now = Date.now();
+    const repeat = this.entries.findIndex(
+      (e) =>
+        now - e.at < REPEAT_GAP_MS && e.provider === provider && e.scope === scope && e.channel === channel && e.message === message,
+    );
+    if (repeat >= 0) {
+      this.entries = this.entries.map((e, i) => (i === repeat ? { ...e, at: now } : e));
+    } else {
+      const entry: EmoteProblem = {
+        id: `${now}-${provider}-${scope}-${channel ?? ""}-${Math.random().toString(36).slice(2, 7)}`,
+        at: now,
+        provider,
+        scope,
+        channel,
+        message,
+      };
+      this.entries = [...this.entries, entry].slice(-MAX);
+    }
     const store = storage();
     if (store) {
       try {

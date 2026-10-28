@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chat, HISTORY_FLUSH_MS, ALL_CHANNELS } from "@/lib/chat/controller";
 import { config } from "@/lib/config";
+import { emoteRegistry } from "@/lib/emotes/registry";
 import { newChannelView, useChat } from "@/store/chat";
 import { DEFAULT_SETTINGS } from "@/store/settings";
 import { useUi } from "@/store/ui";
@@ -420,6 +421,57 @@ describe("chat controller view and history", () => {
     expect(asked).toEqual([]);
     expect(fills).toHaveLength(1);
     expect((fills[0].error as { problem?: string }).problem).toBe("unauthorized");
+  });
+
+  it("fetches a channel's emotes again once they're an hour old, one channel per tick", () => {
+    seed({ mode: "grid", focused: "geckotown", gridChannels: ["geckotown", "lizardlounge"], channels: ["geckotown", "lizardlounge"] });
+    useChat.setState((s) => ({
+      channels: {
+        geckotown: { ...s.channels.geckotown, roomId: "1" },
+        lizardlounge: { ...s.channels.lizardlounge, roomId: "2" },
+      },
+    }));
+    const internal = chat as unknown as {
+      read: unknown;
+      emoteLoadedAt: Map<string, number>;
+      globalEmotesLoadedAt: number;
+      tick: () => void;
+    };
+    const loadChannel = vi.spyOn(emoteRegistry, "loadChannel").mockResolvedValue();
+    const loadGlobal = vi.spyOn(emoteRegistry, "loadGlobal").mockResolvedValue();
+    const realRead = internal.read;
+    internal.read = { status: "connected" };
+    try {
+      const start = Date.now();
+      internal.globalEmotesLoadedAt = start;
+      internal.emoteLoadedAt.set("geckotown", start);
+      internal.emoteLoadedAt.set("lizardlounge", start);
+      vi.setSystemTime(start + 30 * 60_000);
+      internal.tick();
+      expect(loadChannel).not.toHaveBeenCalled();
+
+      vi.setSystemTime(start + 61 * 60_000);
+      internal.tick();
+      expect(loadChannel).toHaveBeenCalledTimes(1);
+      expect(loadChannel).toHaveBeenLastCalledWith("geckotown", "1", true);
+      internal.tick();
+      expect(loadChannel).toHaveBeenCalledTimes(2);
+      expect(loadChannel).toHaveBeenLastCalledWith("lizardlounge", "2", true);
+      internal.tick();
+      expect(loadChannel).toHaveBeenCalledTimes(2);
+      expect(loadGlobal).not.toHaveBeenCalled();
+
+      // Global 7TV / BTTV / FFZ sets change rarely: every 12 hours.
+      vi.setSystemTime(start + 12 * 60 * 60_000 + 1);
+      internal.tick();
+      expect(loadGlobal).toHaveBeenCalledWith(true);
+    } finally {
+      internal.read = realRead;
+      internal.emoteLoadedAt.clear();
+      internal.globalEmotesLoadedAt = Date.now();
+      loadChannel.mockRestore();
+      loadGlobal.mockRestore();
+    }
   });
 
   it("flushes a message still waiting in the paint queue", async () => {

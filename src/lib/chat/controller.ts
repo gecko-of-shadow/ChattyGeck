@@ -14,6 +14,7 @@ import {
   type FillResult,
 } from "@/lib/chat/remoteHistory";
 import { channelOnScreen, readMarkerAfterFocus } from "@/lib/chat/visibility";
+import { FRESH_FOR } from "@/lib/emotes/cache";
 import { emoteRegistry, type EmotePrefs } from "@/lib/emotes/registry";
 import { mentionChimesPlayed, mentionDue, playMentionChime } from "@/lib/notify";
 import { IrcConnection, type ConnectionDetail, type ConnectionStatus } from "@/lib/irc/connection";
@@ -135,6 +136,7 @@ class ChatController {
   private globalBadges: BadgeMap = new Map();
   private channelBadges = new Map<string, BadgeMap>();
   private emoteLoadedAt = new Map<string, number>();
+  private globalEmotesLoadedAt = Date.now();
   private refreshing: Promise<Session | null> | null = null;
   private recoveringAuth = false;
   private everConnected = false;
@@ -1264,6 +1266,7 @@ class ChatController {
       return;
     }
     this.emoteLoadedAt.set(channel, Date.now());
+    this.globalEmotesLoadedAt = Date.now();
     void emoteRegistry.loadChannel(channel, view.roomId, true);
     void emoteRegistry.loadGlobal(true);
   }
@@ -1275,6 +1278,7 @@ class ChatController {
   }
 
   private refetchEmotes(): void {
+    this.globalEmotesLoadedAt = Date.now();
     void emoteRegistry.loadGlobal(true);
     for (const view of Object.values(get().channels)) {
       if (view.roomId) {
@@ -1386,6 +1390,27 @@ class ChatController {
           error: `Twitch never confirmed #${c.login}. Check the spelling; the channel may not exist or may be banned.`,
         }));
       }
+    }
+    this.refreshStaleEmotes(now);
+  }
+
+  /**
+   * New, removed or renamed 7TV / BTTV / FFZ emotes show up without a restart: a channel's lists are
+   * fetched again once they're an hour old (global ones after 12 hours), one set per 5 s tick so the
+   * requests are spread out. The emotes on screen stay until the fresh list arrives.
+   */
+  private refreshStaleEmotes(now: number): void {
+    if (now - this.globalEmotesLoadedAt > FRESH_FOR.global) {
+      this.globalEmotesLoadedAt = now;
+      void emoteRegistry.loadGlobal(true);
+      return;
+    }
+    for (const view of Object.values(get().channels)) {
+      const loadedAt = this.emoteLoadedAt.get(view.login);
+      if (view.status !== "joined" || !view.roomId || loadedAt === undefined || now - loadedAt < FRESH_FOR.channel) continue;
+      this.emoteLoadedAt.set(view.login, now);
+      void emoteRegistry.loadChannel(view.login, view.roomId, true);
+      return;
     }
   }
 
