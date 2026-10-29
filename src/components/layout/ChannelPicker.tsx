@@ -5,7 +5,7 @@ import { ArrowLeft, Plus, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { chat } from "@/lib/chat/controller";
-import { addedMoveOffset, moveHighlight, pickerModel, type PickerItem } from "@/lib/channelPicker";
+import { addedMoveOffset, moveHighlight, pickerModel, sortFollows, type PickerItem } from "@/lib/channelPicker";
 import { liveLabel } from "@/lib/follows";
 import { loadIntoPane } from "@/lib/view/loadIntoPane";
 import { cn } from "@/lib/utils";
@@ -18,31 +18,26 @@ function countLabel(n: number): string {
   return n > 99 ? "99+" : String(n);
 }
 
+/** Rows drawn in the first frame; the rest follow a few frames later, so a 500-follow list opens without a freeze. */
+const FIRST_ROWS = 60;
+
 function optionId(prefix: string, item: PickerItem): string {
   return `${prefix}-${item.kind}-${item.login}`;
 }
 
-/** One channel in the picker: avatar (green dot while live), name, mention / unread count. Right-click: channel menu. */
+/** One channel in the picker: avatar (green dot while live), name, mention / unread count. Right-click: the list's channel menu. */
 const PickerRowView = memo(function PickerRowView({
   id,
   login,
   name,
-  joined,
   highlighted,
-  movable,
-  moveUp,
-  moveDown,
   onChoose,
   onHover,
 }: {
   id: string;
   login: string;
   name: string;
-  joined: boolean;
   highlighted: boolean;
-  movable: boolean;
-  moveUp: number | null;
-  moveDown: number | null;
   onChoose: (login: string) => void;
   onHover: (login: string) => void;
 }) {
@@ -62,29 +57,24 @@ const PickerRowView = memo(function PickerRowView({
   const label = [`#${name}`, liveText, status, activity].filter(Boolean).join(", ");
 
   return (
-    <ContextMenuPrimitive.Root>
-      <ContextMenuPrimitive.Trigger
-        render={
-          <div
-            id={id}
-            role="option"
-            aria-selected={highlighted}
-            aria-label={label}
-            title={`${label}\nClick: show it in this pane · Right-click: more`}
-            data-testid={`picker-row-${login}`}
-            data-picker-row={login}
-            data-live={viewers !== null && viewers !== undefined ? "" : undefined}
-            onClick={() => onChoose(login)}
-            onPointerMove={() => {
-              if (!highlighted) onHover(login);
-            }}
-            className={cn(
-              "flex cursor-pointer items-center gap-2 px-2 py-1 text-[13px] select-none",
-              highlighted ? "bg-accent text-foreground shadow-[inset_2px_0_0_var(--ring)]" : "text-foreground hover:bg-accent/60",
-            )}
-          />
-        }
-      >
+    <div
+      id={id}
+      role="option"
+      aria-selected={highlighted}
+      aria-label={label}
+      title={`${label}\nClick: show it in this pane · Right-click: more`}
+      data-testid={`picker-row-${login}`}
+      data-picker-row={login}
+      data-live={viewers !== null && viewers !== undefined ? "" : undefined}
+      onClick={() => onChoose(login)}
+      onPointerMove={() => {
+        if (!highlighted) onHover(login);
+      }}
+      className={cn(
+        "flex cursor-pointer items-center gap-2 px-2 py-1 text-[13px] select-none",
+        highlighted ? "bg-accent text-foreground shadow-[inset_2px_0_0_var(--ring)]" : "text-foreground hover:bg-accent/60",
+      )}
+    >
         <span className="relative shrink-0">
           <ChannelAvatar login={login} className={cn("size-6", view && view.status !== "joined" && "grayscale")} />
           {viewers !== null && viewers !== undefined ? (
@@ -118,9 +108,7 @@ const PickerRowView = memo(function PickerRowView({
             {mentions > 0 ? `@${countLabel(mentions)}` : countLabel(unread)}
           </span>
         ) : null}
-      </ContextMenuPrimitive.Trigger>
-      <ChannelMenuPopup login={login} joined={joined} movable={movable} moveUp={moveUp} moveDown={moveDown} />
-    </ContextMenuPrimitive.Root>
+    </div>
   );
 });
 
@@ -200,8 +188,16 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
   // Set while the Menu key / Shift+F10 opens a row's menu, so the browser's own text menu is skipped only then.
   const menuKeyRef = useRef(false);
   const prefix = useId().replace(/:/g, "");
+  // The row whose channel menu is open (one shared menu for the whole list).
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [limit, setLimit] = useState(FIRST_ROWS);
 
-  const model = useMemo(() => pickerModel(query, channels, follows, displayNames), [query, channels, follows, displayNames]);
+  // The follow order doesn't change while typing, so it's sorted once per follow list.
+  const followOrder = useMemo(() => sortFollows(follows), [follows]);
+  const model = useMemo(
+    () => pickerModel(query, channels, follows, displayNames, followOrder),
+    [query, channels, follows, displayNames, followOrder],
+  );
   const joined = useMemo(() => new Set(channels), [channels]);
   // Move up/down works on the whole Added list, not the filtered one.
   const addedAll = useMemo(() => channels.filter((c) => !(c in follows)), [channels, follows]);
@@ -211,6 +207,14 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+  // Draw the rest of a long list over the next frames instead of all at once.
+  useEffect(() => {
+    if (limit >= model.items.length) return;
+    const frame = requestAnimationFrame(() => setLimit((n) => n + FIRST_ROWS * 4));
+    return () => cancelAnimationFrame(frame);
+  }, [limit, model.items.length]);
+  // Rows up to the highlighted one are always drawn (arrow keys can run ahead of the frames).
+  const shown = Math.max(limit, highlight + 1);
   useEffect(() => {
     if (current) document.getElementById(optionId(prefix, current))?.scrollIntoView({ block: "nearest" });
   }, [current, prefix]);
@@ -266,25 +270,23 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
     }
   };
 
-  const rowsFor = (section: "following" | "added") =>
-    (section === "following" ? model.following : model.added).map((row) => {
-      const item = model.items.indexOf(row);
-      return (
-        <PickerRowView
-          key={row.login}
-          id={optionId(prefix, row)}
-          login={row.login}
-          name={row.name}
-          joined={joined.has(row.login)}
-          highlighted={item === highlight}
-          movable={section === "added"}
-          moveUp={section === "added" ? addedMoveOffset(addedAll, channels, row.login, -1) : null}
-          moveDown={section === "added" ? addedMoveOffset(addedAll, channels, row.login, 1) : null}
-          onChoose={choose}
-          onHover={hover}
-        />
-      );
-    });
+  // Rows' places in the arrow-key order: Following first, then Added (no per-row search through the list).
+  const rowsFor = (section: "following" | "added") => {
+    const rows = section === "following" ? model.following : model.added;
+    const offset = section === "following" ? 0 : model.following.length;
+    return rows.slice(0, Math.max(0, shown - offset)).map((row, i) => (
+      <PickerRowView
+        key={row.login}
+        id={optionId(prefix, row)}
+        login={row.login}
+        name={row.name}
+        highlighted={offset + i === highlight}
+        onChoose={choose}
+        onHover={hover}
+      />
+    ));
+  };
+  const menuAdded = menuFor !== null && !(menuFor in follows);
 
   const addItem = model.addable ? model.items[model.items.length - 1] : null;
 
@@ -313,6 +315,7 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
           onChange={(event) => {
             setQuery(event.target.value);
             setIndex(0);
+            setLimit(FIRST_ROWS);
           }}
           role="combobox"
           aria-expanded
@@ -334,7 +337,24 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
           className="h-7 min-w-0 flex-1 border border-input bg-background px-2 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
-      <div className="zoo-scroll min-h-0 flex-1 overflow-y-auto pb-1">
+      <ContextMenuPrimitive.Root>
+      <ContextMenuPrimitive.Trigger
+        render={
+          <div
+            className="zoo-scroll min-h-0 flex-1 overflow-y-auto pb-1"
+            // One channel menu for the whole list: remember which row was right-clicked (Menu key / Shift+F10 sends
+            // the same event to the highlighted row). Outside a row there's no channel menu.
+            onContextMenuCapture={(event) => {
+              const row = event.target instanceof Element ? event.target.closest("[data-picker-row]") : null;
+              if (!row) {
+                event.stopPropagation();
+                return;
+              }
+              setMenuFor(row.getAttribute("data-picker-row"));
+            }}
+          />
+        }
+      >
         <section aria-labelledby={`${prefix}-following-h`} data-testid="picker-section-following">
           <SectionHeading id={`${prefix}-following-h`}>Following</SectionHeading>
           {model.following.length === 0 ? <FollowingNote query={query} hasFollows={Object.keys(follows).length > 0} /> : null}
@@ -375,7 +395,17 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
             ) : null}
           </div>
         </section>
-      </div>
+      </ContextMenuPrimitive.Trigger>
+      {menuFor ? (
+        <ChannelMenuPopup
+          login={menuFor}
+          joined={joined.has(menuFor)}
+          movable={menuAdded}
+          moveUp={menuAdded ? addedMoveOffset(addedAll, channels, menuFor, -1) : null}
+          moveDown={menuAdded ? addedMoveOffset(addedAll, channels, menuFor, 1) : null}
+        />
+      ) : null}
+      </ContextMenuPrimitive.Root>
     </div>
   );
 }
