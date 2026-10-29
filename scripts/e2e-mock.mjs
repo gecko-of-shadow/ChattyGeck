@@ -37,28 +37,82 @@ async function step(name, fn) {
     console.log(`  ok  ${name}`);
   } catch (err) {
     failures++;
-    console.log(`FAIL  ${name}\n      ${String(err).split("\n")[0]}`);
+    // Which line of this script failed (a timeout alone doesn't say which wait it was).
+    const where = String(err?.stack ?? "").split("\n").find((line) => line.includes("e2e-mock.mjs"))?.trim() ?? "";
+    console.log(`FAIL  ${name}\n      ${String(err).split("\n")[0]}${where ? `\n      ${where}` : ""}`);
     await page.screenshot({ path: path.join(out, `fail-${name.replace(/\W+/g, "-")}.png`) }).catch(() => {});
   }
 }
 const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
-const addChannel = async (name) => {
-  let input = page.getByLabel("Channel name or twitch.tv link").first();
-  // Once a channel exists, the add box lives behind the "+" tile at the end of the strip.
-  if (!(await input.isVisible().catch(() => false))) {
-    await page.getByTestId("add-channel-tile").click();
-    input = page.getByLabel("Channel name or twitch.tv link").first();
-  }
-  await input.fill(name);
-  await input.press("Enter");
-};
-/** A channel's round avatar in the top strip (click = open it alone in view 1). */
-const avatar = (name) => page.locator(`[data-drag-channel="${name}"]`);
-/** View switch: 1 = single, 2/3/4/6/9 = grid. */
+/** View switch (bottom right): 1 = single, 2/3/4/6/9 = grid. */
 const view = (n) => page.getByTestId(`view-${n}`).click();
+const inSingle = async () => (await page.getByTestId("view-1").getAttribute("aria-checked")) === "true";
+/** The grid pane (0-based) showing a channel, or null. */
+const paneOf = async (name) => {
+  const pane = page.locator(`[data-grid-channel="${name}"]`);
+  return (await pane.count()) ? Number(await pane.getAttribute("data-pane-index")) : null;
+};
+/** The first empty grid pane, or null. */
+const firstEmptyPane = async () => {
+  const ids = await page
+    .locator("[data-testid^='pane-empty-']")
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")).filter((id) => /^pane-empty-\d+$/.test(id)));
+  return ids.length ? Number(ids[0].slice("pane-empty-".length)) : null;
+};
+/** Opens a pane's channel picker ("⋯", or "Pick a channel" on an empty pane): a grid index or "single". */
+const openPickerIn = async (pane) => {
+  const ids = pane === "single" ? ["single-pick", "pane-empty-single"] : [`pane-pick-${pane}`, `pane-empty-${pane}`];
+  for (const id of ids) {
+    const button = page.getByTestId(id);
+    if (await button.count()) {
+      await button.click();
+      break;
+    }
+  }
+  const search = page.getByTestId("channel-picker-search");
+  await search.waitFor({ timeout: 3_000 });
+  return search;
+};
+/** Loads a channel into a pane with its picker (the picker's "Add #name" when it isn't in the app yet). */
+const pick = async (pane, name) => {
+  const search = await openPickerIn(pane);
+  await search.fill(name);
+  const row = page.getByTestId(`picker-row-${name}`);
+  if (await row.count()) await row.click();
+  else await page.getByTestId("picker-add").click();
+  await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
+};
+/** Adding a channel happens only in a pane's picker: view 1's pane, or the first empty grid pane. */
+const addChannel = async (name) => {
+  const pane = (await inSingle()) ? "single" : await firstEmptyPane();
+  if (pane === null) throw new Error(`no empty pane to add #${name} into`);
+  await pick(pane, name);
+};
+/** Read one channel alone (view 1). */
+const openAlone = async (name) => {
+  await view(1);
+  await pick("single", name);
+};
+/** Puts a channel in the first empty grid pane unless it's already on screen. */
 const showInGrid = async (name) => {
-  const show = page.getByRole("button", { name: `Show #${name} in the grid` });
-  if (await show.count()) await show.click();
+  if ((await paneOf(name)) !== null) return;
+  const empty = await firstEmptyPane();
+  if (empty !== null) await pick(empty, name);
+};
+/** "−" on the pane showing a channel. */
+const clearPaneOf = async (name) => {
+  const index = await paneOf(name);
+  if (index === null) throw new Error(`#${name} isn't in a pane`);
+  await page.getByTestId(`pane-clear-${index}`).click();
+  await page.getByTestId(`pane-empty-${index}`).waitFor({ timeout: 3_000 });
+  return index;
+};
+/** Waits (picker open) for a channel's picker row whose spoken name matches, e.g. "unread". */
+const pickerRowSays = async (pane, name, text) => {
+  await openPickerIn(pane);
+  await page.locator(`[data-testid="picker-row-${name}"][aria-label*="${text}"]`).waitFor({ timeout: 5_000 });
+  await page.keyboard.press("Escape");
+  await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
 };
 /** Opens Settings (gear) at a section unless it is already open there. */
 const openSettings = async (section) => {
@@ -100,29 +154,35 @@ await page.evaluate(() => {
 });
 await page.reload();
 
-await step("empty state on first launch", async () => {
-  await page.getByText("Nothing in the zoo yet").waitFor({ timeout: 10_000 });
+await step("empty panes on first launch, nothing above them", async () => {
+  await page.getByTestId("pane-empty-0").waitFor({ timeout: 10_000 });
+  for (let i = 0; i < 4; i++) await page.getByTestId(`pane-empty-${i}`).waitFor({ timeout: 2_000 });
+  if (await page.getByTestId("top-bar").count()) throw new Error("the top bar is still there");
+  if (await page.getByTestId("add-channel-tile").count()) throw new Error("the old + tile is still there");
   await shot("01-empty");
 });
 
 await step("join a channel and read mock chat", async () => {
   await addChannel("geckotown");
   await rowsWith(/Leopard_Lou|TokayTom|CrestedCarl/).first().waitFor({ timeout: 15_000 });
+  if ((await paneOf("geckotown")) !== 0) throw new Error(`#geckotown went into pane ${await paneOf("geckotown")}`);
 });
 
 await step("reject an invalid channel name", async () => {
-  await addChannel("bad name!");
-  await page.getByText("doesn't look like a Twitch channel").waitFor({ timeout: 3_000 });
+  const search = await openPickerIn(await firstEmptyPane());
+  await search.fill("bad name!");
+  await page.getByTestId("picker-invalid").getByText("doesn't look like a Twitch channel").waitFor({ timeout: 3_000 });
+  if (await page.getByTestId("picker-add").count()) throw new Error("offered to add a bad name");
   // A pasted VOD address must not become the channel "videos".
-  await addChannel("https://www.twitch.tv/videos/1234567890");
-  await page.getByText("doesn't look like a Twitch channel").waitFor({ timeout: 3_000 });
+  await search.fill("https://www.twitch.tv/videos/1234567890");
+  await page.getByTestId("picker-invalid").waitFor({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
+  await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
 });
 
 await step("join a second channel", async () => {
   await addChannel("lizardlounge");
-  await avatar("lizardlounge").waitFor();
-  // The add box stays open after a bad name; close it.
-  await page.keyboard.press("Escape");
+  await page.getByTestId("grid-header-lizardlounge").waitFor();
 });
 
 await step("grid shows each channel in its own box", async () => {
@@ -138,7 +198,7 @@ await step("grid shows each channel in its own box", async () => {
 });
 
 await step("grid still shows messages after visiting focused view", async () => {
-  await avatar("geckotown").click();
+  await openAlone("geckotown");
   await page.getByLabel("Chat messages").locator(".chat-row").first().waitFor({ timeout: 10_000 });
   await view(2);
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
@@ -147,27 +207,29 @@ await step("grid still shows messages after visiting focused view", async () => 
 
 await step("off-grid channel counts unread while the grid is showing", async () => {
   await view(2);
-  const box = page.getByRole("region", { name: "#geckotown chat" });
-  await box.getByRole("button", { name: "Options for #geckotown" }).click();
-  await page.getByRole("menuitem", { name: "Hide from grid" }).click();
+  // "−" empties the pane in place; the channel stays joined and counts unread (shown in the picker).
+  const index = await clearPaneOf("geckotown");
+  if ((await paneOf("lizardlounge")) !== 1) throw new Error("the other pane moved");
   await mockPost("/__burst?channel=geckotown&n=2");
-  await page.locator('[data-drag-channel="geckotown"][aria-label*="unread"]').waitFor({ timeout: 5_000 });
-  await showInGrid("geckotown");
+  await openPickerIn(index);
+  await page.locator('[data-testid="picker-row-geckotown"][aria-label*="unread"]').waitFor({ timeout: 5_000 });
+  await page.getByTestId("picker-row-geckotown").click();
   await page.getByRole("region", { name: "#geckotown chat" }).locator(".chat-row").first().waitFor({ timeout: 10_000 });
+  if ((await paneOf("geckotown")) !== index) throw new Error(`#geckotown came back in pane ${await paneOf("geckotown")}, not ${index}`);
 });
 
 await step("focused view counts unread on other channels", async () => {
-  await avatar("geckotown").click();
+  await openAlone("geckotown");
   await mockPost("/__burst?channel=lizardlounge&n=3");
-  await page.locator('[data-drag-channel="lizardlounge"][aria-label*="unread"]').waitFor({ timeout: 5_000 });
+  await pickerRowSays("single", "lizardlounge", "unread");
   await shot("03-focused-unread");
 });
 
 await step("returning to a channel marks where you left off", async () => {
-  await avatar("lizardlounge").click();
+  await openAlone("lizardlounge");
   await mockPost("/__burst?channel=geckotown&n=3");
   await page.waitForTimeout(1_000);
-  await avatar("geckotown").click();
+  await openAlone("geckotown");
   await page.getByText("New since you left").waitFor({ timeout: 3_000 });
 });
 
@@ -179,23 +241,31 @@ await step("device-code login", async () => {
   await canChat();
 });
 
-await step("Twitch follows join the strip with live dots and viewer counts", async () => {
-  // Followed on mock Twitch but never added in the app: shown, not joined.
-  const follow = page.locator('[data-drag-channel="chameleoncafe"]');
+await step("Twitch follows show in the picker with live dots and viewer counts", async () => {
+  await openPickerIn("single");
+  const following = page.getByTestId("picker-section-following");
+  const added = page.getByTestId("picker-section-added");
+  // Followed on mock Twitch but never added in the app: listed, not joined.
+  const follow = following.getByTestId("picker-row-chameleoncafe");
   await follow.waitFor({ timeout: 10_000 });
-  if (!/chat not open/.test((await follow.getAttribute("aria-label")) ?? "")) throw new Error("follow-only avatar label");
-  await page.locator('[data-strip-channel="geckotown"] [data-live-dot]').waitFor({ timeout: 10_000 });
-  const label = (await avatar("geckotown").getAttribute("aria-label")) ?? "";
+  if (!/chat not open/.test((await follow.getAttribute("aria-label")) ?? "")) throw new Error("follow-only row label");
+  await following.locator('[data-testid="picker-row-geckotown"] [data-live-dot]').waitFor({ timeout: 10_000 });
+  const label = (await following.getByTestId("picker-row-geckotown").getAttribute("aria-label")) ?? "";
   if (!label.includes("live, 1,234 watching")) throw new Error(`live label: "${label}"`);
-  if (await page.locator('[data-strip-channel="lizardlounge"] [data-live-dot]').count()) throw new Error("offline channel has a live dot");
+  if (await following.locator('[data-testid="picker-row-lizardlounge"] [data-live-dot]').count()) throw new Error("offline channel has a live dot");
+  // Followed channels added by hand earlier sit under Following only.
+  if (await added.locator("[data-testid^='picker-row-']").count()) throw new Error("a followed channel is also under Added");
+  await shot("04c-follows");
+  await page.keyboard.press("Escape");
+  await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
   await page.getByTestId("single-status").filter({ hasText: "1,234 watching" }).waitFor({ timeout: 5_000 });
   const channels = await page.evaluate(() => JSON.parse(localStorage.getItem("zoochattr.settings") || "{}").channels);
   if (channels.includes("chameleoncafe")) throw new Error("a follow was joined without asking");
-  await shot("04c-follows");
 });
 
-await step("channel switch blocks send until unlock", async () => {
-  await page.getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
+await step("channel switch blocks send until unlock (in the bottom bar)", async () => {
+  await page.getByTestId("bottom-bar").getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
+  await page.getByTestId("channel-switch-ack").getByText("You switched channels. Confirm before sending.").waitFor({ timeout: 2_000 });
   const unlock = page.getByTestId("channel-switch-unlock");
   if ((await unlock.innerText()).trim() !== "chat in #geckotown") {
     throw new Error(`unlock button text: "${await unlock.innerText()}"`);
@@ -203,6 +273,33 @@ await step("channel switch blocks send until unlock", async () => {
   await shot("04b-channel-ack");
   await unlock.click();
   await page.getByLabel("Message #geckotown").waitFor({ timeout: 3_000 });
+});
+
+await step("bottom bar: gear left, message box middle, 1 2 3 4 6 9 right; nothing above the panes", async () => {
+  const viewport = page.viewportSize();
+  const bar = await page.getByTestId("bottom-bar").boundingBox();
+  if (!bar || Math.abs(bar.y + bar.height - viewport.height) > 1) throw new Error(`bar isn't at the bottom: ${JSON.stringify(bar)}`);
+  const gear = await page.getByTestId("bottom-bar-left").getByTestId("settings-gear").boundingBox();
+  const middle = await page.getByTestId("bottom-bar-middle").boundingBox();
+  const first = await page.getByTestId("bottom-bar-right").getByTestId("view-1").boundingBox();
+  const last = await page.getByTestId("bottom-bar-right").getByTestId("view-9").boundingBox();
+  if (!gear || !middle || !first || !last) throw new Error("bottom bar part missing");
+  if (gear.x > 24) throw new Error(`gear isn't at the left (x=${gear.x})`);
+  if (viewport.width - (last.x + last.width) > 24) throw new Error("view switch isn't at the right");
+  if (!(gear.x + gear.width <= middle.x && middle.x + middle.width <= first.x)) throw new Error("bottom bar order isn't gear / box / views");
+  await page.getByTestId("bottom-bar-middle").getByLabel("Message #geckotown").waitFor({ timeout: 2_000 });
+  await page.getByTestId("bottom-bar-left").getByTestId("connection-status").waitFor({ timeout: 2_000 });
+  // Same active style as before: the current view is the filled (primary) button.
+  if ((await page.getByTestId("view-1").getAttribute("aria-checked")) !== "true") throw new Error("view 1 isn't marked current");
+  if (!/\bbg-primary\b/.test((await page.getByTestId("view-1").getAttribute("class")) ?? "")) throw new Error("current view lost its filled style");
+  // Nothing above the panes: view 1's header starts at the very top of the page.
+  const header = await page.getByTestId("single-header").boundingBox();
+  if (!header || header.y > 1) throw new Error(`something sits above the panes (header at y=${header?.y})`);
+  // The gear still opens the same Settings panel.
+  await page.getByTestId("settings-gear").click();
+  await page.getByTestId("settings-panel").waitFor({ timeout: 3_000 });
+  await closeSettings();
+  await shot("04d-bottom-bar");
 });
 
 await step("send a message; Twitch's echo replaces the local copy (with emote)", async () => {
@@ -331,11 +428,12 @@ await step("spell check underlines misspellings and skips emotes", async () => {
   await input.fill("");
 });
 
-await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and strip replace", async () => {
+await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and picker replace", async () => {
   const backToGecko = async () => {
     await page.keyboard.press("Escape").catch(() => {});
+    await view(2);
     for (const name of ["lizardlounge", "geckotown"]) await showInGrid(name);
-    await avatar("geckotown").click();
+    await openAlone("geckotown");
     await page.getByLabel("Chat messages").waitFor({ timeout: 5_000 });
   };
   try {
@@ -387,28 +485,107 @@ await step("Ctrl+G, Ctrl+K, Ctrl+1, drag swap and strip replace", async () => {
   await page.keyboard.press("Control+g");
   await page.getByTestId("chat-grid").waitFor({ timeout: 5_000 });
 
-  await page.getByRole("region", { name: "#lizardlounge chat" }).getByRole("button", { name: "Options for #lizardlounge" }).click();
-  await page.getByRole("menuitem", { name: "Hide from grid" }).click();
-  await page.getByRole("menu").waitFor({ state: "hidden", timeout: 3_000 });
-  await page.waitForTimeout(200);
-  const sideBox = await avatar("lizardlounge").boundingBox();
+  // Picking a channel in another pane's picker puts it in that pane (what dragging an avatar onto a pane did).
+  await clearPaneOf("lizardlounge");
   const host = page.locator("[data-grid-channel]").first();
   const hostName = await host.getAttribute("data-grid-channel");
-  const hostHeader = page.getByTestId(`grid-header-${hostName}`);
-  const hostBox = await hostHeader.boundingBox();
-  if (!sideBox || !hostBox || !hostName) throw new Error("missing strip drag target");
-  await page.mouse.move(sideBox.x + sideBox.width / 2, sideBox.y + sideBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(hostBox.x + hostBox.width / 2, hostBox.y + hostBox.height / 2, { steps: 20 });
-  await page.mouse.up();
-  await page.waitForTimeout(300);
-  const afterDrop = await orderOf();
-  if (!afterDrop.includes("lizardlounge")) {
-    const mode = await page.evaluate(() => JSON.parse(localStorage.getItem("zoochattr.settings") || "{}").mode);
-    throw new Error(`strip drop missed: ${afterDrop.join(",")} (mode ${mode}, from ${JSON.stringify(sideBox)} to ${hostName} ${JSON.stringify(hostBox)})`);
+  const hostIndex = await paneOf(hostName);
+  await pick(hostIndex, "lizardlounge");
+  const afterPick = await orderOf();
+  if ((await paneOf("lizardlounge")) !== hostIndex || afterPick.includes(hostName)) {
+    throw new Error(`picker replace missed: ${afterPick.join(",")} (pane ${hostIndex} had #${hostName})`);
   }
   } finally {
     await backToGecko();
+  }
+});
+
+await step("pane picker: search focused, case-insensitive filter, Following / Added, keys, Esc and Back, −", async () => {
+  try {
+    await view(4);
+    // A channel added by hand that nobody follows goes under Added.
+    await pick(await firstEmptyPane(), "newtnook");
+    const index = await paneOf("geckotown");
+    const pickButton = page.getByTestId(`pane-pick-${index}`);
+    // Each pane header has exactly two buttons: "−" and "⋯".
+    const buttons = await page.getByTestId("grid-header-geckotown").getByRole("button").evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    if (buttons.join() !== `pane-clear-${index},pane-pick-${index}`) throw new Error(`header buttons: ${buttons.join()}`);
+
+    await pickButton.click();
+    const search = page.getByTestId("channel-picker-search");
+    await search.waitFor({ timeout: 3_000 });
+    if (!(await search.evaluate((el) => el === document.activeElement))) throw new Error("search box not focused");
+    const following = page.getByTestId("picker-section-following");
+    const added = page.getByTestId("picker-section-added");
+    await following.getByTestId("picker-row-chameleoncafe").waitFor({ timeout: 5_000 });
+    await added.getByTestId("picker-row-newtnook").waitFor({ timeout: 3_000 });
+    if (await added.getByTestId("picker-row-geckotown").count()) throw new Error("followed channel also under Added");
+    const rows = () => page.locator("[data-testid^='picker-row-']").evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
+    await search.fill("CHAMELEON");
+    if ((await rows()).join() !== "picker-row-chameleoncafe") throw new Error(`filter CHAMELEON: ${await rows()}`);
+    await search.fill("NeWt");
+    if ((await rows()).join() !== "picker-row-newtnook") throw new Error(`filter NeWt: ${await rows()}`);
+    await search.fill("");
+    // Arrows move the highlight (first row starts highlighted).
+    const selected = () => page.locator("[data-testid^='picker-row-'][aria-selected='true']").getAttribute("data-testid");
+    const top = await selected();
+    await search.press("ArrowDown");
+    if ((await selected()) === top) throw new Error("ArrowDown didn't move the highlight");
+    await search.press("ArrowUp");
+    if ((await selected()) !== top) throw new Error("ArrowUp didn't move back");
+    await shot("04e-picker");
+
+    // Esc closes and focus goes back to the pane's "⋯".
+    await search.press("Escape");
+    await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
+    await page.waitForFunction((id) => document.activeElement?.getAttribute("data-testid") === id, `pane-pick-${index}`, { timeout: 2_000 });
+    // Back closes too.
+    await pickButton.click();
+    await page.getByTestId("channel-picker-back").click();
+    await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
+
+    // Enter loads the highlighted row into this pane (a follow joins chat for it).
+    await pickButton.click();
+    await search.fill("chameleon");
+    await search.press("Enter");
+    await page.getByTestId("channel-picker").waitFor({ state: "detached", timeout: 3_000 });
+    await page.getByTestId("grid-header-chameleoncafe").waitFor({ timeout: 5_000 });
+    if ((await paneOf("chameleoncafe")) !== index) throw new Error(`#chameleoncafe landed in pane ${await paneOf("chameleoncafe")}`);
+
+    // "−" empties only that pane; the others keep their place.
+    const before = await page.locator("[data-grid-channel]").evaluateAll((els) => els.map((el) => `${el.getAttribute("data-grid-channel")}@${el.getAttribute("data-pane-index")}`));
+    await page.getByTestId(`pane-clear-${index}`).click();
+    await page.getByTestId(`pane-empty-${index}`).waitFor({ timeout: 3_000 });
+    const after = await page.locator("[data-grid-channel]").evaluateAll((els) => els.map((el) => `${el.getAttribute("data-grid-channel")}@${el.getAttribute("data-pane-index")}`));
+    if (after.join() !== before.filter((p) => !p.startsWith("chameleoncafe@")).join()) throw new Error(`panes moved: ${before} -> ${after}`);
+
+    // No other way to add a channel: no + tile, and Ctrl+K only jumps.
+    if (await page.getByTestId("add-channel-tile").count()) throw new Error("+ tile is back");
+    await page.keyboard.press("Control+k");
+    await page.getByTestId("quick-switch").fill("zzznotachannel");
+    if (await page.getByTestId("quick-switch-add").count()) throw new Error("Ctrl+K still offers to add");
+    await page.keyboard.press("Escape");
+
+    // Right-click a picker row: the channel menu (Leave closes the chat for good).
+    await openPickerIn(index);
+    await page.getByTestId("picker-row-chameleoncafe").click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Leave #chameleoncafe" }).click();
+    await page.getByTestId("picker-section-following").getByTestId("picker-row-chameleoncafe").waitFor({ timeout: 3_000 });
+    await page.getByTestId("picker-row-newtnook").click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Leave #newtnook" }).click();
+    await page.getByTestId("picker-row-newtnook").waitFor({ state: "detached", timeout: 3_000 });
+    await page.keyboard.press("Escape");
+    const channels = await page.evaluate(() => JSON.parse(localStorage.getItem("zoochattr.settings") || "{}").channels);
+    if (channels.includes("chameleoncafe") || channels.includes("newtnook")) throw new Error(`Leave didn't: ${channels}`);
+  } finally {
+    await page.keyboard.press("Escape").catch(() => {});
+    await view(2);
+    for (const name of ["geckotown", "lizardlounge"]) {
+      if ((await paneOf(name)) !== null) continue;
+      const empty = await firstEmptyPane();
+      await pick(empty ?? 1, name);
+    }
+    await openAlone("geckotown");
   }
 });
 
@@ -469,7 +646,7 @@ await step("mention sound chimes once per cooldown for any open chat", async () 
   await mockPost("/__say?channel=lizardlounge&text=" + encodeURIComponent("just chatting"));
   await page.waitForTimeout(400);
   if ((await chimes()) !== afterPreview) throw new Error("an ordinary line chimed");
-  // Focused on #geckotown; #lizardlounge is still an open chat in the sidebar.
+  // Focused on #geckotown; #lizardlounge is still an open chat (not on screen).
   await mockPost("/__say?channel=lizardlounge&text=" + encodeURIComponent("hey geckotester"));
   await page.waitForFunction((n) => window.__zoochattrStats().mentionChimes > n, afterPreview, { timeout: 8_000 });
   await mockPost("/__say?channel=geckotown&text=" + encodeURIComponent("geckotester again"));
@@ -571,10 +748,16 @@ await step("per-channel overrides turn a source off in one channel only", async 
 
 await step("Problems lists a failed emote download", async () => {
   await mockPost("/__fail-emotes?provider=7tv");
-  await page.getByRole("button", { name: "Emotes in #geckotown" }).first().click();
-  await page.getByRole("button", { name: "Reload emotes" }).click();
+  // Reload emotes is on the channel's right-click menu (pane header or picker row).
+  await page.getByTestId("single-header").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Reload emotes" }).click();
   await page.waitForTimeout(1_000);
+  // Emote status from the same menu opens the table under the header.
+  await page.getByTestId("single-header").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Emote status…" }).click();
+  await page.getByTestId("emote-status").getByText("Emotes in #geckotown").waitFor({ timeout: 3_000 });
   await page.keyboard.press("Escape");
+  await page.getByTestId("emote-status").waitFor({ state: "detached", timeout: 3_000 });
   await openSettings("Emotes");
   const list = page.getByTestId("problems-list");
   await list.waitFor({ timeout: 5_000 });
@@ -584,9 +767,8 @@ await step("Problems lists a failed emote download", async () => {
   await page.getByText("No problems so far.").waitFor({ timeout: 3_000 });
   await closeSettings();
   await mockPost("/__unfail-emotes");
-  await page.getByRole("button", { name: "Emotes in #geckotown" }).first().click();
-  await page.getByRole("button", { name: "Reload emotes" }).click();
-  await page.keyboard.press("Escape");
+  await page.getByTestId("single-header").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Reload emotes" }).click();
 });
 
 await step("scrolling up pauses the feed; the toe-pad button sticks back to live", async () => {
@@ -672,7 +854,8 @@ await step("history server fills in chat said while ZooChattr was closed, once e
   // Only the history server has these.
   await mockPost("/__history?channel=geckotown&n=3&text=" + encodeURIComponent("missed while closed"));
   await page.reload();
-  await avatar("geckotown").click();
+  await page.getByTestId("bottom-bar").waitFor({ timeout: 10_000 });
+  await openAlone("geckotown");
   await rowsWith("missed while closed 3").first().waitFor({ timeout: 15_000 });
   await page.getByText("Filled in 3 messages from your history server.").waitFor({ timeout: 3_000 });
   for (const text of ["missed while closed 1", "missed while closed 2", "missed while closed 3", "said before the restart"]) {
@@ -684,7 +867,11 @@ await step("history server fills in chat said while ZooChattr was closed, once e
 
 await step("channels, view and login survive a reload", async () => {
   await page.reload();
-  await avatar("lizardlounge").waitFor({ timeout: 10_000 });
+  await page.getByTestId("single-header").waitFor({ timeout: 10_000 });
+  if ((await page.getByTestId("single-header").getAttribute("data-single-header")) !== "geckotown") throw new Error("view 1 lost its channel");
+  await openPickerIn("single");
+  await page.getByTestId("picker-row-lizardlounge").waitFor({ timeout: 10_000 });
+  await page.keyboard.press("Escape");
   await canChat();
 });
 
@@ -782,7 +969,12 @@ await step("log out falls back to anonymous reading", async () => {
   await page.getByText("Not logged in").waitFor({ timeout: 5_000 });
   await closeSettings();
   await page.getByText("You're reading anonymously").waitFor({ timeout: 5_000 });
+  await openPickerIn("single");
+  // Logged out: no follows, no dots, a note to log in; Added still lists the channels.
+  await page.getByTestId("picker-follows-note").getByText("Log in to see the channels you follow.").waitFor({ timeout: 5_000 });
   if (await page.locator("[data-live-dot]").count()) throw new Error("live dots shown while logged out");
+  await page.getByTestId("picker-section-added").getByTestId("picker-row-lizardlounge").waitFor({ timeout: 3_000 });
+  await page.keyboard.press("Escape");
 });
 
 await step("an older login without the follows permission asks to log in again", async () => {
@@ -790,26 +982,34 @@ await step("an older login without the follows permission asks to log in again",
   try {
     await page.getByRole("button", { name: "Log in with Twitch" }).first().click();
     await page.getByRole("button", { name: "Get a login code" }).click();
+    await canChat();
+    await openPickerIn("single");
+    // The picker's Following section asks to sign in again; Added keeps working.
     const chip = page.getByTestId("follows-login");
     await chip.waitFor({ timeout: 15_000 });
-    if (await page.locator('[data-drag-channel="chameleoncafe"]').count()) throw new Error("follows shown without the permission");
+    await page.getByText("Sign in again to see follows.").waitFor({ timeout: 2_000 });
+    if (await page.getByTestId("picker-row-chameleoncafe").count()) throw new Error("follows shown without the permission");
+    await page.getByTestId("picker-section-added").getByTestId("picker-row-geckotown").waitFor({ timeout: 3_000 });
     await shot("07b-follows-relogin");
     await mockPost("/__new-scopes");
     await chip.click();
     await page.getByRole("button", { name: "Get a login code" }).click();
     await chip.waitFor({ state: "detached", timeout: 15_000 });
-    await page.locator('[data-drag-channel="chameleoncafe"]').waitFor({ timeout: 10_000 });
+    await page.getByTestId("picker-section-following").getByTestId("picker-row-chameleoncafe").waitFor({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
   } finally {
     await mockPost("/__new-scopes");
   }
 });
 
-await step("small window: the strip still reaches every channel", async () => {
+await step("small window: the bottom bar and the picker still fit", async () => {
   await page.setViewportSize({ width: 420, height: 760 });
-  await avatar("lizardlounge").click();
+  await openAlone("lizardlounge");
   await page.getByText("#Lizardlounge").first().waitFor({ timeout: 5_000 });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow > 0) throw new Error(`page scrolls sideways by ${overflow}px`);
+  const last = await page.getByTestId("view-9").boundingBox();
+  if (!last || last.x + last.width > 420) throw new Error("view switch is cut off");
   await shot("08-small-window");
 });
 

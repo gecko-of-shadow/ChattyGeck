@@ -55,7 +55,11 @@ export function beginChannelDrag(event: ReactPointerEvent | ReactMouseEvent, log
     useUi.setState({ dropTarget: null });
     if (!dragging) return;
     ev.preventDefault();
-    window.addEventListener("click", (click) => click.stopPropagation(), { capture: true, once: true });
+    // The click that follows a drop isn't a click. When the browser sends none (the drop landed on another
+    // element), stop waiting soon, or the next real click (say a pane's "−") would be swallowed.
+    const swallow = (click: MouseEvent) => click.stopPropagation();
+    window.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 100);
     if (kind === "box" && slot && slot !== login) chat.swapGridChannels(login, slot);
   };
 
