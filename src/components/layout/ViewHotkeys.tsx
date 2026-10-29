@@ -4,7 +4,8 @@ import { paneChannels } from "@/lib/view/panes";
 import { cycleChannel } from "@/lib/view/reorder";
 import { viewShortcut } from "@/lib/view/shortcuts";
 import { useChat } from "@/store/chat";
-import { useUi } from "@/store/ui";
+import { viewForSlots } from "@/lib/gridLayout";
+import { closePicker, openPicker, useUi } from "@/store/ui";
 
 /** A real overlay (dialog, menu, completion list) is open. The Settings panel isn't one: chat keeps working beside it. */
 function overlayOpen(): boolean {
@@ -50,6 +51,12 @@ export function ViewHotkeys() {
           return;
         }
         if (overlayOpen()) return;
+        // An open channel picker closes first (it handles Esc itself while focus is inside it).
+        if (useUi.getState().pickerPane !== null) {
+          event.preventDefault();
+          closePicker();
+          return;
+        }
         // Esc closes the Settings panel first (the panel handles it), not the single view behind it.
         if (useUi.getState().settingsOpen) return;
         if (useChat.getState().settings.mode === "focused") {
@@ -100,7 +107,14 @@ export function ViewHotkeys() {
 
       if (shortcut.type === "slot") {
         const name = settings.gridChannels[shortcut.index];
-        if (!name) return;
+        if (!name) {
+          // An empty pane in the grid: open its channel picker.
+          if (settings.mode === "grid" && shortcut.index < viewForSlots(settings.gridSlots)) {
+            event.preventDefault();
+            openPicker(shortcut.index);
+          }
+          return;
+        }
         event.preventDefault();
         if (settings.mode === "grid") focusComposer(name);
         else chat.focus(name);

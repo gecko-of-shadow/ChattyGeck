@@ -17,7 +17,6 @@ import { ConnectionDot } from "./ChatHeader";
 import { beginChannelDrag } from "./gridDrag";
 import { ChannelAvatar } from "./ChannelAvatar";
 import { AddChannelForm } from "./Sidebar";
-import { StripEmoteStatus } from "./Views";
 import { ViewSwitch } from "./ViewSwitch";
 
 function countLabel(n: number): string {
@@ -344,7 +343,6 @@ export function TopBar() {
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-2" data-testid="top-bar">
       <img src={geckoLogo} alt="ZooChattr" title="ZooChattr" className="size-9 shrink-0" draggable={false} />
       <ChannelStrip />
-      <StripEmoteStatus />
       <ConnectionDot />
       <ViewSwitch />
       <Button

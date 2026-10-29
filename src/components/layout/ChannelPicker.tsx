@@ -324,7 +324,10 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
         </section>
         <section aria-labelledby={`${prefix}-added-h`} data-testid="picker-section-added">
           <SectionHeading id={`${prefix}-added-h`}>Added</SectionHeading>
-          {model.added.length === 0 ? (
+          {model.added.length === 0 && !model.addable && model.items.length === 0 && query.trim() ? (
+            // Same words the old add box used for a name that can't be a channel.
+            <Note testId="picker-invalid">That doesn't look like a Twitch channel. Use letters, numbers and underscores.</Note>
+          ) : model.added.length === 0 ? (
             <Note>{addedAll.length === 0 ? "Nothing added by hand yet. Type a channel name or twitch.tv link above to add one." : "No matches"}</Note>
           ) : null}
           <div role="listbox" id={`${prefix}-added`} aria-labelledby={`${prefix}-added-h`}>

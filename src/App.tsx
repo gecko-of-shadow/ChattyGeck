@@ -9,7 +9,7 @@ import { TopBar } from "@/components/layout/ChannelStrip";
 import { ConnectionBanner } from "@/components/layout/ChatHeader";
 import { QuickSwitcher } from "@/components/layout/QuickSwitcher";
 import { ViewHotkeys } from "@/components/layout/ViewHotkeys";
-import { EmptyState, FocusedView, GridView } from "@/components/layout/Views";
+import { EmoteStatusPopover, EmptySingleView, FocusedView, GridView } from "@/components/layout/Views";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
@@ -18,7 +18,7 @@ import { applySkinToDocument } from "@/lib/themes";
 import { useRememberThemeForBoot, useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { installUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
-import { openSettings, useUi } from "@/store/ui";
+import { closePicker, openSettings, useUi } from "@/store/ui";
 
 function BootScreen() {
   const waking = useTheme().waking;
@@ -77,6 +77,7 @@ export default function App() {
   const skin = useResolvedSkin();
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
+  const gridSlots = useChat((s) => s.settings.gridSlots);
   const count = useChat((s) => s.settings.channels.length);
   const chromeHidden = useChat((s) => s.settings.chromeHidden);
   const readOnly = useChat((s) => s.settings.readOnly);
@@ -94,6 +95,9 @@ export default function App() {
   useEffect(() => {
     void chat.boot();
   }, []);
+
+  // A pane's channel picker belongs to the view it was opened in.
+  useEffect(() => closePicker(false), [mode, gridSlots]);
 
   // Until the saved settings are loaded the store holds defaults; keep the theme theme-boot.js already put on the page.
   useEffect(() => {
@@ -167,12 +171,12 @@ export default function App() {
             {chromeHidden ? null : <ConnectionBanner />}
             {/* Settings opens as a panel over the right part of the chats, between the strip and the message box. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
-              {count === 0 ? (
-                <EmptyState />
-              ) : mode === "grid" || !focused ? (
+              {mode === "grid" ? (
                 <GridView />
-              ) : (
+              ) : focused ? (
                 <FocusedView key={focused} login={focused} />
+              ) : (
+                <EmptySingleView />
               )}
               <SettingsDialog />
             </div>
@@ -186,6 +190,7 @@ export default function App() {
           <QuitConfirmDialog />
           <QuickSwitcher />
           <ViewHotkeys />
+          <EmoteStatusPopover />
           <LiveRegion />
         </div>
       )}
