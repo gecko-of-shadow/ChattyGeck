@@ -200,6 +200,69 @@ describe("chat controller view and history", () => {
     expect(state.channels.lizardlounge.readMarker).toBe("liz-1");
   });
 
+  it("\"−\" empties a pane in place: the panes after it don't move and the channel stays joined", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "b", "c", "d"], channels: ["a", "b", "c", "d"] });
+    chat.hideFromGrid("b");
+    const state = useChat.getState();
+    expect(state.settings.gridChannels).toEqual(["a", "", "c", "d"]);
+    expect(state.settings.channels).toContain("b");
+    expect(state.channels.b).toBeDefined();
+  });
+
+  it("the picker loads a channel into an empty pane, replaces a pane, or swaps with the pane already showing it", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "b", "c", "d"] });
+    chat.setPaneChannel(1, "b");
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b", "c"]);
+    expect(useChat.getState().settings.focused).toBe("b");
+    chat.setPaneChannel(3, "d");
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b", "c", "d"]);
+    chat.setPaneChannel(0, "c");
+    expect(useChat.getState().settings.gridChannels).toEqual(["c", "b", "a", "d"]);
+    // Past the view (4 panes) or a channel not in the app: nothing happens.
+    chat.setPaneChannel(4, "a");
+    chat.setPaneChannel(0, "nope");
+    expect(useChat.getState().settings.gridChannels).toEqual(["c", "b", "a", "d"]);
+  });
+
+  it("a new channel fills the first empty pane; leaving a channel leaves its pane empty", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "c"] });
+    (chat as unknown as { settingsUiOnly: boolean }).settingsUiOnly = true;
+    try {
+      chat.addChannel("newone");
+    } finally {
+      (chat as unknown as { settingsUiOnly: boolean }).settingsUiOnly = false;
+    }
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "newone", "c"]);
+    chat.removeChannel("a");
+    expect(useChat.getState().settings.gridChannels).toEqual(["", "newone", "c"]);
+    expect(useChat.getState().settings.focused).not.toBe("a");
+  });
+
+  it("Alt+Shift+arrows move a pane into an empty pane, at the end too", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "b"], channels: ["a", "b"] });
+    chat.moveGridChannel("b", 1);
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "", "b"]);
+    chat.moveGridChannel("b", -1);
+    // No empty pane is left hanging at the end.
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b"]);
+  });
+
+  it("restoring preferences keeps an emptied pane empty when the view size is the same", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "b", "c"] });
+    useChat.setState((s) => ({ settings: { ...s.settings, gridParked: ["b"] } }));
+    chat.replacePreferences({ ...DEFAULT_SETTINGS });
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "", "c"]);
+    expect(useChat.getState().settings.gridParked).toEqual(["b"]);
+  });
+
+  it("\"−\" in view 1 shows nothing until a channel is picked", () => {
+    seed({ mode: "focused", focused: "a", gridChannels: ["a"], channels: ["a", "b"] });
+    chat.clearSingle();
+    expect(useChat.getState().settings).toMatchObject({ mode: "focused", focused: null });
+    chat.focus("b");
+    expect(useChat.getState().settings).toMatchObject({ mode: "focused", focused: "b" });
+  });
+
   it("writes a replaced pending line after the history timer already stripped it", async () => {
     seed({
       mode: "focused",
@@ -654,5 +717,77 @@ describe("chat controller view and history", () => {
     });
     chat.removeChannel("geckotown");
     expect(useUi.getState().replyTo).toBeNull();
+  });
+});
+
+describe("follow list states for the channel picker", () => {
+  const session = {
+    clientId: "cid",
+    login: "me",
+    userId: "42",
+    accessToken: "test-only",
+    expiresAt: Date.now() + 3_600_000,
+    scopes: ["chat:read", "chat:edit", "user:read:follows"],
+  };
+  const internal = chat as unknown as {
+    session: unknown;
+    liveTimer: ReturnType<typeof setInterval> | null;
+    followsGeneration: number;
+  };
+
+  beforeEach(() => {
+    vi.stubGlobal("document", { hasFocus: () => true, hidden: false });
+    internal.session = session;
+    internal.liveTimer = setInterval(() => undefined, 1_000_000);
+    useChat.setState({ follows: {}, followsState: "loading", live: null });
+  });
+
+  afterEach(() => {
+    if (internal.liveTimer) clearInterval(internal.liveTimer);
+    internal.liveTimer = null;
+    internal.session = null;
+    vi.unstubAllGlobals();
+  });
+
+  it("shows an error when the first fetch fails, and Retry loads the list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+    chat.retryFollows();
+    expect(useChat.getState().followsState).toBe("loading");
+    await vi.waitFor(() => expect(useChat.getState().followsState).toBe("error"));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        new Response(
+          JSON.stringify({
+            data: url.includes("/channels/followed")
+              ? [{ broadcaster_id: "1", broadcaster_login: "geckotown", broadcaster_name: "GeckoTown", followed_at: "2026-01-01T00:00:00Z" }]
+              : [],
+            pagination: {},
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    chat.retryFollows();
+    await vi.waitFor(() => expect(useChat.getState().followsState).toBe("ok"));
+    expect(Object.keys(useChat.getState().follows)).toEqual(["geckotown"]);
+  });
+
+  it("keeps a list it already has when a later fetch fails", async () => {
+    useChat.setState({ follows: { geckotown: { displayName: "GeckoTown", followedAt: "2026-01-01T00:00:00Z" } }, followsState: "ok" });
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
+    chat.retryFollows();
+    await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(useChat.getState().followsState).toBe("ok");
+    expect(Object.keys(useChat.getState().follows)).toEqual(["geckotown"]);
+  });
+
+  it("does nothing while logged out", () => {
+    internal.session = null;
+    useChat.setState({ followsState: "off" });
+    chat.retryFollows();
+    expect(useChat.getState().followsState).toBe("off");
   });
 });

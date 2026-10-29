@@ -220,7 +220,7 @@ export function LoginDialog() {
                 ZooChattr only asks for <code className="rounded bg-muted px-1 text-foreground">chat:read</code> and{" "}
                 <code className="rounded bg-muted px-1 text-foreground">chat:edit</code> (read and send chat) and{" "}
                 <code className="rounded bg-muted px-1 text-foreground">user:read:follows</code> (show the channels you
-                follow in the top strip), nothing else. Your login is stored in your system's credential store.
+                follow in the channel picker), nothing else. Your login is stored in your system's credential store.
               </div>
             </div>
             {error ? (

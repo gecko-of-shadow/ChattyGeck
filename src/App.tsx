@@ -1,15 +1,14 @@
 import { useEffect } from "react";
-import { PanelLeftOpen } from "lucide-react";
-import { Composer, LoginPrompt } from "@/components/chat/Composer";
+import { PanelBottomOpen } from "lucide-react";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
 import { Mascot } from "@/components/mascots/Mascot";
-import { TopBar } from "@/components/layout/ChannelStrip";
+import { BottomBar } from "@/components/layout/BottomBar";
 import { ConnectionBanner } from "@/components/layout/ChatHeader";
 import { QuickSwitcher } from "@/components/layout/QuickSwitcher";
 import { ViewHotkeys } from "@/components/layout/ViewHotkeys";
-import { EmptyState, FocusedView, GridView } from "@/components/layout/Views";
+import { EmoteStatusPopover, EmptySingleView, FocusedView, GridView } from "@/components/layout/Views";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { chat } from "@/lib/chat/controller";
@@ -18,7 +17,7 @@ import { applySkinToDocument } from "@/lib/themes";
 import { useRememberThemeForBoot, useResolvedSkin, useTheme } from "@/lib/useTheme";
 import { installUpdate } from "@/lib/updates";
 import { useChat } from "@/store/chat";
-import { openSettings, useUi } from "@/store/ui";
+import { closePicker, openSettings, useUi } from "@/store/ui";
 
 function BootScreen() {
   const waking = useTheme().waking;
@@ -30,11 +29,11 @@ function BootScreen() {
   );
 }
 
-/** Floating controls while the top strip is hidden (Ctrl+Shift+H). */
+/** Floating controls while the bottom bar is hidden (Ctrl+Shift+H). */
 function ChromeReveal() {
   const readOnly = useChat((s) => s.settings.readOnly);
   return (
-    <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+    <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5">
       <Button
         type="button"
         size="sm"
@@ -42,9 +41,9 @@ function ChromeReveal() {
         className="gap-1.5 shadow-lg"
         data-testid="show-chrome"
         onClick={() => chat.updateSettings({ chromeHidden: false })}
-        title="Show the top strip (Ctrl+Shift+H)"
+        title="Show the bottom bar (Ctrl+Shift+H)"
       >
-        <PanelLeftOpen className="size-3.5" />
+        <PanelBottomOpen className="size-3.5" />
         Show UI
       </Button>
       <Button
@@ -77,11 +76,9 @@ export default function App() {
   const skin = useResolvedSkin();
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
-  const count = useChat((s) => s.settings.channels.length);
+  const gridSlots = useChat((s) => s.settings.gridSlots);
   const chromeHidden = useChat((s) => s.settings.chromeHidden);
-  const readOnly = useChat((s) => s.settings.readOnly);
   const mentions = useChat((s) => Object.values(s.channels).reduce((sum, c) => sum + c.mentions, 0));
-  const loggedIn = useChat((s) => s.auth.status === "logged_in");
   // One shared message box: Single sends to its channel, the grid to the focused pane (only while it's on screen).
   const composerChannel = useChat((s) =>
     s.settings.mode === "focused"
@@ -94,6 +91,9 @@ export default function App() {
   useEffect(() => {
     void chat.boot();
   }, []);
+
+  // A pane's channel picker belongs to the view it was opened in.
+  useEffect(() => closePicker(false), [mode, gridSlots]);
 
   // Until the saved settings are loaded the store holds defaults; keep the theme theme-boot.js already put on the page.
   useEffect(() => {
@@ -163,29 +163,26 @@ export default function App() {
       ) : (
         <div className="relative flex h-full">
           <main className="relative flex min-w-0 flex-1 flex-col">
-            {chromeHidden ? <ChromeReveal /> : <TopBar />}
-            {chromeHidden ? null : <ConnectionBanner />}
-            {/* Settings opens as a panel over the right part of the chats, between the strip and the message box. */}
+            {/* Nothing above the panes. Settings opens as a panel over the right part of the chats, above the bottom bar. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
-              {count === 0 ? (
-                <EmptyState />
-              ) : mode === "grid" || !focused ? (
+              {mode === "grid" ? (
                 <GridView />
-              ) : (
+              ) : focused ? (
                 <FocusedView key={focused} login={focused} />
+              ) : (
+                <EmptySingleView />
               )}
               <SettingsDialog />
+              {chromeHidden ? <ChromeReveal /> : null}
             </div>
-            {readOnly ? null : composerChannel ? (
-              <Composer channel={composerChannel} />
-            ) : count > 0 && !loggedIn ? (
-              <LoginPrompt />
-            ) : null}
+            {chromeHidden ? null : <ConnectionBanner />}
+            {chromeHidden ? null : <BottomBar channel={composerChannel} />}
           </main>
           <LoginDialog />
           <QuitConfirmDialog />
           <QuickSwitcher />
           <ViewHotkeys />
+          <EmoteStatusPopover />
           <LiveRegion />
         </div>
       )}

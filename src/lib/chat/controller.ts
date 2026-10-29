@@ -48,6 +48,7 @@ import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { fitGridToView, focusOnGrid, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
+import { clearPaneOf, EMPTY_PANE, fillFreePane, paneChannels, placeInPane, trimPanes } from "@/lib/view/panes";
 import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
@@ -1041,10 +1042,9 @@ class ChatController {
     if (!name) return { ok: false, error: "That doesn't look like a Twitch channel. Use letters, numbers and underscores." };
     if (this.settingsUiOnly) {
       if (get().settings.channels.includes(name)) return { ok: true, channel: name };
-      const gridFull = get().settings.gridChannels.length >= this.gridCap();
       this.updateSettings((s) => ({
         channels: [...s.channels, name],
-        gridChannels: gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+        gridChannels: fillFreePane(s.gridChannels, name, this.gridCap()) ?? s.gridChannels,
         focused: s.mode === "focused" || !s.focused ? name : s.focused,
       }));
       return { ok: true, channel: name };
@@ -1054,10 +1054,11 @@ class ChatController {
       return { ok: true, channel: name };
     }
     set((s) => ({ channels: { ...s.channels, [name]: newChannelView(name) } }));
-    const gridFull = toGrid && get().settings.gridChannels.length >= this.gridCap();
+    const placed = toGrid ? fillFreePane(get().settings.gridChannels, name, this.gridCap()) : null;
+    const gridFull = toGrid && !placed;
     this.updateSettings((s) => ({
       channels: [...s.channels, name],
-      gridChannels: !toGrid || gridFull || s.gridChannels.includes(name) ? s.gridChannels : [...s.gridChannels, name],
+      gridChannels: placed ?? s.gridChannels,
       focused: s.mode === "focused" || !s.focused ? name : s.focused,
     }));
     this.openChannel(name);
@@ -1067,7 +1068,7 @@ class ChatController {
     }
     if (gridFull) {
       toast(`Added #${name}`, {
-        description: `Grid is full (${this.gridCap()}). It's in the top strip: hide a pane to make room, or open it alone anytime.`,
+        description: `Grid is full (${this.gridCap()}). Empty a pane with − and pick it there, or open it alone anytime.`,
       });
     }
     return { ok: true, channel: name };
@@ -1095,7 +1096,8 @@ class ChatController {
     this.updateSettings((s) => {
       const index = s.channels.indexOf(name);
       const channels = s.channels.filter((c) => c !== name);
-      const gridChannels = s.gridChannels.filter((c) => c !== name);
+      // Its pane stays where it is, empty.
+      const gridChannels = clearPaneOf(s.gridChannels, name);
       const gridParked = s.gridParked.filter((c) => c !== name);
       const fallback = channels[Math.min(Math.max(index, 0), channels.length - 1)] ?? null;
       return { channels, gridChannels, gridParked, focused: s.focused === name ? fallback : s.focused };
@@ -1113,8 +1115,12 @@ class ChatController {
   /** Reorder a box on the grid (not the full follow list). */
   moveGridChannel(name: string, offset: number): void {
     this.updateSettings((s) => {
-      const gridChannels = moveItem(s.gridChannels, name, offset);
-      if (!gridChannels) return {};
+      // Every pane of the view counts, empty ones too (so a pane can move into an empty pane at the end).
+      const panes = [...s.gridChannels];
+      while (panes.length < this.gridCap()) panes.push(EMPTY_PANE);
+      const moved = moveItem(panes, name, offset);
+      if (!moved) return {};
+      const gridChannels = trimPanes(moved);
       this.announce(`Moved #${name} ${offset < 0 ? "earlier" : "later"}`);
       return { gridChannels };
     });
@@ -1151,7 +1157,7 @@ class ChatController {
   }
 
   /**
-   * The top-right view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
+   * The bottom-left view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
    * sets the extra pins aside; going up brings them back.
    */
   setView(view: ViewSize): void {
@@ -1181,19 +1187,20 @@ class ChatController {
       return { ok: true };
     }
     const cap = this.gridCap();
-    if (settings.gridChannels.length >= cap) {
+    const gridChannels = fillFreePane(settings.gridChannels, name, cap);
+    if (!gridChannels) {
       return {
         ok: false,
-        error: `Grid is full (${cap}). Hide one from the grid first, or read this channel alone (view 1).`,
+        error: `Grid is full (${cap}). Empty a pane with − first, or read this channel alone (view 1).`,
       };
     }
-    this.updateSettings((s) => ({ gridChannels: [...s.gridChannels, name], gridParked: s.gridParked.filter((c) => c !== name) }));
+    this.updateSettings((s) => ({ gridChannels, gridParked: s.gridParked.filter((c) => c !== name) }));
     this.setMode("grid");
     this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
     return { ok: true };
   }
 
-  /** Keep following, but tuck the channel off the grid. */
+  /** "−" on a pane: the channel stays joined (it counts unread), its pane stays where it is, empty. */
   hideFromGrid(name: string): void {
     const { mode, gridChannels } = get().settings;
     if (mode === "grid" && gridChannels.includes(name)) {
@@ -1201,7 +1208,32 @@ class ChatController {
       const last = get().channels[name]?.messages.at(-1)?.id;
       if (last) this.patchChannel(name, (c) => ({ ...c, readMarker: last }));
     }
-    this.updateSettings((s) => ({ gridChannels: s.gridChannels.filter((c) => c !== name), gridParked: s.gridParked.filter((c) => c !== name) }));
+    this.updateSettings((s) => ({ gridChannels: clearPaneOf(s.gridChannels, name), gridParked: s.gridParked.filter((c) => c !== name) }));
+  }
+
+  /**
+   * The channel picker in grid pane `index` loaded `name` (a channel already in the app). A channel already on screen
+   * swaps places with what the pane showed. The pane becomes the focused one, so the message box sends there.
+   */
+  setPaneChannel(index: number, name: string): void {
+    const settings = get().settings;
+    if (!settings.channels.includes(name) || index < 0 || index >= this.gridCap()) return;
+    const replaced = settings.gridChannels[index];
+    this.updateSettings((s) => ({
+      gridChannels: placeInPane(s.gridChannels, index, name),
+      gridParked: s.gridParked.filter((c) => c !== name),
+      focused: name,
+    }));
+    if (replaced && replaced !== name) this.announce(`Replaced #${replaced} with #${name}`);
+    if (settings.mode === "grid") this.patchChannel(name, (c) => ({ ...c, unread: 0, mentions: 0 }));
+  }
+
+  /** "−" in view 1: nothing is shown until a channel is picked (it stays joined). */
+  clearSingle(): void {
+    const { mode, focused } = get().settings;
+    if (mode !== "focused" || !focused) return;
+    this.markRead(focused, null);
+    this.updateSettings({ focused: null });
   }
 
   /** Remembers where the user stopped reading the channel they're leaving. */
@@ -1239,7 +1271,7 @@ class ChatController {
   setMode(mode: ViewMode): void {
     if (mode === "focused") {
       const { focused, channels, gridChannels } = get().settings;
-      const target = focused ?? gridChannels[0] ?? channels[0];
+      const target = focused ?? paneChannels(gridChannels)[0] ?? channels[0];
       if (target) this.focus(target);
       else this.updateSettings({ mode });
       return;
@@ -1356,8 +1388,10 @@ class ChatController {
       delete next.mode;
       delete next.version;
       // Keep the view pointing at a channel we actually have, and the pins within the (possibly new) view size.
+      // Same view size: a pane emptied on purpose stays empty.
       const slots = next.gridSlots ?? current.gridSlots;
-      return { ...next, focused: current.focused, ...fitGridToView(current.gridChannels, current.gridParked, slots) };
+      const refill = viewForSlots(slots) !== viewForSlots(current.gridSlots);
+      return { ...next, focused: current.focused, ...fitGridToView(current.gridChannels, current.gridParked, slots, refill) };
     });
   }
 
@@ -1781,7 +1815,7 @@ class ChatController {
     // Another account: don't show the previous one's follows or dots while the new ones load.
     if (this.followsUser !== userId) set({ follows: {}, live: null });
     this.followsUser = userId;
-    set({ followsState: "off" });
+    set({ followsState: "loading" });
     void this.refreshFollows();
     this.liveTimer = setInterval(() => {
       if (document.hidden) return;
@@ -1822,12 +1856,23 @@ class ChatController {
     }, 1_500);
   }
 
+  /** The picker's Retry after the follow list couldn't be fetched. Same fetch as the timer's. */
+  retryFollows(): void {
+    if (!this.session || !this.liveTimer) return;
+    if (get().followsState !== "ok") set({ followsState: "loading" });
+    void this.refreshFollows();
+  }
+
   private async refreshFollows(): Promise<void> {
     const generation = this.followsGeneration;
     // A token that's about to expire is refreshed first, so the check itself doesn't hit a 401.
     const session = await this.pollSession();
-    if (!session || generation !== this.followsGeneration) return;
-    // Logged in before ZooChattr asked for this permission: the strip offers a fresh login instead.
+    if (generation !== this.followsGeneration) return;
+    if (!session) {
+      if (get().followsState === "loading") set({ followsState: "error" });
+      return;
+    }
+    // Logged in before ZooChattr asked for this permission: the picker offers a fresh login instead.
     if (!hasFollowsScope(session.scopes)) {
       this.followsFetchedAt = Date.now();
       set({ follows: {}, followsState: "needs-login" });
@@ -1846,13 +1891,17 @@ class ChatController {
         follows[f.login] = { displayName: f.displayName, followedAt: f.followedAt, avatarUrl: before[f.login]?.avatarUrl };
       }
       set({ follows, followsState: "ok" });
-      // Pictures for every follow (kept across refreshes), so one you Leave keeps its picture in the strip.
+      // Pictures for every follow (kept across refreshes), so one you Leave keeps its picture in the picker.
       const missing = list.map((f) => f.login).filter((login) => !follows[login].avatarUrl);
       if (missing.length) void this.loadFollowPictures(session, missing, generation);
     } catch (err) {
       unauthorized = err instanceof HelixUnauthorizedError;
       // Failed (offline, timeout, 401): try the follow list again in 5 minutes; live dots keep updating meanwhile.
-      if (generation === this.followsGeneration) this.followsFetchedAt = Date.now() - FOLLOWS_REFRESH_MS + 5 * 60_000;
+      if (generation === this.followsGeneration) {
+        this.followsFetchedAt = Date.now() - FOLLOWS_REFRESH_MS + 5 * 60_000;
+        // A list fetched earlier stays up; only a first fetch that failed shows the error (with Retry).
+        if (get().followsState !== "ok") set({ followsState: "error" });
+      }
     }
     // A 401 to a request made before a logout or login switch says nothing about the current login.
     if (unauthorized && generation === this.followsGeneration && this.session) await this.onHelixPollUnauthorized();
@@ -1882,7 +1931,7 @@ class ChatController {
     }
   }
 
-  /** Viewer counts for every channel in the strip. Skipped while the window is hidden (tray or minimised). */
+  /** Viewer counts for every channel in the picker. Skipped while the window is hidden (tray or minimised). */
   private async pollLive(): Promise<void> {
     if (!this.session || document.hidden) return;
     const generation = this.followsGeneration;

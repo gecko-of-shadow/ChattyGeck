@@ -80,6 +80,14 @@ describe("sanitizeSettings", () => {
     });
   });
 
+  it("remembers chat history by default, and keeps a saved choice", () => {
+    expect(DEFAULT_SETTINGS.rememberChatHistory).toBe(true);
+    for (const fresh of [undefined, null, {}, { channels: ["geckotown"] }]) {
+      expect(sanitizeSettings(fresh).rememberChatHistory).toBe(true);
+    }
+    expect(sanitizeSettings({ rememberChatHistory: false }).rememberChatHistory).toBe(false);
+  });
+
   it("never changes Start with Windows or Close to tray that a user already saved", () => {
     const saved = sanitizeSettings({ startOnLogin: true, closeToTray: false });
     expect(saved).toMatchObject({ startOnLogin: true, closeToTray: false });
@@ -257,6 +265,47 @@ describe("fitGridToView (the view switch)", () => {
   it("treats 5, 7 and 8 as the next offered view and never lists a channel twice", () => {
     expect(fitGridToView(["a", "b", "c", "d", "e", "f", "g"], [], 5).gridChannels).toHaveLength(6);
     expect(fitGridToView(["a", "b"], ["b", "c"], 2)).toEqual({ gridChannels: ["a", "b"], gridParked: ["c"] });
+  });
+
+  it("keeps an emptied pane in its place; picking a view fills empty panes from the set-aside ones first", () => {
+    expect(fitGridToView(["a", "", "c"], [], 4, false)).toEqual({ gridChannels: ["a", "", "c"], gridParked: [] });
+    expect(fitGridToView(["a", "", "c"], ["d"], 4)).toEqual({ gridChannels: ["a", "d", "c"], gridParked: [] });
+    // Going down: the empty pane still counts as a pane (and picking the view fills it).
+    expect(fitGridToView(["a", "", "c", "d"], [], 2, false)).toEqual({ gridChannels: ["a"], gridParked: ["c", "d"] });
+    expect(fitGridToView(["a", "", "c", "d"], [], 2)).toEqual({ gridChannels: ["a", "c"], gridParked: ["d"] });
+    expect(fitGridToView(["", "", "c"], [], 9, false).gridChannels).toEqual(["", "", "c"]);
+  });
+});
+
+describe("empty panes on disk", () => {
+  const channels = ["alpha", "bravo", "charlie", "delta"];
+
+  it("loads an empty pane in its place and drops empty panes at the end", () => {
+    const s = sanitizeSettings({ channels, gridChannels: ["alpha", "", "charlie", "", ""], mode: "grid" });
+    expect(s.gridChannels).toEqual(["alpha", "", "charlie"]);
+    expect(sanitizeSettings({ channels, gridChannels: ["", ""] }).gridChannels).toEqual([]);
+  });
+
+  it("an unknown name is still dropped (not turned into an empty pane), as in older builds", () => {
+    expect(sanitizeSettings({ channels, gridChannels: ["alpha", "gone", "charlie"] }).gridChannels).toEqual(["alpha", "charlie"]);
+  });
+
+  it("puts the focus on a pane that shows a channel", () => {
+    expect(sanitizeSettings({ channels, gridChannels: ["", "bravo"], focused: "alpha", mode: "grid" }).focused).toBe("bravo");
+    expect(focusOnGrid("grid", null, ["", "b"])).toBe("b");
+    expect(focusOnGrid("grid", "x", ["", ""])).toBe("x");
+  });
+
+  it("keeps an emptied view 1 empty", () => {
+    expect(sanitizeSettings({ channels, mode: "focused", focused: null }).focused).toBeNull();
+    // A missing or unknown focus still falls back to the first channel.
+    expect(sanitizeSettings({ channels, mode: "focused" }).focused).toBe("alpha");
+    expect(sanitizeSettings({ channels, mode: "grid", focused: null, gridChannels: ["bravo"] }).focused).toBe("bravo");
+  });
+
+  it("round-trips through a backup file", () => {
+    const s = sanitizeSettings({ channels, gridChannels: ["", "bravo"], mode: "grid" });
+    expect(readBackup(JSON.stringify(makeBackup(s)))?.gridChannels).toEqual(["", "bravo"]);
   });
 });
 

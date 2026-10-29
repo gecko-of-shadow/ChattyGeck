@@ -11,11 +11,12 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 ## What it does
 
 - **Many channels, one window.** Follow as many Twitch chats as you want. Connections stay open while the app runs, and drops are recovered automatically with backoff.
-- **Top strip.** Every channel is a round avatar in a strip across the top: the channels you added in the app first, then the channels you follow on Twitch (newest follow first). A green dot means the channel is live, a number on the avatar counts mentions, and a ring marks the chats on screen. Click an avatar to read it alone, use its +/− badge to put it on the grid or take it off, right-click it (or press the Menu key) for everything else, or drag it onto a grid pane. The "+" tile at the end adds a channel by name, `#name` or twitch.tv link. Only channels on your app list are joined in chat, so following 200 channels doesn't open 200 chats.
+- **A channel picker in every pane.** Each pane header has two buttons: − empties the pane (it keeps its place and shows "Pick a channel"), ⋯ opens the picker inside the pane. The picker has a search box and two lists: Following (the channels you follow on Twitch, newest follow first) and Added (channels you added by hand). A green dot means the channel is live, a number counts mentions or unread lines. Click a row (or use the arrow keys and Enter) to show it in that pane; Esc or Back closes the picker. Type a name, `#name` or twitch.tv link that isn't listed to add it. Right-click a row or a pane header (or press the Menu key in the picker) for everything else. Only channels you open are joined in chat, so following 200 channels doesn't open 200 chats.
+- **One bottom bar.** The 1 · 2 · 3 · 4 · 6 · 9 view switch on the left, the message box in the middle, connection dot and Settings gear on the right. Nothing sits above the chats.
 - **Pick how many chats.** The 1 · 2 · 3 · 4 · 6 · 9 switch next to the gear sets the view: 1 shows one chat, the others lay out 2 side by side, 3 in a row, 2 by 2, 3 by 2 or 3 by 3. Ctrl+G flips between one chat and the grid, Esc goes back to the grid. Pane headers show "N watching" or "offline", the room modes, and a warning when an emote source failed; their ⋯ menu reloads emotes, swaps panes, opens the channel on twitch.tv or leaves it. Drag a pane header onto another to swap them, double-click it to read that chat alone.
 - **Lives in the tray.** Closing the window keeps ZooChattr running in the system tray, so chats stay connected; the tray tooltip counts your mentions. Right-click the tray icon and choose Quit to get a confirmation (or turn close-to-tray off in Settings). Opening the exe again brings the running copy back instead of starting a second one. Optional **Start with Windows**.
 - **Chat as yourself.** Log in with Twitch's device login (type a code at twitch.tv/activate; your password never touches ZooChattr). One message box at the bottom sends to the chat you're focused on ("Send to #channel"); click a pane or press Ctrl+1 … Ctrl+9 to pick another. Press Enter to send, `/me` works, and ↑/↓ recall what you sent. The box shows emote-only, followers-only, subs-only and slow mode.
-- **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped, the pane header shows a warning, and Emote status (right-click the channel in the top strip) says why.
+- **Emotes everywhere.** Twitch emotes come from chat tags. 7TV, BetterTTV and FrankerFaceZ load global and channel sets for every joined channel, including zero-width overlay emotes. If a provider is down, its emotes are skipped, the pane header shows a warning, and Emote status (right-click the pane header or the channel in the picker) says why.
 - **Emotes your way** (the favourite bits of the Geckmotes browser extension, built in):
   - **Emote menu.** The smiley button next to Send opens a grid of emotes with a search box and tabs for ★ (favourites), Recent, Channel, Global, BTTV and 7TV. The footer names the emote under the pointer and where it comes from. Scroll loads more so big packs don't freeze. Right-click any emote to favourite it.
   - **Tab finishes emote and chatter names.** Type the first letters and press Tab; Tab again, or the arrow keys, cycles the matches (Shift+Tab goes back), or click one in the strip above the box. Emote names that start with what you typed come first, then names that contain it, then people who have spoken in that chat. A word that starts with `@`, or just `@`, completes those people.
@@ -32,7 +33,7 @@ Built with Tauri 2, React, TypeScript and Tailwind. No backend of its own: it ta
 - **Remembers you.** Channels, view, theme, favourites, window position and every preference survive restarts. Back them up to a JSON file, restore that file on another machine, or reset to the defaults from Settings → About & data. Your Twitch login is never part of a backup. The window position is stored beside settings and is written after you finish dragging, not on every pixel.
 - **Right room.** With "Confirm channel before typing" on (the default), the message box stays locked after you switch chats until you press "Switch to #channel", so a message does not land in the wrong chat when several are open.
 - **Just reading.** Ctrl+Shift+R turns Read only on or off (also in Settings → Chat & mentions); it hides the message box so you can't chat by accident.
-- **More room for chat.** Ctrl+Shift+H hides the top strip so the chats fill the window; a floating Show UI button brings it back. Settings → Window & startup lists every keyboard shortcut.
+- **More room for chat.** Ctrl+Shift+H hides the bottom bar so the chats fill the window; a floating Show UI button brings it back. Settings → Window & startup lists every keyboard shortcut.
 - **Chat history.** Keeps about 48 hours of messages per channel in `ZooChattr-data/chat` so logs come back after you quit (toggle in Settings → Account & history).
 - **Updates.** Checks GitHub for a newer portable build on launch (and every few hours); Settings → About & data still has a manual check. Before installing, the app checks that the download is a release of this repository and that its SHA-256 fingerprint matches the `.sha256` file published with it; if not, nothing is changed. Install keeps your data folder.
 - **Portable.** One `.exe` and nothing to install. Settings live in a `ZooChattr-data` folder next to it. Unzipping a new release over the old folder (or using in-app update) replaces only the exe and keeps your channels.
@@ -70,7 +71,7 @@ Reading chat works with no setup (anonymous, read-only). Sending needs a Twitch 
 
    It's baked into the build, so friends who get your `.exe` can log in without any setup. You can also paste a Client ID at runtime in **Settings → Account & history**, which overrides the built-in one.
 
-ZooChattr asks for `chat:read` and `chat:edit` (read and send chat) and `user:read:follows` (list the channels you follow, for the top strip). It only reads your follows; it can't follow or unfollow anyone. If you logged in before that permission was added, the strip shows "Log in again to see your Twitch follows" until you log in once more. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
+ZooChattr asks for `chat:read` and `chat:edit` (read and send chat) and `user:read:follows` (list the channels you follow, in the channel picker). It only reads your follows; it can't follow or unfollow anyone. If you logged in before that permission was added, the picker shows "Sign in again to see follows" until you log in once more. It re-validates the token every hour, as Twitch requires, and refreshes it automatically when it expires.
 
 ### Where the login is stored
 
@@ -186,7 +187,7 @@ The emote features above were ported from the Geckmotes browser extension and fo
 - `src/components/chat/EmotePicker.tsx` (menu), `Composer.tsx` (Tab completion), `MessageRow.tsx` / `ChatLog.tsx` (sizes, animation, deleted rows, hover preview).
 - `src/store/settings.ts`: the settings model, backup format and migration from older files.
 
-Per-channel overrides and the Problems list live in Settings (same idea as Geckmotes' options page). Emote status (right-click the channel in the top strip) shows live provider status for that channel.
+Per-channel overrides and the Problems list live in Settings (same idea as Geckmotes' options page). Emote status (right-click the pane header or the channel in the picker) shows live provider status for that channel.
 
 ## Project layout
 
@@ -197,7 +198,7 @@ src/
   lib/emotes/       7TV / BTTV / FFZ providers and the per-channel registry
   lib/chat/         controller (connections, buffering, sending) + tokenizer
   store/            Zustand stores: chat state, settings, UI
-  components/       chat log, composer, top strip and view switch, panes, dialogs, gecko art
+  components/       chat log, composer, bottom bar and view switch, panes and channel picker, dialogs, gecko art
 src-tauri/          Rust shell: data folder, settings file, credential store
 scripts/            mock Twitch, end-to-end run, soak test, portable packaging
 ```

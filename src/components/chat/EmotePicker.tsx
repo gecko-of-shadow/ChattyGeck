@@ -284,7 +284,7 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
             size={compact ? "icon-sm" : "icon-lg"}
             className={cn(
               "shrink-0 data-popup-open:border-primary data-popup-open:bg-primary data-popup-open:text-primary-foreground",
-              !compact && "size-10",
+              !compact && "size-8",
             )}
             aria-label="Emote menu"
             title="Emotes (right-click one to favourite it)"
@@ -292,7 +292,7 @@ export function EmotePicker({ channel, emotes, index, onPick, returnFocus, compa
           />
         }
       >
-        <Smile className={compact ? "size-4" : "size-5"} />
+        <Smile className="size-4" />
       </PopoverTrigger>
       <PopoverContent
         align="end"

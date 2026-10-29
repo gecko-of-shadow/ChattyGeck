@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { chat } from "@/lib/chat/controller";
+import { paneChannels } from "@/lib/view/panes";
 import { cycleChannel } from "@/lib/view/reorder";
 import { viewShortcut } from "@/lib/view/shortcuts";
 import { useChat } from "@/store/chat";
-import { useUi } from "@/store/ui";
+import { viewForSlots } from "@/lib/gridLayout";
+import { closePicker, openPicker, useUi } from "@/store/ui";
 
 /** A real overlay (dialog, menu, completion list) is open. The Settings panel isn't one: chat keeps working beside it. */
 function overlayOpen(): boolean {
@@ -43,12 +45,22 @@ export function ViewHotkeys() {
       }
 
       if (shortcut.type === "escape") {
+        // Esc that ends an IME composition isn't a "close" key.
+        if (event.isComposing) return;
         if (useUi.getState().quickSwitchOpen) {
           event.preventDefault();
           useUi.setState({ quickSwitchOpen: false });
           return;
         }
         if (overlayOpen()) return;
+        // With Settings open, Esc closes Settings (the panel handles it) unless focus is in a pane's channel picker.
+        if (useUi.getState().settingsOpen && !document.activeElement?.closest("[data-testid='channel-picker']")) return;
+        // An open channel picker closes first (it handles Esc itself while focus is inside it).
+        if (useUi.getState().pickerPane !== null) {
+          event.preventDefault();
+          closePicker();
+          return;
+        }
         // Esc closes the Settings panel first (the panel handles it), not the single view behind it.
         if (useUi.getState().settingsOpen) return;
         if (useChat.getState().settings.mode === "focused") {
@@ -71,8 +83,8 @@ export function ViewHotkeys() {
               ? "Read only on: message box hidden"
               : "Read only off"
             : on
-              ? "Top strip hidden. Ctrl+Shift+H shows it again"
-              : "Top strip shown";
+              ? "Bottom bar hidden. Ctrl+Shift+H shows it again"
+              : "Bottom bar shown";
         useUi.setState((u) => ({ liveMessage: text, liveNonce: u.liveNonce + 1 }));
         return;
       }
@@ -87,7 +99,7 @@ export function ViewHotkeys() {
           const target =
             (hovered && settings.gridChannels.includes(hovered) ? hovered : null) ??
             settings.focused ??
-            settings.gridChannels[0] ??
+            paneChannels(settings.gridChannels)[0] ??
             settings.channels[0];
           if (target) chat.focus(target);
           else chat.setMode("focused");
@@ -99,7 +111,14 @@ export function ViewHotkeys() {
 
       if (shortcut.type === "slot") {
         const name = settings.gridChannels[shortcut.index];
-        if (!name) return;
+        if (!name) {
+          // An empty pane in the grid: open its channel picker.
+          if (settings.mode === "grid" && shortcut.index < viewForSlots(settings.gridSlots)) {
+            event.preventDefault();
+            openPicker(shortcut.index);
+          }
+          return;
+        }
         event.preventDefault();
         if (settings.mode === "grid") focusComposer(name);
         else chat.focus(name);
@@ -109,7 +128,8 @@ export function ViewHotkeys() {
 
       if (shortcut.type === "cycle") {
         if (settings.mode !== "focused") return;
-        const order = settings.gridChannels.length ? settings.gridChannels : settings.channels;
+        const onGrid = paneChannels(settings.gridChannels);
+        const order = onGrid.length ? onGrid : settings.channels;
         const next = cycleChannel(order, settings.focused, shortcut.direction);
         if (!next || next === settings.focused) return;
         event.preventDefault();
@@ -124,7 +144,7 @@ export function ViewHotkeys() {
             ? hovered
             : settings.focused && settings.gridChannels.includes(settings.focused)
               ? settings.focused
-              : settings.gridChannels[0];
+              : paneChannels(settings.gridChannels)[0];
         if (!name) return;
         event.preventDefault();
         chat.moveGridChannel(name, shortcut.direction);

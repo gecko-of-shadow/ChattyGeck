@@ -1,7 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { toast } from "sonner";
 import { chat } from "@/lib/chat/controller";
-import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
 function elementAt(x: number, y: number): Element | null {
@@ -12,19 +10,14 @@ function slotAt(x: number, y: number): string | null {
   return elementAt(x, y)?.closest("[data-grid-channel]")?.getAttribute("data-grid-channel") ?? null;
 }
 
-function overGrid(x: number, y: number): boolean {
-  return !!elementAt(x, y)?.closest("[data-testid='chat-grid'], [data-testid='grid-canvas']");
-}
-
 let dragActive = false;
 
-/** Pointer or mouse drag for a grid header or a sidebar row. A short press still clicks. */
-export function beginChannelDrag(event: ReactPointerEvent | ReactMouseEvent, login: string, kind: "box" | "sidebar"): void {
+/** Pointer or mouse drag for a grid pane header (drop on another pane to swap). A short press still clicks. */
+export function beginChannelDrag(event: ReactPointerEvent | ReactMouseEvent, login: string, kind: "box"): void {
   if (dragActive || event.button !== 0) return;
   const target = event.target;
   if (target instanceof Element) {
-    const button = target.closest("button");
-    if (button && !button.hasAttribute("data-drag-channel")) return;
+    if (target.closest("button")) return;
     if (target.closest("input, textarea, [role='menu'], [data-no-drag]")) return;
   }
   dragActive = true;
@@ -62,27 +55,12 @@ export function beginChannelDrag(event: ReactPointerEvent | ReactMouseEvent, log
     useUi.setState({ dropTarget: null });
     if (!dragging) return;
     ev.preventDefault();
-    window.addEventListener("click", (click) => click.stopPropagation(), { capture: true, once: true });
-    // A Twitch follow that isn't in the app yet: add it (joins its chat) before placing it.
-    if (kind === "sidebar" && !useChat.getState().settings.channels.includes(login)) {
-      // Dropped on a pane it takes that pane's place (below), so it isn't also put in a free slot.
-      const added = chat.addChannel(login, { toGrid: !slot });
-      if (!added.ok) {
-        toast.error(added.error ?? `Couldn't open #${login}`);
-        return;
-      }
-    }
-    const mode = useChat.getState().settings.mode;
-    if (kind === "sidebar" && mode === "focused") {
-      chat.focus(login);
-      return;
-    }
-    if (slot && slot !== login) {
-      if (kind === "box") chat.swapGridChannels(login, slot);
-      else chat.replaceInGrid(slot, login);
-      return;
-    }
-    if (kind === "sidebar" && !slot && overGrid(x, y)) chat.showInGrid(login);
+    // The click that follows a drop isn't a click. When the browser sends none (the drop landed on another
+    // element), stop waiting soon, or the next real click (say a pane's "−") would be swallowed.
+    const swallow = (click: MouseEvent) => click.stopPropagation();
+    window.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 100);
+    if (kind === "box" && slot && slot !== login) chat.swapGridChannels(login, slot);
   };
 
   window.addEventListener("pointermove", move);

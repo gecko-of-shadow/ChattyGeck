@@ -51,12 +51,15 @@ export interface ChatState {
   globalEmoteVersion: number;
   badgeVersion: number;
   /**
-   * Channels the logged-in user follows on Twitch, by login. Only shown in the top strip: chat joins only the
+   * Channels the logged-in user follows on Twitch, by login. Only listed in the channel picker: chat joins only the
    * channels in settings.channels. Not saved; fetched again each launch.
    */
   follows: Record<string, FollowView>;
-  /** "needs-login": logged in before the follows permission existed, so the strip asks to log in again. */
-  followsState: "off" | "needs-login" | "ok";
+  /**
+   * "off": logged out. "loading": first fetch running. "needs-login": logged in before the follows permission existed,
+   * so the picker asks to log in again. "error": the fetch failed and there's no list yet (the picker offers Retry).
+   */
+  followsState: "off" | "loading" | "needs-login" | "ok" | "error";
   /** Viewer counts of channels that are live (app list and follows); missing = offline. Null = not known (logged out). */
   live: Record<string, number> | null;
 }

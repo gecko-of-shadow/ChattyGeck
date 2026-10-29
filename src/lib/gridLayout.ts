@@ -1,7 +1,7 @@
 /** Gap between chat panes (the design's 2px lines). */
 export const GRID_GAP = 2;
 
-/** The views the top-right switch offers: 1 = Single, the rest are grids. */
+/** The views the bottom-left switch offers: 1 = Single, the rest are grids. */
 export const VIEW_SIZES = [1, 2, 3, 4, 6, 9] as const;
 export type ViewSize = (typeof VIEW_SIZES)[number];
 

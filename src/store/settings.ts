@@ -1,6 +1,7 @@
 import { CONCRETE_SKINS, DEFAULT_AUTO_DARK, DEFAULT_AUTO_LIGHT, DEFAULT_SKIN, SKIN_ORDER, type ConcreteSkin, type Skin } from "@/lib/themes";
 import { parseHistoryServer } from "@/lib/chat/remoteHistory";
 import { viewForSlots } from "@/lib/gridLayout";
+import { EMPTY_PANE, paneChannels, trimPanes } from "@/lib/view/panes";
 import type { ThirdPartyProvider } from "@/lib/emotes/types";
 import { normalizeChannelName } from "@/lib/twitch/messages";
 
@@ -39,8 +40,8 @@ export interface Settings {
   /** Every channel you're following (IRC stays joined). */
   channels: string[];
   /**
-   * Subset of `channels` shown as boxes in Grid view (at most {@link MAX_GRID_SLOTS}).
-   * Other followed channels stay in the top strip until you pin them or open Single.
+   * The grid panes in order: channels from `channels` (at most {@link MAX_GRID_SLOTS}), with "" for an empty pane that
+   * keeps its place. Other channels wait in each pane's channel picker until you pick them or open Single.
    */
   gridChannels: string[];
   /** How many boxes the grid may hold (1–{@link MAX_GRID_SLOTS}). Older files omit this and stay at 4. */
@@ -66,7 +67,7 @@ export interface Settings {
   zebra: boolean;
   /** Closing the window hides ZooChattr in the system tray instead of quitting. */
   closeToTray: boolean;
-  /** Hide the top strip so the chat boxes fill the window (Ctrl+Shift+H, or the floating Show UI button). */
+  /** Hide the bottom bar so the chat boxes fill the window (Ctrl+Shift+H, or the floating Show UI button). */
   chromeHidden: boolean;
   /**
    * Watch-only: hide composers, emote/send controls, and channel-switch confirms on every pane.
@@ -328,9 +329,15 @@ export function sanitizeSettings(raw: unknown): Settings {
       if (name && !channels.includes(name)) channels.push(name);
     }
   }
-  const savedFocus = typeof input.focused === "string" && channels.includes(input.focused) ? input.focused : (channels[0] ?? null);
   // Older builds had a "merged" feed; the grid replaces it.
   const mode = input.mode === "merged" ? "grid" : pick(input.mode, ["grid", "focused"] as const, DEFAULT_SETTINGS.mode);
+  // View 1 emptied with "−" stays empty (older builds only saved null with no channels at all).
+  const savedFocus =
+    typeof input.focused === "string" && channels.includes(input.focused)
+      ? input.focused
+      : input.focused === null && mode === "focused"
+        ? null
+        : (channels[0] ?? null);
   const gridSlots = clampGridSlots(input.gridSlots);
   // Pins beyond the view are set aside (gridParked), not dropped.
   const { gridChannels, gridParked } = fitGridToView(
@@ -462,8 +469,9 @@ export function clampGridSlots(value: unknown): number {
 
 /** The focused channel, moved to the first pane when the grid is showing and it isn't on it. */
 export function focusOnGrid(mode: ViewMode, focused: string | null, gridChannels: readonly string[]): string | null {
-  if (mode !== "grid" || gridChannels.length === 0) return focused;
-  return focused && gridChannels.includes(focused) ? focused : gridChannels[0];
+  const shown = paneChannels(gridChannels);
+  if (mode !== "grid" || shown.length === 0) return focused;
+  return focused && shown.includes(focused) ? focused : shown[0];
 }
 
 /** Followed channels from a saved list, unique, in order (unknown names dropped), at most {@link MAX_GRID_SLOTS}. */
@@ -491,14 +499,19 @@ export function fitGridToView(
   refill = true,
 ): { gridChannels: string[]; gridParked: string[] } {
   const view = viewForSlots(slots);
-  const shown = [...new Set(gridChannels)];
-  const rest = [...shown.slice(view), ...gridParked].filter((name, i, list) => !shown.slice(0, view).includes(name) && list.indexOf(name) === i);
-  const grid = shown.slice(0, view);
-  while (refill && grid.length < view && rest.length) grid.push(rest.shift()!);
-  return { gridChannels: grid, gridParked: rest.slice(0, MAX_GRID_SLOTS) };
+  // Each channel once; empty panes keep their place.
+  const panes = gridChannels.filter((name, i) => name === EMPTY_PANE || gridChannels.indexOf(name) === i);
+  const grid = panes.slice(0, view);
+  const rest = [...paneChannels(panes.slice(view)), ...gridParked].filter(
+    (name, i, list) => name !== EMPTY_PANE && !grid.includes(name) && list.indexOf(name) === i,
+  );
+  if (refill) {
+    for (let i = 0; i < view && rest.length; i++) if (!grid[i]) grid[i] = rest.shift()!;
+  }
+  return { gridChannels: trimPanes(grid), gridParked: rest.slice(0, MAX_GRID_SLOTS) };
 }
 
-/** Pins that still exist, unique, at most `slots`. Missing list → the first slots (older builds). */
+/** Pins that still exist, unique, at most `slots` panes ("" = empty pane kept). Missing list → the first slots (older builds). */
 function sanitizeGridChannels(raw: unknown, channels: string[], slots = DEFAULT_GRID_SLOTS): string[] {
   const cap = clampGridSlots(slots);
   const allowed = new Set(channels);
@@ -506,12 +519,16 @@ function sanitizeGridChannels(raw: unknown, channels: string[], slots = DEFAULT_
   if (Array.isArray(raw)) {
     for (const entry of raw) {
       if (typeof entry !== "string") continue;
-      const name = normalizeChannelName(entry);
-      if (!name || !allowed.has(name) || out.includes(name)) continue;
-      out.push(name);
+      if (entry === EMPTY_PANE) {
+        out.push(EMPTY_PANE);
+      } else {
+        const name = normalizeChannelName(entry);
+        if (!name || !allowed.has(name) || out.includes(name)) continue;
+        out.push(name);
+      }
       if (out.length >= cap) break;
     }
-    return out;
+    return trimPanes(out);
   }
   return channels.slice(0, cap);
 }

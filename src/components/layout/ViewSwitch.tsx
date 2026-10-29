@@ -13,7 +13,7 @@ const VIEW_HINTS: Record<ViewSize, string> = {
   9: "9 chats, 3 by 3",
 };
 
-/** The 1 · 2 · 3 · 4 · 6 · 9 switch at the top right. 1 is Single; the others are grid views. `testIds` off for copies (Settings). */
+/** The 1 · 2 · 3 · 4 · 6 · 9 switch at the bottom left. 1 is Single; the others are grid views. `testIds` off for copies (Settings). */
 export function ViewSwitch({ testIds = true, label = "View: how many chats" }: { testIds?: boolean; label?: string } = {}) {
   const current = useChat((s) => (s.settings.mode === "focused" ? 1 : viewForSlots(s.settings.gridSlots)));
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);

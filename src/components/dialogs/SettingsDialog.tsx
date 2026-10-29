@@ -164,17 +164,17 @@ function Choice<T extends string | number>({
   );
 }
 
-/** The same switch as the top right, so the two always agree (1 is Single there too). */
+/** The same switch as at the bottom left, so the two always agree (1 is Single there too). */
 function GridSlotsRow() {
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex flex-col items-start gap-0.5">
         <span className="text-sm">Grid slots</span>
         <span className="text-xs font-normal text-muted-foreground">
-          How many chats show at once; 1 is a single chat. The same switch as at the top right.
+          How many chats show at once; 1 is a single chat. The same switch as at the bottom left.
         </span>
       </div>
-      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the top)" />
+      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the bottom left)" />
     </div>
   );
 }
@@ -1499,7 +1499,7 @@ export function SettingsBody({
 
 const SHORTCUTS: [string, string][] = [
   ["Ctrl+G", "Grid ↔ single chat"],
-  ["Ctrl+K", "Find or add a channel"],
+  ["Ctrl+K", "Find an open channel"],
   ["Ctrl+1 … Ctrl+9", "Jump to a grid pane"],
   ["Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous chat (single)"],
   ["Alt+Enter (in Ctrl+K)", "Put the channel in a grid pane"],
@@ -1511,11 +1511,12 @@ const SHORTCUTS: [string, string][] = [
   ["Shift+Enter", "Don't send yet"],
   ["Ctrl+Enter", "Save a word list"],
   ["Ctrl+Shift+R", "Read only on / off"],
-  ["Ctrl+Shift+H", "Hide / show the top strip"],
-  ["Menu key / Shift+F10", "Channel menu on an avatar"],
+  ["Ctrl+Shift+H", "Hide / show the bottom bar"],
+  ["⋯ on a pane header", "Pick or add a channel for that pane"],
+  ["Menu key / Shift+F10", "Channel menu (in the channel picker)"],
   ["Drag a header", "Swap grid panes"],
   ["Double-click a header", "Open the chat alone"],
-  ["Drag an avatar", "Put a channel in a pane"],
+  ["Right-click a header or picker row", "Channel menu"],
   ["Right-click an emote", "Favourite it (emote panel)"],
 ];
 
@@ -1567,9 +1568,9 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
-      // A menu, popover or the login dialog inside Settings closes first.
-      if (document.querySelector("[role='menu'], [role='listbox'], [data-slot='popover-content'], [data-slot='dialog-content']")) return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      // A menu, popover or the login dialog inside Settings closes first (a pane's channel picker beside it doesn't count).
+      if (document.querySelector("[role='menu'], [role='listbox']:not([data-picker-list]), [data-slot='popover-content'], [data-slot='dialog-content']")) return;
       event.preventDefault();
       // Text fields save on blur; blur first so a half-typed edit isn't lost when the panel goes away.
       (document.activeElement as HTMLElement | null)?.blur();
