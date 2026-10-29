@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+
+### Changed
+
+- No more top bar: nothing sits above the chats. One bar at the bottom holds the view switch (1 · 2 · 3 · 4 · 6 · 9) on the left, the message box in the middle and the connection dot and Settings gear on the right. On a narrow window the message box gets its own row.
+- Each pane picks its own channel. A pane header has two buttons: − empties the pane (it keeps its place, also after a restart) and ⋯ opens a channel picker inside the pane: search, your Twitch follows under Following, channels you added under Added, live dots and unread counts. Arrow keys and Enter work; Esc or Back closes it.
+- Channels are added only in the picker: type a name, #name or twitch.tv link and pick "Add". Ctrl+K still jumps between open channels.
+- The channel menu (Open alone, Emote status, Reload emotes, Open on twitch.tv, Move up/down, Leave) is on right-click of a pane header or a picker row, or the Menu key in the picker.
+- Ctrl+Shift+H hides the bottom bar.
+
+### Fixed
+
+- After dragging a pane header onto another pane, the next click is no longer ignored.
+
 ## 0.6.0
 
 ### Changed
