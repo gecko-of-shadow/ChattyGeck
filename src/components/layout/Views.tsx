@@ -238,7 +238,8 @@ function PaneButtons({
 }) {
   const open = useUi((s) => s.pickerPane === pane);
   return (
-    <>
+    // Side by side with no gap between them (the owner's choice), right at the header's edge.
+    <span className="-mr-0.5 flex shrink-0 items-center">
       <Button
         variant="ghost"
         size="icon-xs"
@@ -261,7 +262,7 @@ function PaneButtons({
       >
         <MoreHorizontal className="size-3.5" />
       </Button>
-    </>
+    </span>
   );
 }
 
