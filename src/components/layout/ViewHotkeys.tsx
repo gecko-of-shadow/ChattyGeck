@@ -79,8 +79,8 @@ export function ViewHotkeys() {
               ? "Read only on: message box hidden"
               : "Read only off"
             : on
-              ? "Top strip hidden. Ctrl+Shift+H shows it again"
-              : "Top strip shown";
+              ? "Bottom bar hidden. Ctrl+Shift+H shows it again"
+              : "Bottom bar shown";
         useUi.setState((u) => ({ liveMessage: text, liveNonce: u.liveNonce + 1 }));
         return;
       }

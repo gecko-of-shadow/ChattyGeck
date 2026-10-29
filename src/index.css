@@ -788,10 +788,6 @@ html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
     outline: 2px solid Highlight !important;
     outline-offset: 1px;
   }
-  /* Strip avatars draw "in the grid" as an outline; keep the focus outline clear of it. */
-  [data-drag-channel]:focus-visible {
-    outline-offset: 5px !important;
-  }
   .zc-badge,
   .zc-live-dot {
     forced-color-adjust: none;

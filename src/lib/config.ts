@@ -15,7 +15,7 @@ export const config = {
   builtInClientId: (env.TWITCH_CLIENT_ID || "").trim(),
   /** Bran's chat logger, built in at release time like the Client ID. Never its read token: that is a secret. */
   builtInHistoryServer: (env.VITE_HISTORY_SERVER || "").trim(),
-  // user:read:follows: the top strip shows the channels you follow on Twitch (Bran's choice, Q1 A).
+  // user:read:follows: the channel picker lists the channels you follow on Twitch (the owner's choice, Q1 A).
   scopes: ["chat:read", "chat:edit", "user:read:follows"],
   messageCapPerChannel: 400,
 } as const;

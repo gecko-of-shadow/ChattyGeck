@@ -92,7 +92,7 @@ const PickerRowView = memo(function PickerRowView({
             <span
               aria-hidden
               data-live-dot
-              className="zc-live-dot pointer-events-none absolute bottom-0 left-0 size-1.5 rounded-full bg-live ring-[1.5px] ring-background"
+              className="zc-live-dot pointer-events-none absolute bottom-0 left-0 size-1.5 rounded-full bg-live ring-[1.5px] ring-surface"
             />
           ) : null}
         </span>

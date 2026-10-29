@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { chat } from "@/lib/chat/controller";
-import { toast } from "sonner";
-import { normalizeChannelName } from "@/lib/twitch/messages";
 import { fuzzyChannels } from "@/lib/view/fuzzy";
 import { paneChannels } from "@/lib/view/panes";
 import { useChat } from "@/store/chat";
 import { useUi } from "@/store/ui";
 
-/** Ctrl+K. Enter opens Single. Alt+Enter drops the channel into the active grid slot. A new name can be added here. */
+/** Ctrl+K. Enter opens Single. Alt+Enter drops the channel into the active grid slot. (New channels: a pane's picker.) */
 export function QuickSwitcher() {
   const open = useUi((s) => s.quickSwitchOpen);
   const channels = useChat((s) => s.settings.channels);
@@ -26,19 +24,6 @@ export function QuickSwitcher() {
 
   const close = () => useUi.setState({ quickSwitchOpen: false });
   const current = matches[Math.min(index, Math.max(0, matches.length - 1))];
-  // Nothing followed matches: offer to add what was typed (a name, #name or twitch.tv link).
-  const addable = matches.length === 0 && query.trim() ? normalizeChannelName(query) : null;
-
-  const addAndOpen = () => {
-    if (!addable) return;
-    const result = chat.addChannel(query);
-    if (!result.ok) {
-      toast.error(result.error ?? "Couldn't add that channel.");
-      return;
-    }
-    chat.focus(addable);
-    close();
-  };
 
   const choose = (name: string, intoGrid: boolean) => {
     if (intoGrid) {
@@ -89,9 +74,6 @@ export function QuickSwitcher() {
             } else if (event.key === "Enter" && current) {
               event.preventDefault();
               choose(current, event.altKey);
-            } else if (event.key === "Enter" && addable) {
-              event.preventDefault();
-              addAndOpen();
             } else if (event.key === "Escape") {
               event.preventDefault();
               event.stopPropagation();
@@ -117,19 +99,10 @@ export function QuickSwitcher() {
               </button>
             </li>
           ))}
-          {matches.length === 0 && addable ? (
-            <li>
-              <button
-                type="button"
-                data-testid="quick-switch-add"
-                className="flex w-full rounded-md bg-primary px-2 py-1.5 text-left text-sm text-primary-foreground"
-                onClick={addAndOpen}
-              >
-                Add #{addable} and open it (Enter)
-              </button>
+          {matches.length === 0 ? (
+            <li role="option" aria-selected={false} aria-disabled className="px-2 py-2 text-sm text-muted-foreground">
+              No open channel matches. To add one, use a pane's channel picker (the ⋯ button).
             </li>
-          ) : matches.length === 0 ? (
-            <li role="option" aria-selected={false} aria-disabled className="px-2 py-2 text-sm text-muted-foreground">No followed channel matches. Type a channel name or twitch.tv link to add it.</li>
           ) : null}
         </ul>
         <div className="mt-1 flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">

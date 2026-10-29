@@ -1148,7 +1148,7 @@ class ChatController {
   }
 
   /**
-   * The top-right view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
+   * The bottom-right view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
    * sets the extra pins aside; going up brings them back.
    */
   setView(view: ViewSize): void {
@@ -1857,7 +1857,7 @@ class ChatController {
     // A token that's about to expire is refreshed first, so the check itself doesn't hit a 401.
     const session = await this.pollSession();
     if (!session || generation !== this.followsGeneration) return;
-    // Logged in before ZooChattr asked for this permission: the strip offers a fresh login instead.
+    // Logged in before ZooChattr asked for this permission: the picker offers a fresh login instead.
     if (!hasFollowsScope(session.scopes)) {
       this.followsFetchedAt = Date.now();
       set({ follows: {}, followsState: "needs-login" });
@@ -1876,7 +1876,7 @@ class ChatController {
         follows[f.login] = { displayName: f.displayName, followedAt: f.followedAt, avatarUrl: before[f.login]?.avatarUrl };
       }
       set({ follows, followsState: "ok" });
-      // Pictures for every follow (kept across refreshes), so one you Leave keeps its picture in the strip.
+      // Pictures for every follow (kept across refreshes), so one you Leave keeps its picture in the picker.
       const missing = list.map((f) => f.login).filter((login) => !follows[login].avatarUrl);
       if (missing.length) void this.loadFollowPictures(session, missing, generation);
     } catch (err) {
@@ -1916,7 +1916,7 @@ class ChatController {
     }
   }
 
-  /** Viewer counts for every channel in the strip. Skipped while the window is hidden (tray or minimised). */
+  /** Viewer counts for every channel in the picker. Skipped while the window is hidden (tray or minimised). */
   private async pollLive(): Promise<void> {
     if (!this.session || document.hidden) return;
     const generation = this.followsGeneration;

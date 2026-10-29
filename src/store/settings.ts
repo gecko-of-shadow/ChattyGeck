@@ -67,7 +67,7 @@ export interface Settings {
   zebra: boolean;
   /** Closing the window hides ZooChattr in the system tray instead of quitting. */
   closeToTray: boolean;
-  /** Hide the top strip so the chat boxes fill the window (Ctrl+Shift+H, or the floating Show UI button). */
+  /** Hide the bottom bar so the chat boxes fill the window (Ctrl+Shift+H, or the floating Show UI button). */
   chromeHidden: boolean;
   /**
    * Watch-only: hide composers, emote/send controls, and channel-switch confirms on every pane.

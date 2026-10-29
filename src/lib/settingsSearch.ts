@@ -225,13 +225,13 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "grid-slots",
         label: "Grid slots",
-        hint: "How many chats show at once; 1 is a single chat. The same switch as at the top right.",
+        hint: "How many chats show at once; 1 is a single chat. The same switch as at the bottom right.",
         choices: ["1", "2", "3", "4", "6", "9"],
       },
       {
         id: "shortcuts",
         label: "Keyboard shortcuts",
-        hint: "Ctrl+G grid and single. Ctrl+K switch or add a channel. Menu key or Shift+F10 on an avatar. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc. Ctrl+Shift+R read only. Ctrl+Shift+H hide the top strip. Ctrl+Enter saves a word list.",
+        hint: "Ctrl+G grid and single. Ctrl+K switch channel. The ⋯ on a pane picks or adds a channel. Menu key or Shift+F10 in the channel picker. Ctrl+1 to 9. Ctrl+Tab. Alt+Shift+Arrow. Esc. Ctrl+Shift+R read only. Ctrl+Shift+H hide the bottom bar. Ctrl+Enter saves a word list.",
       },
     ],
   },

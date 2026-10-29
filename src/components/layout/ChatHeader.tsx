@@ -18,9 +18,9 @@ function useCountdown(targetMs: number | null): number {
 }
 
 /**
- * Connection status as a small dot by the view switch (not a button). The shape changes too, so it doesn't rely on
+ * Connection status as a small dot next to the Settings gear (not a button). The shape changes too, so it doesn't rely on
  * colour alone: a solid dot when live, an open ring while connecting, a closed ring when offline or the login is
- * rejected. The words are in the tooltip and for screen readers; the banner under the strip has Retry now.
+ * rejected. The words are in the tooltip and for screen readers; the banner above the bottom bar has Retry now.
  */
 export function ConnectionDot() {
   const read = useChat((s) => s.read);

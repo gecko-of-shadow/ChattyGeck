@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import { PanelLeftOpen } from "lucide-react";
-import { Composer, LoginPrompt } from "@/components/chat/Composer";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
 import { Mascot } from "@/components/mascots/Mascot";
-import { TopBar } from "@/components/layout/ChannelStrip";
+import { BottomBar } from "@/components/layout/BottomBar";
 import { ConnectionBanner } from "@/components/layout/ChatHeader";
 import { QuickSwitcher } from "@/components/layout/QuickSwitcher";
 import { ViewHotkeys } from "@/components/layout/ViewHotkeys";
@@ -30,11 +29,11 @@ function BootScreen() {
   );
 }
 
-/** Floating controls while the top strip is hidden (Ctrl+Shift+H). */
+/** Floating controls while the bottom bar is hidden (Ctrl+Shift+H). */
 function ChromeReveal() {
   const readOnly = useChat((s) => s.settings.readOnly);
   return (
-    <div className="absolute top-2 left-2 z-30 flex items-center gap-1.5">
+    <div className="absolute bottom-2 left-2 z-30 flex items-center gap-1.5">
       <Button
         type="button"
         size="sm"
@@ -42,7 +41,7 @@ function ChromeReveal() {
         className="gap-1.5 shadow-lg"
         data-testid="show-chrome"
         onClick={() => chat.updateSettings({ chromeHidden: false })}
-        title="Show the top strip (Ctrl+Shift+H)"
+        title="Show the bottom bar (Ctrl+Shift+H)"
       >
         <PanelLeftOpen className="size-3.5" />
         Show UI
@@ -78,11 +77,8 @@ export default function App() {
   const mode = useChat((s) => s.settings.mode);
   const focused = useChat((s) => s.settings.focused);
   const gridSlots = useChat((s) => s.settings.gridSlots);
-  const count = useChat((s) => s.settings.channels.length);
   const chromeHidden = useChat((s) => s.settings.chromeHidden);
-  const readOnly = useChat((s) => s.settings.readOnly);
   const mentions = useChat((s) => Object.values(s.channels).reduce((sum, c) => sum + c.mentions, 0));
-  const loggedIn = useChat((s) => s.auth.status === "logged_in");
   // One shared message box: Single sends to its channel, the grid to the focused pane (only while it's on screen).
   const composerChannel = useChat((s) =>
     s.settings.mode === "focused"
@@ -167,9 +163,7 @@ export default function App() {
       ) : (
         <div className="relative flex h-full">
           <main className="relative flex min-w-0 flex-1 flex-col">
-            {chromeHidden ? <ChromeReveal /> : <TopBar />}
-            {chromeHidden ? null : <ConnectionBanner />}
-            {/* Settings opens as a panel over the right part of the chats, between the strip and the message box. */}
+            {/* Nothing above the panes. Settings opens as a panel over the right part of the chats, above the bottom bar. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
               {mode === "grid" ? (
                 <GridView />
@@ -179,12 +173,10 @@ export default function App() {
                 <EmptySingleView />
               )}
               <SettingsDialog />
+              {chromeHidden ? <ChromeReveal /> : null}
             </div>
-            {readOnly ? null : composerChannel ? (
-              <Composer channel={composerChannel} />
-            ) : count > 0 && !loggedIn ? (
-              <LoginPrompt />
-            ) : null}
+            {chromeHidden ? null : <ConnectionBanner />}
+            {chromeHidden ? null : <BottomBar channel={composerChannel} />}
           </main>
           <LoginDialog />
           <QuitConfirmDialog />
