@@ -41,14 +41,12 @@ export function pickerModel(
   appChannels: readonly string[],
   follows: Readonly<Record<string, FollowView>>,
   displayNames: Readonly<Record<string, string | undefined>> = {},
+  // The follow order doesn't depend on what's typed: pass sortFollows(follows) once instead of sorting per keystroke.
+  followed: readonly string[] = sortFollows(follows),
 ): PickerModel {
   const term = searchTerm(query);
   const matches = (row: PickerRow) => !term || row.login.includes(term) || row.name.toLowerCase().includes(term);
 
-  const followed = Object.keys(follows).sort((a, b) => {
-    const diff = Date.parse(follows[b].followedAt) - Date.parse(follows[a].followedAt);
-    return diff || a.localeCompare(b);
-  });
   const following: PickerRow[] = followed
     .map((login) => ({ kind: "channel" as const, login, name: follows[login].displayName || login, section: "following" as const }))
     .filter(matches);
@@ -62,6 +60,12 @@ export function pickerModel(
   const addable = candidate && !listed ? candidate : null;
   const items: PickerItem[] = [...following, ...added, ...(addable ? [{ kind: "add" as const, login: addable }] : [])];
   return { following, added, addable, items };
+}
+
+/** Followed channels, most recently followed first (ties by name). */
+export function sortFollows(follows: Readonly<Record<string, FollowView>>): string[] {
+  const time = new Map(Object.entries(follows).map(([login, f]) => [login, Date.parse(f.followedAt)]));
+  return [...time.keys()].sort((a, b) => time.get(b)! - time.get(a)! || a.localeCompare(b));
 }
 
 /** Arrow keys: one row up or down, stopping at the ends (Home / End jump there). */

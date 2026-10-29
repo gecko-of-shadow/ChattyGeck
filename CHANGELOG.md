@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3
+
+### Fixed
+
+- The channel picker opens instantly with a long follow list (with 500 follows it used to stall for a moment, and again when you cleared the search).
+- The newest chat line no longer stays half below a pane's bottom edge after an emote picture finishes loading or after the window comes back from behind other windows.
+
 ## 0.7.2
 
 ### Changed

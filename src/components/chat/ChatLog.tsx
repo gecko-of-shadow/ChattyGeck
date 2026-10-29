@@ -151,9 +151,27 @@ export function ChatLog({
     });
     observer.observe(content);
     observer.observe(box);
+    // Belt and braces for a last line left half below the edge: an emote picture that finished loading, or the
+    // window coming back from behind other windows (Windows stops drawing it there), re-pins while live.
+    const repin = () => {
+      if (pauseRef.current) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!pauseRef.current) scrollToBottom();
+      });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") repin();
+    };
+    content.addEventListener("load", repin, true);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", repin);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      content.removeEventListener("load", repin, true);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", repin);
     };
   }, [scrollToBottom]);
 
