@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.2
+
+### Changed
+
+- The − and ⋯ buttons in a pane header sit together at the pane's edge, with no gap between them.
+
 ## 0.7.1
 
 ### Changed

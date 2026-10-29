@@ -243,6 +243,8 @@ function PaneButtons({
       <Button
         variant="ghost"
         size="icon-xs"
+        // Touching buttons: the focused one draws on top, so its focus ring isn't hidden by its neighbour.
+        className="relative focus-visible:z-10"
         onClick={onClear}
         aria-label={`Clear this pane (#${name} stays in the channel picker)`}
         title="Clear this pane"
@@ -253,6 +255,7 @@ function PaneButtons({
       <Button
         variant={open ? "secondary" : "ghost"}
         size="icon-xs"
+        className="relative focus-visible:z-10"
         onClick={() => (open ? closePicker() : openPicker(pane))}
         aria-label={`Pick a channel for this pane (now #${name})`}
         aria-expanded={open}
