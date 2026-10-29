@@ -265,7 +265,10 @@ await step("Twitch follows show in the picker with live dots and viewer counts",
 
 await step("channel switch blocks send until unlock (in the bottom bar)", async () => {
   await page.getByTestId("bottom-bar").getByTestId("channel-switch-ack").waitFor({ timeout: 5_000 });
-  await page.getByTestId("channel-switch-ack").getByText("You switched channels. Confirm before sending.").waitFor({ timeout: 2_000 });
+  // The sentence is the button's tooltip now, not a line above it.
+  const why = await page.getByTestId("channel-switch-unlock").getAttribute("title");
+  if (why !== "You switched channels. Confirm before sending.") throw new Error(`unlock tooltip: "${why}"`);
+  if (await page.getByTestId("channel-switch-ack").locator("p").count()) throw new Error("the line above the button is back");
   const unlock = page.getByTestId("channel-switch-unlock");
   if ((await unlock.innerText()).trim() !== "chat in #geckotown") {
     throw new Error(`unlock button text: "${await unlock.innerText()}"`);

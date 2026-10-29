@@ -567,15 +567,14 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           className={cn("flex flex-col", compact ? "gap-0" : "gap-1.5")}
           data-testid="channel-switch-ack"
         >
-          {compact ? null : (
-            <p className="text-xs text-muted-foreground">You switched channels. Confirm before sending.</p>
-          )}
+          {/* No line of text above the button (the owner's choice): the sentence is its tooltip and spoken description. */}
           <Button
             type="button"
             size={compact ? "sm" : "default"}
             className={cn("h-8 w-full shrink-0", compact && "text-[13px]")}
             data-testid="channel-switch-unlock"
-            title={compact ? "You switched channels. Confirm before sending." : undefined}
+            title="You switched channels. Confirm before sending."
+            aria-description="You switched channels. Confirm before sending."
             onClick={() => {
               ackSendChannel(channel);
               setTimeout(() => inputRef.current?.focus(), 0);
