@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+### Changed
+
+- The bottom bar is slimmer and even: the view switch, message box, emote button, Send, connection dot and Settings gear are all the same height, and the message box fills all the space between the view switch and the gear.
+- No line of text above "chat in #channel" any more. You still confirm before sending to a new channel; the reason is in the button's tooltip.
+
 ## 0.7.0
 
 ### Changed
