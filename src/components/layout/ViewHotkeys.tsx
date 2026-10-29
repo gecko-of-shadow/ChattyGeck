@@ -51,6 +51,8 @@ export function ViewHotkeys() {
           return;
         }
         if (overlayOpen()) return;
+        // Esc in the Settings panel closes Settings (the panel handles it), even with a pane's picker open beside it.
+        if (useUi.getState().settingsOpen && document.activeElement?.closest("[data-testid='settings-panel']")) return;
         // An open channel picker closes first (it handles Esc itself while focus is inside it).
         if (useUi.getState().pickerPane !== null) {
           event.preventDefault();

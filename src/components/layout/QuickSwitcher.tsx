@@ -84,7 +84,7 @@ export function QuickSwitcher() {
           aria-label="Channel search"
           className="h-9 w-full rounded-lg border bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         />
-        <ul role="listbox" aria-label="Followed channels" className="zoo-scroll mt-1 max-h-64 overflow-y-auto">
+        <ul role="listbox" aria-label="Open channels" className="zoo-scroll mt-1 max-h-64 overflow-y-auto">
           {matches.map((name, i) => (
             <li key={name}>
               <button

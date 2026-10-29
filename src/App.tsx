@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { PanelLeftOpen } from "lucide-react";
+import { PanelBottomOpen } from "lucide-react";
 import { LoginDialog } from "@/components/dialogs/LoginDialog";
 import { QuitConfirmDialog } from "@/components/dialogs/QuitConfirmDialog";
 import { SettingsDialog } from "@/components/dialogs/SettingsDialog";
@@ -43,7 +43,7 @@ function ChromeReveal() {
         onClick={() => chat.updateSettings({ chromeHidden: false })}
         title="Show the bottom bar (Ctrl+Shift+H)"
       >
-        <PanelLeftOpen className="size-3.5" />
+        <PanelBottomOpen className="size-3.5" />
         Show UI
       </Button>
       <Button

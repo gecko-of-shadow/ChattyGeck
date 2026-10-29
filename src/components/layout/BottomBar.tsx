@@ -33,6 +33,7 @@ function SettingsGear() {
  */
 export function BottomBar({ channel }: { channel: string | null }) {
   const readOnly = useChat((s) => s.settings.readOnly);
+  const emptySingle = useChat((s) => s.settings.mode === "focused" && !s.settings.focused);
   const loggedIn = useChat((s) => s.auth.status === "logged_in");
   const anyChannel = useChat((s) => s.settings.channels.length > 0);
 
@@ -50,21 +51,25 @@ export function BottomBar({ channel }: { channel: string | null }) {
   } else {
     middle = (
       <p className="min-w-0 flex-1 truncate py-1.5 text-center text-xs text-muted-foreground" data-testid="bottom-bar-hint">
-        {anyChannel ? "Click a pane to chat in it." : "Pick a channel in a pane to start reading."}
+        {anyChannel && !emptySingle ? "Click a pane to chat in it." : "Pick a channel in a pane to start reading."}
       </p>
     );
   }
 
   return (
-    <div className="flex shrink-0 items-end gap-2 border-t border-border bg-surface px-2 py-2" data-testid="bottom-bar">
+    // Narrow windows: the message box gets a row of its own above gear and view switch, so there's room to type.
+    <div
+      className="flex shrink-0 flex-wrap items-end gap-2 border-t border-border bg-surface px-2 py-2 sm:flex-nowrap"
+      data-testid="bottom-bar"
+    >
       <div className="flex shrink-0 items-center gap-1" data-testid="bottom-bar-left">
         <SettingsGear />
         <ConnectionDot />
       </div>
-      <div className="flex min-w-0 flex-1" data-testid="bottom-bar-middle">
+      <div className="order-first flex min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto" data-testid="bottom-bar-middle">
         {middle}
       </div>
-      <div className="shrink-0" data-testid="bottom-bar-right">
+      <div className="ml-auto shrink-0 sm:ml-0" data-testid="bottom-bar-right">
         <ViewSwitch />
       </div>
     </div>

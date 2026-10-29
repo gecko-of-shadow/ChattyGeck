@@ -1010,6 +1010,9 @@ await step("small window: the bottom bar and the picker still fit", async () => 
   if (overflow > 0) throw new Error(`page scrolls sideways by ${overflow}px`);
   const last = await page.getByTestId("view-9").boundingBox();
   if (!last || last.x + last.width > 420) throw new Error("view switch is cut off");
+  // Narrow window: the message box has a row of its own, so there's room to type.
+  const middle = await page.getByTestId("bottom-bar-middle").boundingBox();
+  if (!middle || middle.width < 380) throw new Error(`message box row is only ${middle?.width}px wide`);
   await shot("08-small-window");
 });
 

@@ -329,7 +329,7 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
         <section aria-labelledby={`${prefix}-following-h`} data-testid="picker-section-following">
           <SectionHeading id={`${prefix}-following-h`}>Following</SectionHeading>
           {model.following.length === 0 ? <FollowingNote query={query} hasFollows={Object.keys(follows).length > 0} /> : null}
-          <div role="listbox" id={`${prefix}-following`} aria-labelledby={`${prefix}-following-h`}>
+          <div role="listbox" id={`${prefix}-following`} aria-labelledby={`${prefix}-following-h`} data-picker-list>
             {rowsFor("following")}
           </div>
         </section>
@@ -341,7 +341,7 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
           ) : model.added.length === 0 ? (
             <Note>{addedAll.length === 0 ? "Nothing added by hand yet. Type a channel name or twitch.tv link above to add one." : "No matches"}</Note>
           ) : null}
-          <div role="listbox" id={`${prefix}-added`} aria-labelledby={`${prefix}-added-h`}>
+          <div role="listbox" id={`${prefix}-added`} aria-labelledby={`${prefix}-added-h`} data-picker-list>
             {rowsFor("added")}
             {addItem ? (
               <div

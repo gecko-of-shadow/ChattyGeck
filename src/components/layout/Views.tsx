@@ -61,7 +61,7 @@ function useEmoteStatus(channel: string) {
 function EmoteStatusNote({ channel, compact = false }: { channel: string; compact?: boolean }) {
   const { failing, total } = useEmoteStatus(channel);
   if (compact && !failing) return null;
-  const label = failing ? `Emotes in #${channel}: an emote source failed. Right-click the header for Emote status.` : `${total} channel emotes`;
+  const label = failing ? `Emotes in #${channel}: an emote source failed. Right-click the header (or Shift+F10 on its row in the channel picker) for Emote status.` : `${total} channel emotes`;
   return (
     <span
       role="img"
@@ -275,6 +275,8 @@ function EmptyPaneBody({ pane, testId, hint }: { pane: PaneTarget; testId: strin
         <ChannelPicker pane={pane} label="Pick a channel for this empty pane" />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 overflow-y-auto p-4 text-center">
+          {/* The theme's animal stays on empty screens (still, no animation: a 9-pane view can have many). */}
+          <Mascot className="size-10 opacity-80" />
           <Button variant="outline" size="sm" onClick={() => openPicker(pane)} data-testid={testId} data-pane-return={String(pane)}>
             Pick a channel
           </Button>

@@ -1862,7 +1862,11 @@ class ChatController {
     const generation = this.followsGeneration;
     // A token that's about to expire is refreshed first, so the check itself doesn't hit a 401.
     const session = await this.pollSession();
-    if (!session || generation !== this.followsGeneration) return;
+    if (generation !== this.followsGeneration) return;
+    if (!session) {
+      if (get().followsState === "loading") set({ followsState: "error" });
+      return;
+    }
     // Logged in before ZooChattr asked for this permission: the picker offers a fresh login instead.
     if (!hasFollowsScope(session.scopes)) {
       this.followsFetchedAt = Date.now();

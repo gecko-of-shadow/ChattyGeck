@@ -174,7 +174,7 @@ function GridSlotsRow() {
           How many chats show at once; 1 is a single chat. The same switch as at the bottom right.
         </span>
       </div>
-      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the top)" />
+      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the bottom right)" />
     </div>
   );
 }
@@ -1563,8 +1563,8 @@ export function SettingsDialog() {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      // A menu, popover or the login dialog inside Settings closes first.
-      if (document.querySelector("[role='menu'], [role='listbox'], [data-slot='popover-content'], [data-slot='dialog-content']")) return;
+      // A menu, popover or the login dialog inside Settings closes first (a pane's channel picker beside it doesn't count).
+      if (document.querySelector("[role='menu'], [role='listbox']:not([data-picker-list]), [data-slot='popover-content'], [data-slot='dialog-content']")) return;
       event.preventDefault();
       // Text fields save on blur; blur first so a half-typed edit isn't lost when the panel goes away.
       (document.activeElement as HTMLElement | null)?.blur();
