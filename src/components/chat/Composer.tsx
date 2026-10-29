@@ -79,12 +79,12 @@ export function LoginPrompt() {
   const booting = useChat((s) => s.auth.status === "booting");
   return (
     <div className="min-w-0 flex-1" data-testid="login-prompt">
-      <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-3 px-1 py-0.5">
+      <div className="flex w-full flex-wrap items-center gap-3 px-1">
         <Mascot className="size-7 shrink-0" />
         <p className="min-w-0 flex-1 text-sm text-muted-foreground">
           You're reading anonymously. Log in with Twitch to chat back.
         </p>
-        <Button size="sm" onClick={() => useUi.setState({ loginOpen: true })} disabled={booting}>
+        <Button size="sm" className="h-8" onClick={() => useUi.setState({ loginOpen: true })} disabled={booting}>
           Log in with Twitch
         </Button>
       </div>
@@ -554,8 +554,8 @@ export function Composer({ channel, compact = false }: { channel: string | null;
 
   return (
     <div className="min-w-0 flex-1" data-testid="composer">
-      {/* Middle of the bottom bar; what's in it stays a comfortable width, centered, when the window is wide. */}
-      <div className="mx-auto w-full max-w-3xl" data-testid="composer-inner">
+      {/* Middle of the bottom bar: fills the space between the view switch and the gear. */}
+      <div className="w-full" data-testid="composer-inner">
       {error ? (
         <div role="alert" className={cn("flex items-start gap-1.5 text-danger-text", compact ? "mb-1 text-[11px]" : "mb-2 text-xs")}>
           <CircleAlert className="mt-px size-3.5 shrink-0" />
@@ -573,7 +573,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           <Button
             type="button"
             size={compact ? "sm" : "default"}
-            className={cn("w-full shrink-0", compact ? "h-8 text-[13px]" : "h-10")}
+            className={cn("h-8 w-full shrink-0", compact && "text-[13px]")}
             data-testid="channel-switch-unlock"
             title={compact ? "You switched channels. Confirm before sending." : undefined}
             onClick={() => {
@@ -682,7 +682,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
               aria-controls={completion ? listId : undefined}
               aria-expanded={tabComplete ? !!completion : undefined}
               aria-activedescendant={completion ? `${listId}-${completion.index}` : undefined}
-              className={cn("bg-background pr-12 transition-none", compact ? "h-8 text-[13px]" : "h-10 text-sm")}
+              className={cn("h-8 bg-background pr-12 transition-none", compact ? "text-[13px]" : "text-sm")}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -703,7 +703,7 @@ export function Composer({ channel, compact = false }: { channel: string | null;
           <Button
             type="submit"
             size={compact ? "icon-sm" : "default"}
-            className={cn(!compact && "h-10 gap-1.5 px-5 font-semibold")}
+            className={cn(!compact && "h-8 gap-1.5 px-4 font-semibold")}
             disabled={!text.trim() || !connected}
             aria-label={theme.sendVerb}
             title={theme.sendVerb}

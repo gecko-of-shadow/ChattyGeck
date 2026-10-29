@@ -40,7 +40,7 @@ export function BottomBar({ channel }: { channel: string | null }) {
   let middle;
   if (readOnly) {
     middle = (
-      <p className="min-w-0 flex-1 truncate py-1.5 text-center text-xs text-muted-foreground" data-testid="bottom-bar-read-only">
+      <p className="min-w-0 flex-1 truncate text-center text-xs leading-8 text-muted-foreground" data-testid="bottom-bar-read-only">
         Read only: the message box is hidden. Ctrl+Shift+R shows it again.
       </p>
     );
@@ -50,7 +50,7 @@ export function BottomBar({ channel }: { channel: string | null }) {
     middle = <LoginPrompt />;
   } else {
     middle = (
-      <p className="min-w-0 flex-1 truncate py-1.5 text-center text-xs text-muted-foreground" data-testid="bottom-bar-hint">
+      <p className="min-w-0 flex-1 truncate text-center text-xs leading-8 text-muted-foreground" data-testid="bottom-bar-hint">
         {anyChannel && !emptySingle ? "Click a pane to chat in it." : "Pick a channel in a pane to start reading."}
       </p>
     );
@@ -59,7 +59,7 @@ export function BottomBar({ channel }: { channel: string | null }) {
   return (
     // Narrow windows: the message box gets a row of its own above the view switch and gear, so there's room to type.
     <div
-      className="flex shrink-0 flex-wrap items-end gap-2 border-t border-border bg-surface px-2 py-2 sm:flex-nowrap"
+      className="flex shrink-0 flex-wrap items-end gap-1.5 border-t border-border bg-surface p-1.5 sm:flex-nowrap"
       data-testid="bottom-bar"
     >
       <div className="flex min-w-0 basis-full sm:order-2 sm:flex-1 sm:basis-auto" data-testid="bottom-bar-middle">
@@ -68,7 +68,7 @@ export function BottomBar({ channel }: { channel: string | null }) {
       <div className="shrink-0 sm:order-1" data-testid="bottom-bar-left">
         <ViewSwitch />
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1 sm:order-3 sm:ml-0" data-testid="bottom-bar-right">
+      <div className="ml-auto flex shrink-0 items-center sm:order-3 sm:ml-0" data-testid="bottom-bar-right">
         <ConnectionDot />
         <SettingsGear />
       </div>

@@ -59,8 +59,8 @@ export function ConnectionDot() {
       title={read.detail.reason ? `${label} · ${read.detail.reason}` : label}
       data-testid="connection-status"
       data-tone={tone}
-      // A little room around the dot so the tooltip is easy to hover; no border or background, so it isn't a button.
-      className="grid size-5 shrink-0 cursor-default place-items-center"
+      // The same 32 px square as the gear beside it (easy to hover); no border or background, so it isn't a button.
+      className="grid size-8 shrink-0 cursor-default place-items-center"
     >
       <span
         aria-hidden
