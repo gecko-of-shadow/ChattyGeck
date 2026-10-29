@@ -31,9 +31,14 @@ interface UiState {
   insert: { text: string; channel: string; nonce: number } | null;
   /** Message the composer will send as a Twitch reply. Stays on its channel when you look at another chat. */
   replyTo: ReplyTarget | null;
-  /** Channel whose emote status is open under its top-strip avatar (from the right-click menu). */
+  /** Channel whose emote status is open (from a channel's right-click menu), under its picker row or pane header. */
   emoteStatusFor: string | null;
+  /** The pane whose channel picker is open: a grid pane's index, or "single" for view 1. One at a time. */
+  pickerPane: PaneTarget | null;
 }
+
+/** A pane the channel picker loads into: grid pane `index` (0-based), or the one pane of view 1. */
+export type PaneTarget = number | "single";
 
 export interface ReplyTarget {
   channel: string;
@@ -61,7 +66,27 @@ export const useUi = create<UiState>(() => ({
   insert: null,
   replyTo: null,
   emoteStatusFor: null,
+  pickerPane: null,
 }));
+
+/** Opens the channel picker inside a pane (closes any other pane's picker). */
+export function openPicker(pane: PaneTarget): void {
+  useUi.setState({ pickerPane: pane });
+}
+
+/**
+ * Closes the picker. Keyboard focus goes back to the pane: its "⋯" button, or its "Pick a channel" button when empty
+ * (both carry `data-pane-return`).
+ */
+export function closePicker(returnFocus = true): void {
+  const pane = useUi.getState().pickerPane;
+  if (pane === null) return;
+  useUi.setState({ pickerPane: null });
+  if (!returnFocus || typeof document === "undefined") return;
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`[data-pane-return="${String(pane)}"]`)?.focus();
+  });
+}
 
 /** Arm a Twitch reply. Also unlocks and focuses that channel's message box. */
 export function setReplyTarget(target: { channel: string; id: string; login: string; displayName: string; text: string }): void {

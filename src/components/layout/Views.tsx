@@ -36,7 +36,8 @@ import { isFeatureOn } from "@/store/settings";
 import { insertIntoComposer, useUi } from "@/store/ui";
 import { paneChannels } from "@/lib/view/panes";
 import { beginChannelDrag } from "./gridDrag";
-import { AddChannelForm, ChannelAvatar } from "./Sidebar";
+import { ChannelAvatar } from "./ChannelAvatar";
+import { AddChannelForm } from "./Sidebar";
 
 export function EmptyState() {
   const gridSlots = useChat((s) => viewForSlots(s.settings.gridSlots));

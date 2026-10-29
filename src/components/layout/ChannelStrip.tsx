@@ -15,7 +15,8 @@ import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
 import { ConnectionDot } from "./ChatHeader";
 import { beginChannelDrag } from "./gridDrag";
-import { AddChannelForm, ChannelAvatar } from "./Sidebar";
+import { ChannelAvatar } from "./ChannelAvatar";
+import { AddChannelForm } from "./Sidebar";
 import { StripEmoteStatus } from "./Views";
 import { ViewSwitch } from "./ViewSwitch";
 

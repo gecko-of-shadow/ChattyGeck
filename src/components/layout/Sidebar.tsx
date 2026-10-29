@@ -28,36 +28,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { chat } from "@/lib/chat/controller";
-import { readableTagColor, TAG_TINT } from "@/lib/colors";
 import { openExternal } from "@/lib/platform";
 import { viewForSlots } from "@/lib/gridLayout";
-import { useResolvedSkin, useTheme } from "@/lib/useTheme";
+import { useTheme } from "@/lib/useTheme";
 import { cn } from "@/lib/utils";
 import { useChat } from "@/store/chat";
 import { openSettings, useUi } from "@/store/ui";
+import { ChannelAvatar } from "./ChannelAvatar";
 import { beginChannelDrag } from "./gridDrag";
-
-export function ChannelAvatar({ login, className }: { login: string; className?: string }) {
-  // Joined channels carry their picture; Twitch follows that aren't joined have theirs in the follow list.
-  const avatarUrl = useChat((s) => s.channels[login]?.avatarUrl ?? s.follows[login]?.avatarUrl);
-  const skin = useResolvedSkin();
-  if (avatarUrl) {
-    // Not draggable: the browser's own image drag would swallow the pointer-up of a strip-avatar-to-pane drag.
-    // Lazy: a strip with hundreds of follows only loads the pictures scrolled into view.
-    return <img src={avatarUrl} alt="" draggable={false} loading="lazy" decoding="async" className={cn("size-7 shrink-0 rounded-full object-cover", className)} />;
-  }
-  // Letter colour is nudged per theme to read at 4.5:1 on its disc (tested in themeContrast.test.ts).
-  const color = readableTagColor(login, skin);
-  return (
-    <span
-      aria-hidden
-      className={cn("grid size-7 shrink-0 place-items-center rounded-full text-[12px] font-bold uppercase", className)}
-      style={{ color, backgroundColor: `color-mix(in srgb, ${color} ${TAG_TINT * 100}%, var(--zc-surface))` }}
-    >
-      {login[0]}
-    </span>
-  );
-}
 
 export function AddChannelForm({ autoFocus, onAdded }: { autoFocus?: boolean; onAdded?: () => void }) {
   const [value, setValue] = useState("");
