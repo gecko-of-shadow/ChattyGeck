@@ -80,6 +80,14 @@ describe("sanitizeSettings", () => {
     });
   });
 
+  it("remembers chat history by default, and keeps a saved choice", () => {
+    expect(DEFAULT_SETTINGS.rememberChatHistory).toBe(true);
+    for (const fresh of [undefined, null, {}, { channels: ["geckotown"] }]) {
+      expect(sanitizeSettings(fresh).rememberChatHistory).toBe(true);
+    }
+    expect(sanitizeSettings({ rememberChatHistory: false }).rememberChatHistory).toBe(false);
+  });
+
   it("never changes Start with Windows or Close to tray that a user already saved", () => {
     const saved = sanitizeSettings({ startOnLogin: true, closeToTray: false });
     expect(saved).toMatchObject({ startOnLogin: true, closeToTray: false });
