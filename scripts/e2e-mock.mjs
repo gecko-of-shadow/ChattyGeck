@@ -44,7 +44,7 @@ async function step(name, fn) {
   }
 }
 const shot = (name) => page.screenshot({ path: path.join(out, `${name}.png`) });
-/** View switch (bottom right): 1 = single, 2/3/4/6/9 = grid. */
+/** View switch (bottom left): 1 = single, 2/3/4/6/9 = grid. */
 const view = (n) => page.getByTestId(`view-${n}`).click();
 const inSingle = async () => (await page.getByTestId("view-1").getAttribute("aria-checked")) === "true";
 /** The grid pane (0-based) showing a channel, or null. */
@@ -275,20 +275,20 @@ await step("channel switch blocks send until unlock (in the bottom bar)", async 
   await page.getByLabel("Message #geckotown").waitFor({ timeout: 3_000 });
 });
 
-await step("bottom bar: gear left, message box middle, 1 2 3 4 6 9 right; nothing above the panes", async () => {
+await step("bottom bar: 1 2 3 4 6 9 left, message box middle, gear right; nothing above the panes", async () => {
   const viewport = page.viewportSize();
   const bar = await page.getByTestId("bottom-bar").boundingBox();
   if (!bar || Math.abs(bar.y + bar.height - viewport.height) > 1) throw new Error(`bar isn't at the bottom: ${JSON.stringify(bar)}`);
-  const gear = await page.getByTestId("bottom-bar-left").getByTestId("settings-gear").boundingBox();
+  const first = await page.getByTestId("bottom-bar-left").getByTestId("view-1").boundingBox();
+  const last = await page.getByTestId("bottom-bar-left").getByTestId("view-9").boundingBox();
   const middle = await page.getByTestId("bottom-bar-middle").boundingBox();
-  const first = await page.getByTestId("bottom-bar-right").getByTestId("view-1").boundingBox();
-  const last = await page.getByTestId("bottom-bar-right").getByTestId("view-9").boundingBox();
+  const gear = await page.getByTestId("bottom-bar-right").getByTestId("settings-gear").boundingBox();
   if (!gear || !middle || !first || !last) throw new Error("bottom bar part missing");
-  if (gear.x > 24) throw new Error(`gear isn't at the left (x=${gear.x})`);
-  if (viewport.width - (last.x + last.width) > 24) throw new Error("view switch isn't at the right");
-  if (!(gear.x + gear.width <= middle.x && middle.x + middle.width <= first.x)) throw new Error("bottom bar order isn't gear / box / views");
+  if (first.x > 24) throw new Error(`view switch isn't at the left (x=${first.x})`);
+  if (viewport.width - (gear.x + gear.width) > 24) throw new Error("gear isn't at the right");
+  if (!(last.x + last.width <= middle.x && middle.x + middle.width <= gear.x)) throw new Error("bottom bar order isn't views / box / gear");
   await page.getByTestId("bottom-bar-middle").getByLabel("Message #geckotown").waitFor({ timeout: 2_000 });
-  await page.getByTestId("bottom-bar-left").getByTestId("connection-status").waitFor({ timeout: 2_000 });
+  await page.getByTestId("bottom-bar-right").getByTestId("connection-status").waitFor({ timeout: 2_000 });
   // Same active style as before: the current view is the filled (primary) button.
   if ((await page.getByTestId("view-1").getAttribute("aria-checked")) !== "true") throw new Error("view 1 isn't marked current");
   if (!/\bbg-primary\b/.test((await page.getByTestId("view-1").getAttribute("class")) ?? "")) throw new Error("current view lost its filled style");
@@ -1010,6 +1010,8 @@ await step("small window: the bottom bar and the picker still fit", async () => 
   if (overflow > 0) throw new Error(`page scrolls sideways by ${overflow}px`);
   const last = await page.getByTestId("view-9").boundingBox();
   if (!last || last.x + last.width > 420) throw new Error("view switch is cut off");
+  const gear = await page.getByTestId("settings-gear").boundingBox();
+  if (!gear || gear.x + gear.width > 420 || gear.x < last.x + last.width) throw new Error("gear is cut off or overlaps the view switch");
   // Narrow window: the message box has a row of its own, so there's room to type.
   const middle = await page.getByTestId("bottom-bar-middle").boundingBox();
   if (!middle || middle.width < 380) throw new Error(`message box row is only ${middle?.width}px wide`);

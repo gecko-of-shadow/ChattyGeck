@@ -1152,7 +1152,7 @@ class ChatController {
   }
 
   /**
-   * The bottom-right view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
+   * The bottom-left view switch. 1 is Single (the focused channel); 2–9 is the grid with that many panes. Going down
    * sets the extra pins aside; going up brings them back.
    */
   setView(view: ViewSize): void {

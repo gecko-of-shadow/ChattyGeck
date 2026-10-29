@@ -7,7 +7,7 @@ import { openSettings, useUi } from "@/store/ui";
 import { ConnectionDot } from "./ChatHeader";
 import { ViewSwitch } from "./ViewSwitch";
 
-/** Bottom-left: the Settings gear (opens the same in-window Settings panel as the tray's Settings…). */
+/** Bottom-right corner: the Settings gear (opens the same in-window Settings panel as the tray's Settings…). */
 function SettingsGear() {
   const settingsOpen = useUi((s) => s.settingsOpen);
   return (
@@ -27,9 +27,9 @@ function SettingsGear() {
 }
 
 /**
- * The one bar under the panes: gear and connection dot on the left, the message box in the middle (it sends to the
- * focused pane, or the channel in view 1, with the "You switched channels" check as before), the 1 · 2 · 3 · 4 · 6 · 9
- * view switch on the right.
+ * The one bar under the panes: the 1 · 2 · 3 · 4 · 6 · 9 view switch on the left, the message box in the middle (it
+ * sends to the focused pane, or the channel in view 1, with the "You switched channels" check as before), connection
+ * dot and gear on the right (the owner's choice: views left, gear right).
  */
 export function BottomBar({ channel }: { channel: string | null }) {
   const readOnly = useChat((s) => s.settings.readOnly);
@@ -57,7 +57,7 @@ export function BottomBar({ channel }: { channel: string | null }) {
   }
 
   return (
-    // Narrow windows: the message box gets a row of its own above gear and view switch, so there's room to type.
+    // Narrow windows: the message box gets a row of its own above the view switch and gear, so there's room to type.
     <div
       className="flex shrink-0 flex-wrap items-end gap-2 border-t border-border bg-surface px-2 py-2 sm:flex-nowrap"
       data-testid="bottom-bar"
@@ -65,12 +65,12 @@ export function BottomBar({ channel }: { channel: string | null }) {
       <div className="flex min-w-0 basis-full sm:order-2 sm:flex-1 sm:basis-auto" data-testid="bottom-bar-middle">
         {middle}
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:order-1" data-testid="bottom-bar-left">
-        <SettingsGear />
-        <ConnectionDot />
-      </div>
-      <div className="ml-auto shrink-0 sm:order-3 sm:ml-0" data-testid="bottom-bar-right">
+      <div className="shrink-0 sm:order-1" data-testid="bottom-bar-left">
         <ViewSwitch />
+      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:order-3 sm:ml-0" data-testid="bottom-bar-right">
+        <ConnectionDot />
+        <SettingsGear />
       </div>
     </div>
   );

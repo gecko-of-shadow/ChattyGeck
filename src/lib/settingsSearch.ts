@@ -225,7 +225,7 @@ export const SETTINGS_SEARCH_CATALOG: SettingsSearchSection[] = [
       {
         id: "grid-slots",
         label: "Grid slots",
-        hint: "How many chats show at once; 1 is a single chat. The same switch as at the bottom right.",
+        hint: "How many chats show at once; 1 is a single chat. The same switch as at the bottom left.",
         choices: ["1", "2", "3", "4", "6", "9"],
       },
       {

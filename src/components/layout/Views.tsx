@@ -497,7 +497,7 @@ function EmptyPane({ index }: { index: number }) {
       testId={`pane-empty-${index}`}
       hint={
         parked > 0
-          ? `${parked} channel${parked === 1 ? "" : "s"} set aside from a bigger view: pick that view again at the bottom right to bring ${parked === 1 ? "it" : "them"} back.`
+          ? `${parked} channel${parked === 1 ? "" : "s"} set aside from a bigger view: pick that view again at the bottom left to bring ${parked === 1 ? "it" : "them"} back.`
           : undefined
       }
     />
@@ -546,7 +546,7 @@ export function GridView() {
     >
       {layout.columns < viewColumns(view) ? (
         <p className="bg-background px-2 py-1 text-[11px] text-muted-foreground">
-          This window is narrow, so the panes are stacked in fewer columns. Pick 1 at the bottom right (or Ctrl+G) to read one alone.
+          This window is narrow, so the panes are stacked in fewer columns. Pick 1 at the bottom left (or Ctrl+G) to read one alone.
         </p>
       ) : null}
       <div

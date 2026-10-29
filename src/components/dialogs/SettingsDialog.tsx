@@ -164,17 +164,17 @@ function Choice<T extends string | number>({
   );
 }
 
-/** The same switch as at the bottom right, so the two always agree (1 is Single there too). */
+/** The same switch as at the bottom left, so the two always agree (1 is Single there too). */
 function GridSlotsRow() {
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="flex flex-col items-start gap-0.5">
         <span className="text-sm">Grid slots</span>
         <span className="text-xs font-normal text-muted-foreground">
-          How many chats show at once; 1 is a single chat. The same switch as at the bottom right.
+          How many chats show at once; 1 is a single chat. The same switch as at the bottom left.
         </span>
       </div>
-      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the bottom right)" />
+      <ViewSwitch testIds={false} label="Grid slots (same as the view switch at the bottom left)" />
     </div>
   );
 }
