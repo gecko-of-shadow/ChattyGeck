@@ -238,6 +238,23 @@ describe("chat controller view and history", () => {
     expect(useChat.getState().settings.focused).not.toBe("a");
   });
 
+  it("Alt+Shift+arrows move a pane into an empty pane, at the end too", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "b"], channels: ["a", "b"] });
+    chat.moveGridChannel("b", 1);
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "", "b"]);
+    chat.moveGridChannel("b", -1);
+    // No empty pane is left hanging at the end.
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "b"]);
+  });
+
+  it("restoring preferences keeps an emptied pane empty when the view size is the same", () => {
+    seed({ mode: "grid", focused: "a", gridChannels: ["a", "", "c"], channels: ["a", "b", "c"] });
+    useChat.setState((s) => ({ settings: { ...s.settings, gridParked: ["b"] } }));
+    chat.replacePreferences({ ...DEFAULT_SETTINGS });
+    expect(useChat.getState().settings.gridChannels).toEqual(["a", "", "c"]);
+    expect(useChat.getState().settings.gridParked).toEqual(["b"]);
+  });
+
   it("\"−\" in view 1 shows nothing until a channel is picked", () => {
     seed({ mode: "focused", focused: "a", gridChannels: ["a"], channels: ["a", "b"] });
     chat.clearSingle();

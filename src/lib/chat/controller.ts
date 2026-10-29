@@ -48,7 +48,7 @@ import type { Badge, ChatMessage } from "@/lib/twitch/types";
 import { newChannelView, useChat, type ChannelView } from "@/store/chat";
 import { fitGridToView, focusOnGrid, isFeatureOn, sanitizeSettings, type Settings, type ViewMode } from "@/store/settings";
 import { moveItem, replaceGridSlot, swapItems } from "@/lib/view/reorder";
-import { clearPaneOf, fillFreePane, paneChannels, placeInPane } from "@/lib/view/panes";
+import { clearPaneOf, EMPTY_PANE, fillFreePane, paneChannels, placeInPane, trimPanes } from "@/lib/view/panes";
 import { viewForSlots, type ViewSize } from "@/lib/gridLayout";
 import { prefersDarkNow, resolveSkin, THEMES } from "@/lib/themes";
 import { clearReplyTarget, useUi } from "@/store/ui";
@@ -1110,8 +1110,12 @@ class ChatController {
   /** Reorder a box on the grid (not the full follow list). */
   moveGridChannel(name: string, offset: number): void {
     this.updateSettings((s) => {
-      const gridChannels = moveItem(s.gridChannels, name, offset);
-      if (!gridChannels) return {};
+      // Every pane of the view counts, empty ones too (so a pane can move into an empty pane at the end).
+      const panes = [...s.gridChannels];
+      while (panes.length < this.gridCap()) panes.push(EMPTY_PANE);
+      const moved = moveItem(panes, name, offset);
+      if (!moved) return {};
+      const gridChannels = trimPanes(moved);
       this.announce(`Moved #${name} ${offset < 0 ? "earlier" : "later"}`);
       return { gridChannels };
     });
@@ -1379,8 +1383,10 @@ class ChatController {
       delete next.mode;
       delete next.version;
       // Keep the view pointing at a channel we actually have, and the pins within the (possibly new) view size.
+      // Same view size: a pane emptied on purpose stays empty.
       const slots = next.gridSlots ?? current.gridSlots;
-      return { ...next, focused: current.focused, ...fitGridToView(current.gridChannels, current.gridParked, slots) };
+      const refill = viewForSlots(slots) !== viewForSlots(current.gridSlots);
+      return { ...next, focused: current.focused, ...fitGridToView(current.gridChannels, current.gridParked, slots, refill) };
     });
   }
 

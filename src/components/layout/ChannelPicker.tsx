@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 import { ArrowLeft, Plus, RotateCw } from "lucide-react";
@@ -213,20 +213,29 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
     if (current) document.getElementById(optionId(prefix, current))?.scrollIntoView({ block: "nearest" });
   }, [current, prefix]);
 
-  const choose = (login: string) => {
-    const result = loadIntoPane(pane, login);
-    if (!result.ok) {
-      toast.error(result.error ?? `Couldn't open #${login}`);
-      return;
-    }
-    closePicker();
-  };
-  const hover = (login: string) => {
-    const at = model.items.findIndex((item) => item.kind === "channel" && item.login === login);
+  // Stable handlers, so a highlight change only redraws the two rows whose highlight changed (lists can be long).
+  const itemsRef = useRef(model.items);
+  itemsRef.current = model.items;
+  const choose = useCallback(
+    (login: string) => {
+      const result = loadIntoPane(pane, login);
+      if (!result.ok) {
+        toast.error(result.error ?? `Couldn't open #${login}`);
+        return;
+      }
+      closePicker();
+    },
+    [pane],
+  );
+  const hover = useCallback((login: string) => {
+    const at = itemsRef.current.findIndex((item) => item.kind === "channel" && item.login === login);
     if (at >= 0) setIndex(at);
-  };
+  }, []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    // Keys pressed in a row's channel menu (a portal, but still a React child) belong to the menu: Esc closes it, not the picker.
+    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -311,6 +320,8 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
           data-testid="channel-picker-search"
           autoComplete="off"
           spellCheck={false}
+          // The Menu key opens the highlighted row's menu (above), not the browser's own text menu.
+          onContextMenu={(event) => event.preventDefault()}
           className="h-7 min-w-0 flex-1 border border-input bg-background px-2 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
