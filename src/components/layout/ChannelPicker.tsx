@@ -197,6 +197,8 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Set while the Menu key / Shift+F10 opens a row's menu, so the browser's own text menu is skipped only then.
+  const menuKeyRef = useRef(false);
   const prefix = useId().replace(/:/g, "");
 
   const model = useMemo(() => pickerModel(query, channels, follows, displayNames), [query, channels, follows, displayNames]);
@@ -254,6 +256,8 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
     } else if ((event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) && current?.kind === "channel") {
       // The keyboard way to the channel menu: open it on the highlighted row.
       event.preventDefault();
+      menuKeyRef.current = true;
+      setTimeout(() => (menuKeyRef.current = false), 500);
       const row = document.getElementById(optionId(prefix, current));
       const box = row?.getBoundingClientRect();
       row?.dispatchEvent(
@@ -320,8 +324,13 @@ export function ChannelPicker({ pane, label }: { pane: PaneTarget; label: string
           data-testid="channel-picker-search"
           autoComplete="off"
           spellCheck={false}
-          // The Menu key opens the highlighted row's menu (above), not the browser's own text menu.
-          onContextMenu={(event) => event.preventDefault()}
+          // The Menu key opens the highlighted row's menu (above), not the browser's own text menu. A mouse right-click
+          // still gets the usual Cut / Copy / Paste.
+          onContextMenu={(event) => {
+            if (!menuKeyRef.current) return;
+            menuKeyRef.current = false;
+            event.preventDefault();
+          }}
           className="h-7 min-w-0 flex-1 border border-input bg-background px-2 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>

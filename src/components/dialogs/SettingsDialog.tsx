@@ -1562,7 +1562,7 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
       // A menu, popover or the login dialog inside Settings closes first (a pane's channel picker beside it doesn't count).
       if (document.querySelector("[role='menu'], [role='listbox']:not([data-picker-list]), [data-slot='popover-content'], [data-slot='dialog-content']")) return;
       event.preventDefault();

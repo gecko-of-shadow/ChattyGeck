@@ -721,7 +721,7 @@
    secondary text. */
 [role^="menuitem"]:focus,
 [role^="menuitem"][data-highlighted],
-[role="option"][aria-selected="true"] {
+[data-picker-list] [role="option"][aria-selected="true"] {
   box-shadow: inset 2px 0 0 var(--ring);
   --muted-foreground: color-mix(in srgb, var(--zc-muted) 50%, var(--zc-text));
 }
@@ -816,7 +816,7 @@ html[data-skin="highcontrast"] .chat-row.chat-row-deleted {
   /* Chosen view, theme card or option: background fills vanish in contrast themes, so mark it with an outline. */
   [role="radio"][aria-checked="true"],
   [aria-pressed="true"],
-  [role="option"][aria-selected="true"],
+  [data-picker-list] [role="option"][aria-selected="true"],
   [data-testid="settings-gear"][aria-expanded="true"] {
     outline: 2px solid Highlight;
     outline-offset: -2px;

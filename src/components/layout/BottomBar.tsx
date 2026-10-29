@@ -62,14 +62,14 @@ export function BottomBar({ channel }: { channel: string | null }) {
       className="flex shrink-0 flex-wrap items-end gap-2 border-t border-border bg-surface px-2 py-2 sm:flex-nowrap"
       data-testid="bottom-bar"
     >
-      <div className="flex shrink-0 items-center gap-1" data-testid="bottom-bar-left">
+      <div className="flex min-w-0 basis-full sm:order-2 sm:flex-1 sm:basis-auto" data-testid="bottom-bar-middle">
+        {middle}
+      </div>
+      <div className="flex shrink-0 items-center gap-1 sm:order-1" data-testid="bottom-bar-left">
         <SettingsGear />
         <ConnectionDot />
       </div>
-      <div className="order-first flex min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto" data-testid="bottom-bar-middle">
-        {middle}
-      </div>
-      <div className="ml-auto shrink-0 sm:ml-0" data-testid="bottom-bar-right">
+      <div className="ml-auto shrink-0 sm:order-3 sm:ml-0" data-testid="bottom-bar-right">
         <ViewSwitch />
       </div>
     </div>
